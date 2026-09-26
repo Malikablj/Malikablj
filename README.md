@@ -12,6 +12,7 @@ npm run dev          # http://localhost:5173
 npm test             # unit test workflow engine, business rules, AI assistant
 npm run build        # production build (dist/), route-level code splitting
 npm run build:single # satu file HTML mandiri (dist-single/index.html) untuk demo
+npm run build:artifact # fragment untuk hosting sandbox (MemoryRouter, tanpa download/print)
 ```
 
 Login memakai akun demo (password semua `demo123`), atau klik salah satu akun di halaman login:

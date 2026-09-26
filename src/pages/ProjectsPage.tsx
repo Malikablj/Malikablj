@@ -131,8 +131,12 @@ export default function ProjectsPage() {
         i.project.remarks ?? '',
       ]),
     ];
-    downloadBlob(buildXlsx([{ name: 'Projects', rows, widths: [14, 12, 18, 32, 22, 16, 16, 16, 10, 12, 12, 12, 28, 16, 12, 28, 40, 14, 10, 10, 30] }]), `NPD-Projects-${today}.xlsx`);
-    toast.success('Export berhasil', `${items.length} project diexport ke Excel.`);
+    try {
+      downloadBlob(buildXlsx([{ name: 'Projects', rows, widths: [14, 12, 18, 32, 22, 16, 16, 16, 10, 12, 12, 12, 28, 16, 12, 28, 40, 14, 10, 10, 30] }]), `NPD-Projects-${today}.xlsx`);
+      toast.success('Export berhasil', `${items.length} project diexport ke Excel.`);
+    } catch (e) {
+      toast.fromError(e, 'Export gagal');
+    }
   };
 
   const title = type ? `Project ${PROJECT_TYPE_LABEL[type]}` : 'Semua Project';

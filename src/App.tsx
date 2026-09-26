@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { lazy, type ReactNode, Suspense } from 'react';
-import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { PageSkeleton } from './components/ui/Feedback';
 import { ToastProvider } from './components/ui/Toast';
@@ -60,17 +60,20 @@ function AppRoutes() {
   );
 }
 
+// Sandboxed previews cannot rely on the URL, so routing stays in memory there.
+const Router = __SANDBOX__ ? MemoryRouter : HashRouter;
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <HashRouter>
+        <Router>
           <AuthProvider>
             <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
               <AppRoutes />
             </Suspense>
           </AuthProvider>
-        </HashRouter>
+        </Router>
       </ToastProvider>
     </QueryClientProvider>
   );

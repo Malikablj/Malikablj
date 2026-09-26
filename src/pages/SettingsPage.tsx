@@ -72,7 +72,7 @@ export default function SettingsPage() {
 
 function Profile() {
   const user = useUser();
-  const [theme, setTheme] = useLocalPref<'light' | 'dark' | 'system'>('theme', 'light');
+  const [theme, setTheme] = useLocalPref<'light' | 'dark' | 'system'>('theme', __SANDBOX__ ? 'system' : 'light');
   useEffect(() => {
     if (theme === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', theme);

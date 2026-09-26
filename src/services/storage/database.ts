@@ -14,6 +14,18 @@ const KEY = 'npd-project-control:db';
 let cache: DbState | null = null;
 const listeners = new Set<() => void>();
 
+/** False when the browser blocks storage (private mode, sandboxed frames): the app then runs in memory. */
+export const storageAvailable = (() => {
+  try {
+    const k = '__npd_probe__';
+    localStorage.setItem(k, '1');
+    localStorage.removeItem(k);
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 function safeGet(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -23,6 +35,7 @@ function safeGet(key: string): string | null {
 }
 
 function persist(db: DbState): void {
+  if (!storageAvailable) return;
   try {
     localStorage.setItem(KEY, JSON.stringify(db));
   } catch (e) {

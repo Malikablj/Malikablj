@@ -72,6 +72,12 @@ function PreviewInner({ row, onClose, initialVersionId }: { row: DocumentRow; on
             <ErrorState error={state.error} compact />
           ) : mime.startsWith('image/') ? (
             <img src={state.url} alt={`${row.doc.name} ${formatRevision(version.revision)}`} className="max-h-[520px] max-w-full object-contain" />
+          ) : mime === 'application/pdf' && __SANDBOX__ ? (
+            <div className="px-6 text-center">
+              <FileQuestion className="mx-auto size-8 text-ink-3" aria-hidden="true" />
+              <p className="mt-2 text-[14px] font-medium text-ink">Pratinjau PDF tidak tersedia di mode pratinjau ini</p>
+              <p className="mt-1 text-[13px] text-ink-2">{version.fileName} · buka aplikasi penuh untuk melihat PDF.</p>
+            </div>
           ) : mime === 'application/pdf' ? (
             <iframe src={state.url} title={`Preview ${row.doc.name}`} className="h-[520px] w-full bg-white" />
           ) : state.text !== undefined ? (

@@ -1,3 +1,5 @@
+import { AppError } from '@/domain/errors';
+
 /**
  * Minimal, dependency-free .xlsx writer (Office Open XML, stored ZIP).
  * Supports multiple sheets, a bold header row, numbers and text.
@@ -147,6 +149,8 @@ export function buildXlsx(sheets: Sheet[]): Blob {
 }
 
 export function downloadBlob(blob: Blob, fileName: string): void {
+  if (__SANDBOX__)
+    throw new AppError('INVALID_STATE', 'Download file tidak tersedia di pratinjau ini. Jalankan aplikasi penuh (npm run dev / build) untuk export & download.');
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

@@ -72,8 +72,12 @@ function Weekly() {
         rows: [['Project', 'Project Name', 'Action', 'Owner', 'Due', 'Terlambat'], ...rep.actionRequired.map((a) => [a.code, a.projectName, a.action, a.owner, a.due, a.overdue ? 'Ya' : ''])],
       },
     ]);
-    downloadBlob(blob, `Weekly-NPD-Report-${rep.periodStart}.xlsx`);
-    toast.success('Weekly report diexport');
+    try {
+      downloadBlob(blob, `Weekly-NPD-Report-${rep.periodStart}.xlsx`);
+      toast.success('Weekly report diexport');
+    } catch (e) {
+      toast.fromError(e, 'Export gagal');
+    }
   };
 
   return (
@@ -108,9 +112,11 @@ function Weekly() {
             >
               Salin teks
             </Button>
-            <Button icon={<Printer className="size-4" />} onClick={() => window.print()}>
-              Print / PDF
-            </Button>
+            {!__SANDBOX__ && (
+              <Button icon={<Printer className="size-4" />} onClick={() => window.print()}>
+                Print / PDF
+              </Button>
+            )}
             <Button variant="primary" icon={<Download className="size-4" />} onClick={() => exportXlsx(r)}>
               Export Excel
             </Button>
@@ -205,6 +211,7 @@ function AnalyticsView() {
     );
   const stats = a.processStats.filter((s) => s.type === type);
   const exportXlsx = (an: Analytics) => {
+    try {
     downloadBlob(
       buildXlsx([
         {
@@ -241,6 +248,9 @@ function AnalyticsView() {
       `NPD-Analytics-${todayISO()}.xlsx`,
     );
     toast.success('Analytics diexport');
+    } catch (e) {
+      toast.fromError(e, 'Export gagal');
+    }
   };
 
   return (

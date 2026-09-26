@@ -19,20 +19,24 @@ export function toPublic(u: User): PublicUser {
   return rest;
 }
 
+// In-memory fallback keeps the session working when storage is blocked.
+let memorySession: string | null = null;
+
 export function readSession(): string | null {
   try {
-    return localStorage.getItem(SESSION_KEY);
+    return localStorage.getItem(SESSION_KEY) ?? memorySession;
   } catch {
-    return null;
+    return memorySession;
   }
 }
 
 export function writeSession(userId: string | null): void {
+  memorySession = userId;
   try {
     if (userId) localStorage.setItem(SESSION_KEY, userId);
     else localStorage.removeItem(SESSION_KEY);
   } catch {
-    /* ignore */
+    /* storage blocked: memory session only */
   }
 }
 
