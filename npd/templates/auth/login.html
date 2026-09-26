@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Login · NPD Project Control</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="login">
+  <section class="login-hero">
+    <div class="brand" style="padding:0"><span class="brand-mark">NPD</span><span><span class="brand-name">NPD Project Control</span><br><span class="brand-sub">New Mold &amp; Subcont</span></span></div>
+    <div>
+      <p class="subtle">One project = one digital record</p>
+      <h1>Posisi setiap project NPD, jelas dalam satu tempat.</h1>
+      <p class="lead">Current process, PIC, waiting for, next action, approval customer, dokumen &amp; revisi — untuk project New Mold dan Subcont.</p>
+    </div>
+    <p class="subtle">Internal Web Application · Packaging Manufacturing · New Product Development</p>
+  </section>
+
+  <section class="login-form">
+    <div class="inner">
+      <h2 style="font-size:26px;font-weight:600;letter-spacing:-0.02em">Masuk</h2>
+      <p class="muted" style="margin-top:4px">Gunakan akun perusahaan Anda.</p>
+
+      <form method="post" class="stack mt-lg" novalidate>
+        {{ csrf_field() }}
+        {% if errors.form %}<div class="alert tone-red" role="alert">{{ errors.form }}</div>{% endif %}
+        {% import "_macros.html" as ui with context %}
+        {{ ui.field('email', 'Email', email, 'email', errors, placeholder='nama@npd.local', attrs='autocomplete="username"') }}
+        {{ ui.field('password', 'Password', '', 'password', errors, attrs='autocomplete="current-password"') }}
+        <button class="btn btn-primary" type="submit" style="width:100%;height:48px">Masuk</button>
+      </form>
+
+      <div class="mt-lg">
+        <div class="row-between"><h3 class="small strong">Akun demo per role</h3><span class="subtle">Password: demo123</span></div>
+        <ul class="card list accounts">
+          {% for u in accounts %}
+            <li>
+              <form method="post">
+                {{ csrf_field() }}
+                <input type="hidden" name="email" value="{{ u.email }}">
+                <input type="hidden" name="password" value="demo123">
+                <button type="submit">
+                  <span class="avatar">{{ u.initials }}</span>
+                  <span class="grow">
+                    <span class="strong">{{ u.name }}</span> <span class="subtle">· {{ C.ROLES[u.role] }}</span><br>
+                    <span class="subtle">{{ C.ROLE_DESCRIPTION[u.role] }}</span>
+                  </span>
+                  <span aria-hidden="true" class="subtle">›</span>
+                </button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+<div class="flash-stack" role="status">{% for c, m in messages %}<div class="flash {{ c }}"><strong>{{ m if m is string else m.title }}</strong></div>{% endfor %}</div>
+{% endif %}{% endwith %}
+</body>
+</html>

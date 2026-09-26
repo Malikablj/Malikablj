@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Update Status · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Update Status', p.code ~ ' · ' ~ p.name, back=(url_for('projects.detail', code=p.code), 'Kembali ke project')) }}
+<form method="post" class="card card-pad" style="max-width:640px" novalidate>
+  {{ csrf_field() }}
+  <p class="small muted mb">Status saat ini: {{ ui.status_chip(p.status, small=true) }} · Completed hanya melalui Finish. Overdue dihitung otomatis dari target date.</p>
+  <fieldset>
+    <legend>Status baru</legend>
+    <div class="radio-cards">
+      {% for key, label in options %}
+        <label class="radio-card {{ 'negative' if key == 'cancelled' else ('neutral' if key == 'hold') }}">
+          <input type="radio" name="status" value="{{ key }}" {{ 'checked' if values.status == key }}>
+          <span class="title">{{ label }}</span>
+          <span class="sub">{{ {
+            'on_progress': 'Proses berjalan normal' ~ (' (lanjut dari Hold)' if p.status == 'hold' else ''),
+            'waiting_approval': 'Butuh approval Pending' ~ ('' if has_pending else ' — belum ada approval Pending'),
+            'waiting_external': 'Menunggu supplier / mold maker / pihak luar',
+            'hold': 'Project ditunda (alasan wajib)',
+            'cancelled': 'Project dibatalkan (alasan wajib)',
+          }[key] }}</span>
+        </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <div class="stack mt">
+    {{ ui.field('waiting_for', 'Waiting For', values.waiting_for, errors=errors, help='Wajib untuk Waiting External, mis. "Mold maker — PT Presisi"') }}
+    {{ ui.field('reason', 'Alasan', values.reason, 'textarea', errors, help='Wajib untuk Hold dan Cancelled') }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=p.code) }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Simpan status</button>
+  </div>
+</form>
+{% endblock %}

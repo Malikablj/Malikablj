@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Pengaturan{% endblock %}
+{% block content %}
+{{ ui.page_head('Pengaturan', 'Profil, user & role, master data customer, workflow template, dan sistem.' if is_admin else 'Profil dan password akun Anda.') }}
+<nav class="tabs mb" aria-label="Pengaturan">
+  {% for k, l in [('profile', 'Profil')] + ([('users', 'User & Role'), ('customers', 'Customer'), ('workflow', 'Workflow'), ('system', 'Sistem')] if is_admin else []) %}
+    <a href="{{ url_for('settings.index', tab=k) }}" class="{{ 'active' if tab == k }}">{{ l }}</a>
+  {% endfor %}
+</nav>
+
+{% if tab == 'profile' %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;max-width:980px">
+    <section class="card card-pad">
+      <div class="row mb"><span class="avatar" style="width:48px;height:48px;font-size:16px">{{ current_user.initials }}</span>
+        <div><p class="strong" style="font-size:17px">{{ current_user.name }}</p><p class="small muted">{{ current_user.email }}</p></div></div>
+      <dl class="info-list">
+        <div><dt>Role</dt><dd>{{ C.ROLES[current_user.role] }}</dd></div>
+        <div><dt>Jabatan</dt><dd>{{ current_user.title }}</dd></div>
+        <div class="full"><dt>Akses</dt><dd>{{ role_description[current_user.role] }}</dd></div>
+        <div class="full"><dt>Scope data project</dt><dd>{{ perm.scope_label(current_user) }}</dd></div>
+      </dl>
+    </section>
+    <form method="post" class="card card-pad" novalidate>{{ csrf_field() }}
+      <h2 style="font-size:15px;font-weight:600" class="mb">Ganti password</h2>
+      <div class="stack">
+        {{ ui.field('current', 'Password saat ini', '', 'password', errors, required=true, attrs='autocomplete="current-password"') }}
+        {{ ui.field('new', 'Password baru', '', 'password', errors, required=true, help='Minimal 6 karakter', attrs='autocomplete="new-password"') }}
+        {{ ui.field('confirm', 'Ulangi password baru', '', 'password', errors, required=true, attrs='autocomplete="new-password"') }}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Simpan password</button></div>
+    </form>
+  </div>
+
+{% elif tab == 'users' %}
+  <section class="card">
+    <div class="card-head"><div><h2>User & Role</h2><p class="desc">{{ users|length }} user · role menentukan akses (PRD §11)</p></div>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('settings.user') }}">{{ icon('plus') }} User baru</a></div>
+    <ul class="list">
+      {% for u in users %}
+        <li><a class="list-item" href="{{ url_for('settings.user', user_id=u.id) }}">
+          <span class="avatar sm">{{ u.initials }}</span>
+          <span class="grow"><span class="title">{{ u.name }}</span>{% if not u.active %} {{ ui.chip('Nonaktif', 'gray', small=true) }}{% endif %}<br><span class="meta">{{ u.email }} · {{ u.title }}</span></span>
+          <span class="tag">{{ C.ROLES[u.role] }}</span><span class="subtle" aria-hidden="true">›</span></a></li>
+      {% endfor %}
+    </ul>
+  </section>
+
+{% elif tab == 'customers' %}
+  <section class="card">
+    <div class="card-head"><div><h2>Customer</h2><p class="desc">Master data customer</p></div>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('settings.customer') }}">{{ icon('plus') }} Customer baru</a></div>
+    {% if not customers %}{{ ui.empty('Belum ada customer') }}{% else %}
+    <ul class="list">
+      {% for c in customers %}
+        <li><a class="list-item" href="{{ url_for('settings.customer', customer_id=c.id) }}">
+          <span class="tag num">{{ c.code }}</span>
+          <span class="grow"><span class="title">{{ c.name }}</span>{% if not c.active %} {{ ui.chip('Nonaktif', 'gray', small=true) }}{% endif %}<br><span class="meta">{{ c.contact_name or '—' }}{{ ' · ' ~ c.contact_email if c.contact_email }}</span></span>
+          <span class="small muted">{{ usage[c.id] }} project</span><span class="subtle" aria-hidden="true">›</span></a></li>
+      {% endfor %}
+    </ul>{% endif %}
+  </section>
+
+{% elif tab == 'workflow' %}
+  <div class="segmented mb" role="group" aria-label="Workflow">
+    {% for w in workflows %}<a href="{{ url_for('settings.index', tab='workflow', wf=w.id) }}" class="{{ 'active' if wf and w.id == wf.id }}">{{ C.PROJECT_TYPES[w.project_type] }}</a>{% endfor %}
+  </div>
+  {% if wf %}
+  <section class="card">
+    <div class="card-head">
+      <div><h2>{{ wf.name }} · v{{ wf.version }}</h2>
+        <p class="desc">{{ wf.processes|length }} proses · diperbarui {{ wf.updated_at|datetime }}{{ ' oleh ' ~ updated_by.name if updated_by }}. Project yang sudah berjalan tetap memakai versi saat project dibuat.</p></div>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('settings.workflow_process', wf_id=wf.id) }}">{{ icon('plus') }} Tambah proses</a>
+    </div>
+    <ol class="list" style="padding:0">
+      {% for p in wf.processes %}
+        <li class="list-item" style="align-items:flex-start">
+          <span class="subtle num" style="width:24px">{{ '%02d'|format(loop.index) }}</span>
+          <div class="grow">
+            <div class="row"><span class="title">{{ p.name }}</span>
+              <span class="tag">{{ {'task': 'Task', 'decision': 'Decision', 'finish': 'Finish'}[p.kind] }}</span>
+              {% if p.is_mandatory %}<span class="tag">Mandatory</span>{% endif %}
+              {% if p.loop_only %}<span class="loop-badge">Hanya saat loop</span>{% endif %}
+              {% if p.requires_document %}{{ ui.chip('Dokumen wajib', 'orange', small=true) }}{% endif %}
+              {% if p.requires_approval %}{{ ui.chip(C.APPROVAL_TYPES[p.approval_type], 'yellow', small=true) }}{% endif %}
+              {% if p.custom %}{{ ui.chip('Tambahan', 'blue', small=true) }}{% else %}<span class="small subtle" title="Proses inti (PRD) tidak dapat dihapus">🔒 inti</span>{% endif %}
+            </div>
+            <p class="small muted">PIC {{ C.ROLES[p.pic_role] }} · dikerjakan {{ p.actor_roles|labels(C.ROLES)|join(', ') }} · {{ p.duration_days }} hari{% if p.requires_document %} · wajib {{ p.required_doc_types|labels(C.DOC_TYPES)|join(' / ') }}{% endif %}</p>
+          </div>
+          <div class="row" style="flex-wrap:nowrap">
+            {% if p.custom %}
+              <form method="post" action="{{ url_for('settings.workflow_move', wf_id=wf.id, key=p.key) }}">{{ csrf_field() }}<input type="hidden" name="direction" value="up"><button class="btn btn-sm btn-ghost" type="submit" aria-label="Naikkan {{ p.name }}">↑</button></form>
+              <form method="post" action="{{ url_for('settings.workflow_move', wf_id=wf.id, key=p.key) }}">{{ csrf_field() }}<input type="hidden" name="direction" value="down"><button class="btn btn-sm btn-ghost" type="submit" aria-label="Turunkan {{ p.name }}">↓</button></form>
+              <form method="post" action="{{ url_for('settings.workflow_remove', wf_id=wf.id, key=p.key) }}">{{ csrf_field() }}<button class="btn btn-sm btn-ghost" type="submit" aria-label="Hapus {{ p.name }}">Hapus</button></form>
+            {% endif %}
+            <a class="btn btn-sm" href="{{ url_for('settings.workflow_process', wf_id=wf.id, key=p.key) }}">Edit</a>
+          </div>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+
+{% elif tab == 'system' %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;max-width:980px">
+    <form method="post" action="{{ url_for('settings.system') }}" class="card card-pad" novalidate>{{ csrf_field() }}
+      <h2 style="font-size:15px;font-weight:600">Threshold</h2>
+      <p class="small muted mb">Dipakai dashboard, attention required, notifikasi, dan AI.</p>
+      <div class="stack">
+        {{ ui.field('due_soon_days', 'Due Soon (hari sebelum target)', settings.due_soon_days, 'number', errors, help='Default 3 hari', attrs='min="1" max="30"') }}
+        {{ ui.field('no_update_days', 'No Update (hari tanpa aktivitas)', settings.no_update_days, 'number', errors, help='Default 7 hari', attrs='min="1" max="60"') }}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary" type="submit">Simpan</button></div>
+    </form>
+    <form method="post" action="{{ url_for('settings.reset_demo') }}" class="card card-pad">{{ csrf_field() }}
+      <h2 style="font-size:15px;font-weight:600">Data demo</h2>
+      <p class="small muted mb">Reset menghapus seluruh isi database &amp; file upload, lalu mengisi ulang 13 project contoh relatif terhadap tanggal hari ini. Akun demo kembali memakai password <code>demo123</code>.</p>
+      {{ ui.field('confirm', 'Ketik RESET untuk konfirmasi', '', errors={}, attrs='autocomplete="off"') }}
+      <div class="form-actions"><button class="btn btn-danger" type="submit">Reset data demo</button></div>
+    </form>
+  </div>
+{% endif %}
+{% endblock %}

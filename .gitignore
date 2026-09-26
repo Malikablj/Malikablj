@@ -1,9 +1,13 @@
-node_modules
-dist
-dist-single
-dist-artifact
-*.local
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Data lokal (database SQLite & file upload)
+data/
+
+# Lain-lain
 .DS_Store
-coverage
-test-results
-screenshots
+*.local

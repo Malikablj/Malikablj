@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ 'Edit proses' if proc else 'Tambah proses' }}{% endblock %}
+{% block content %}
+{{ ui.page_head(('Edit proses: ' ~ proc.name) if proc else 'Tambah proses', wf.name ~ ' · v' ~ wf.version ~ ' — perubahan menaikkan versi template; project berjalan tidak terpengaruh.', back=(url_for('settings.index', tab='workflow', wf=wf.id), 'Workflow')) }}
+<form method="post" class="card card-pad" style="max-width:820px" novalidate>{{ csrf_field() }}
+  <div class="form-grid">
+    {% if not proc %}{{ ui.select('after', 'Posisi', positions, after, errors, class='span-2') }}{% endif %}
+    {{ ui.field('name', 'Nama proses', values.name, errors=errors, required=true) }}
+    {{ ui.field('short_name', 'Nama singkat (tracker)', values.short_name, errors=errors) }}
+    {{ ui.field('description', 'Deskripsi', values.description, 'textarea', errors, class='span-2') }}
+    {{ ui.select('pic_role', 'Default PIC role', roles, values.pic_role, errors, required=true) }}
+    {{ ui.field('duration_days', 'Durasi plan (hari)', values.duration_days, 'number', errors, required=true, attrs='min="1" max="365"') }}
+    <div class="field span-2">
+      <span class="label" id="l-actors">Role yang dapat mengerjakan<span class="req">*</span></span>
+      <div class="checks" role="group" aria-labelledby="l-actors">
+        {% for k, l in roles %}<label class="check-pill"><input type="checkbox" name="actor_roles" value="{{ k }}" {{ 'checked' if k in (values.actor_roles or []) }}> {{ l }}</label>{% endfor %}
+      </div>
+      {% if errors.actor_roles %}<p class="error">{{ errors.actor_roles }}</p>{% endif %}
+    </div>
+    {{ ui.field('default_next_action', 'Default Next Action', values.default_next_action, errors=errors, class='span-2') }}
+    <div class="field span-2">
+      <label class="check-row"><input type="checkbox" name="is_mandatory" value="1" {{ 'checked' if values.is_mandatory }} {{ 'disabled' if proc and (proc.kind == 'finish' or proc.loop_only) }}>
+        <span>Mandatory process<br><span class="small subtle">Project tidak dapat Finish sebelum proses mandatory selesai</span></span></label>
+      {% if proc and proc.kind == 'finish' %}<input type="hidden" name="is_mandatory" value="1">{% endif %}
+      <label class="check-row"><input type="checkbox" name="requires_document" value="1" {{ 'checked' if values.requires_document }}>
+        <span>Wajib upload dokumen<br><span class="small subtle">Proses tidak dapat diselesaikan tanpa dokumen type terpilih</span></span></label>
+    </div>
+    <div class="field span-2">
+      <span class="label" id="l-docs">Document type wajib</span>
+      <div class="checks" role="group" aria-labelledby="l-docs">
+        {% for k, l in doc_types %}<label class="check-pill"><input type="checkbox" name="required_doc_types" value="{{ k }}" {{ 'checked' if k in (values.required_doc_types or []) }}> {{ l }}</label>{% endfor %}
+      </div>
+      {% if errors.required_doc_types %}<p class="error">{{ errors.required_doc_types }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('settings.index', tab='workflow', wf=wf.id) }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Simpan</button>
+  </div>
+</form>
+{% endblock %}

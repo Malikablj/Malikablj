@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "assistant/_answer.html" as ai with context %}
+{% block title %}AI Assistant{% endblock %}
+{% block content %}
+{% call ui.page_head('AI Assistant', 'Tanya posisi project, approval, revisi, deadline, bottleneck, atau minta weekly report. Jawaban hanya dari data sistem yang dapat Anda akses.') %}
+  {% if history %}<form method="post" action="{{ url_for('assistant.clear') }}">{{ csrf_field() }}<button class="btn btn-ghost" type="submit">Hapus percakapan</button></form>{% endif %}
+{% endcall %}
+
+<div class="card card-pad" style="max-width:860px">
+  {% if not history %}
+    <div class="empty" style="padding:24px 0">
+      <p class="title">Halo {{ current_user.name.split()[0] }} 👋</p>
+      <p class="desc">Pilih salah satu contoh pertanyaan atau ketik pertanyaan Anda sendiri.</p>
+    </div>
+  {% else %}
+    <div class="chat" aria-live="polite">
+      {% for m in history %}
+        <div class="msg-user" {% if loop.last %}id="latest"{% endif %}>{{ m.question }}</div>
+        <div class="msg-ai"><span class="ai-avatar" aria-hidden="true">✦</span><div class="grow">{{ ai.answer(m.answer) }}</div></div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <form method="post" class="row mt-lg" style="flex-wrap:nowrap">{{ csrf_field() }}
+    <label class="sr-only" for="question">Pertanyaan</label>
+    <input id="question" name="question" class="input grow" maxlength="500" required autocomplete="off" placeholder="mis. Project Kymm sekarang sampai mana?" {% if history %}autofocus{% endif %}>
+    <button class="btn btn-primary" type="submit">Kirim</button>
+  </form>
+
+  <div class="mt">
+    <p class="small subtle mb" style="margin-bottom:8px">Contoh pertanyaan</p>
+    <div class="checks">
+      {% for s in suggestions %}
+        <form method="post" style="display:inline">{{ csrf_field() }}<input type="hidden" name="question" value="{{ s }}"><button class="check-pill" type="submit">{{ s }}</button></form>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

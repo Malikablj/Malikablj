@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Kalender{% endblock %}
+{% macro agenda(items) -%}
+  <ul class="list">
+    {% for i in items %}
+      <li class="list-item" style="align-items:flex-start;padding:10px 0">
+        <span class="dot mark-{{ C.CALENDAR_CATEGORY_TONE[i.category] }}" style="width:8px;height:8px;border-radius:50%;margin-top:7px;flex-shrink:0"></span>
+        <div class="grow">
+          <p class="small subtle">{{ C.CALENDAR_CATEGORIES[i.category] }}{% if i.time %} · {{ i.time }}{% endif %}</p>
+          {% if i.project %}<a class="strong" style="color:var(--ink)" href="{{ url_for('projects.detail', code=i.project.code) }}">{{ i.title }}</a>{% else %}<span class="strong">{{ i.title }}</span>{% endif %}
+          <p class="small muted">{{ i.subtitle }}</p>
+          {% if i.notes %}<p class="small">{{ i.notes }}</p>{% endif %}
+        </div>
+        {% if i.event and can_manage and (i.event.created_by_id == current_user.id or current_user.role == 'admin') %}
+          <a class="btn btn-sm btn-ghost" href="{{ url_for('calendar.event', event_id=i.event.id) }}">Edit</a>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+{%- endmacro %}
+{% block content %}
+{% call ui.page_head('Kalender', 'Deadline, approval customer, trial/T0, commissioning, material arrival, validation, meeting & follow-up.') %}
+  {% if can_manage %}<a class="btn btn-primary" href="{{ url_for('calendar.event', date=selected.isoformat()) }}">{{ icon('plus') }} Tambah Event</a>{% endif %}
+{% endcall %}
+
+<div class="row-between mb">
+  <div class="row">
+    <a class="icon-btn" href="{{ url_with(month=prev_month.strftime('%Y-%m'), day=none) }}" aria-label="Bulan sebelumnya">{{ icon('chevron-left') }}</a>
+    <h2 style="font-size:18px;font-weight:600;min-width:170px;text-align:center">{{ fmt_month(month) }}</h2>
+    <a class="icon-btn" href="{{ url_with(month=next_month.strftime('%Y-%m'), day=none) }}" aria-label="Bulan berikutnya">{{ icon('chevron-right') }}</a>
+    <a class="btn btn-sm" href="{{ url_with(month=none, day=none) }}">Hari ini</a>
+  </div>
+  <form method="get" class="row" aria-label="Kategori event">
+    <input type="hidden" name="month" value="{{ month.strftime('%Y-%m') }}">
+    <div class="checks">
+      {% for k, l in C.CALENDAR_CATEGORIES.items() %}
+        <label class="check-pill"><input type="checkbox" name="cat" value="{{ k }}" {{ 'checked' if k in cats }}><span class="dot mark-{{ C.CALENDAR_CATEGORY_TONE[k] }}" style="width:8px;height:8px;border-radius:50%"></span>{{ l }}</label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-sm" type="submit">Filter</button>
+  </form>
+</div>
+
+<div class="detail-grid">
+  <div class="card calendar-grid-wrap" style="overflow:hidden">
+    <div class="calendar" role="grid" aria-label="Kalender {{ fmt_month(month) }}">
+      {% for w in ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'] %}<div class="dow" role="columnheader">{{ w }}</div>{% endfor %}
+      {% for d in days %}{% set list = by_day.get(d, []) %}
+        <a role="gridcell" href="{{ url_with(day=d.isoformat()) }}" class="day {{ 'other' if d.month != month.month }} {{ 'today' if d == today }} {{ 'selected' if d == selected }}" aria-label="{{ d|date }}, {{ list|length }} event">
+          <span class="date">{{ d.day }}</span>
+          {% for i in list[:3] %}<span class="ev" title="{{ C.CALENDAR_CATEGORIES[i.category] }}: {{ i.title }}"><span class="dot mark-{{ C.CALENDAR_CATEGORY_TONE[i.category] }}"></span>{{ i.title }}</span>{% endfor %}
+          {% if list|length > 3 %}<span class="small subtle" style="padding-left:4px">+{{ list|length - 3 }} lagi</span>{% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <aside class="stack">
+    <section class="card card-pad hide-mobile">
+      <div class="row-between"><h2 style="font-size:15px;font-weight:600">{{ selected|date }}</h2>
+        {% if can_manage %}<a class="small" href="{{ url_for('calendar.event', date=selected.isoformat()) }}">+ Event</a>{% endif %}</div>
+      {% set day_items = by_day.get(selected, []) %}
+      {% if not day_items %}<p class="subtle small mt">Tidak ada event.</p>{% else %}{{ agenda(day_items) }}{% endif %}
+    </section>
+
+    {# Mobile: agenda satu bulan penuh #}
+    <section class="card card-pad show-mobile">
+      <h2 style="font-size:15px;font-weight:600" class="mb">Agenda {{ fmt_month(month) }}</h2>
+      {% if not month_days %}<p class="subtle small">Tidak ada event bulan ini.</p>{% endif %}
+      {% for d in month_days %}
+        <h3 class="small strong {{ 'text-red' if d == today else 'muted' }}" style="margin-top:12px">{{ d|date }}{{ ' · Hari ini' if d == today }}</h3>
+        {{ agenda(by_day[d]) }}
+      {% endfor %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

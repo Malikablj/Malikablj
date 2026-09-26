@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+{% call ui.page_head('Dashboard', scope ~ ' · per ' ~ (today|date)) %}
+  {% if perm.can_create_project(current_user) %}<a class="btn btn-primary" href="{{ url_for('projects.create') }}">{{ icon('plus') }} Project Baru</a>{% endif %}
+{% endcall %}
+
+{# Filter: formulir GET biasa, diproses di server #}
+<form method="get" class="row mb" aria-label="Filter dashboard">
+  <div class="segmented" role="group" aria-label="Project Type">
+    <a href="{{ url_with(type='') }}" class="{{ 'active' if not filters.type }}">Semua</a>
+    <a href="{{ url_with(type='new_mold') }}" class="{{ 'active' if filters.type == 'new_mold' }}">New Mold</a>
+    <a href="{{ url_with(type='subcont') }}" class="{{ 'active' if filters.type == 'subcont' }}">Subcont</a>
+  </div>
+  <input type="hidden" name="type" value="{{ filters.type }}">
+  <label class="sr-only" for="f-customer">Customer</label>
+  <select id="f-customer" name="customer" class="input" style="width:auto">
+    <option value="">Customer</option>
+    {% for c in customers %}<option {{ 'selected' if c == filters.customer }}>{{ c }}</option>{% endfor %}
+  </select>
+  <label class="sr-only" for="f-pic">NPD PIC</label>
+  <select id="f-pic" name="pic" class="input" style="width:auto">
+    <option value="">NPD PIC</option>
+    {% for c in pics %}<option {{ 'selected' if c == filters.pic }}>{{ c }}</option>{% endfor %}
+  </select>
+  <label class="sr-only" for="f-priority">Priority</label>
+  <select id="f-priority" name="priority" class="input" style="width:auto">
+    <option value="">Priority</option>
+    {% for k, v in C.PRIORITIES.items() %}<option value="{{ k }}" {{ 'selected' if k == filters.priority }}>{{ v }}</option>{% endfor %}
+  </select>
+  <button class="btn btn-sm" type="submit">Terapkan</button>
+  {% if filters.type or filters.customer or filters.pic or filters.priority %}<a class="small" href="{{ url_for('dashboard.index') }}">Reset filter</a>{% endif %}
+</form>
+
+<section class="kpis" aria-label="KPI">
+  {% set tiles = [
+    ('Total Project', kpi.total, None, url_for('projects.index'), ''),
+    ('New Mold', kpi.new_mold, None, url_for('projects.index', type='new_mold'), ''),
+    ('Subcont', kpi.subcont, None, url_for('projects.index', type='subcont'), ''),
+    ('On Progress', kpi.on_progress, 'blue', url_for('projects.index', status='on_progress'), ''),
+    ('Waiting', kpi.waiting, 'yellow', url_for('projects.index', status='waiting'), 'Approval + External'),
+    ('Overdue', kpi.overdue, 'red', url_for('projects.index', status='overdue'), ''),
+    ('Due Soon', kpi.due_soon, 'yellow', url_for('projects.index', status='due_soon'), ''),
+    ('Completed', kpi.completed, 'green', url_for('projects.index', status='completed'), ''),
+  ] %}
+  {% for label, value, tone, href, hint in tiles %}
+    <a class="kpi" href="{{ href }}">
+      <span class="label">{% if tone %}<span class="dot mark-{{ tone }}"></span>{% endif %}{{ label }}</span>
+      <span class="value">{{ value }}</span>
+      {% if hint %}<span class="hint">{{ hint }}</span>{% endif %}
+    </a>
+  {% endfor %}
+</section>
+
+<div class="mt-lg" style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px" id="attention">
+  <section class="card" aria-labelledby="att-title">
+    <div class="card-head"><div><h2 id="att-title">Attention Required</h2><p class="desc">Project aktif yang perlu ditindaklanjuti</p></div></div>
+    <div class="card-body" style="padding-bottom:8px">
+      <nav class="pills" aria-label="Kategori attention">
+        {% for key, label in C.ATTENTION_LABELS.items() %}
+          <a href="{{ url_with(attention=key) }}#attention" class="{{ 'active' if key == attention_key }}">{{ label }} <span>{{ attention[key]|length }}</span></a>
+        {% endfor %}
+      </nav>
+    </div>
+    {% set rows = attention[attention_key] %}
+    {% if not rows %}
+      {{ ui.empty('Tidak ada project ' ~ C.ATTENTION_LABELS[attention_key], 'Tidak ada yang perlu ditindaklanjuti pada kategori ini.') }}
+    {% else %}
+      <ul class="list">
+        {% for v in rows %}
+          {% set p = v.project %}
+          <li><a class="list-item" href="{{ url_for('projects.detail', code=p.code) }}">
+            <span class="grow">
+              <span class="title">{{ p.name }}</span> <span class="subtle">{{ p.code }}</span><br>
+              <span class="small muted">{{ v.customer }} · {{ v.current.name if v.current else '—' }} ·
+                <span style="color:var(--ink)">
+                  {% if attention_key == 'overdue' %}Terlambat {{ v.overdue_days }} hari dari target {{ p.target_date|date }}
+                  {% elif attention_key == 'due_soon' %}Target {{ p.target_date|date }} ({{ describe_due(p.target_date, today) }})
+                  {% elif attention_key in ('waiting_approval', 'waiting_external') %}Menunggu {{ p.waiting_for or '—' }}
+                  {% elif attention_key == 'no_update' %}Tidak ada update {{ v.days_since_update }} hari
+                  {% else %}Dokumen wajib belum ada: {{ v.missing_docs|join(', ') }}{% endif %}
+                </span></span>
+            </span>
+            <span class="hide-mobile">{{ ui.project_status(v, small=true) }}</span>
+            <span aria-hidden="true" class="subtle">›</span>
+          </a></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="mine-title">
+    <div class="card-head"><div><h2 id="mine-title">Menunggu tindakan Anda</h2><p class="desc">Proses aktif dengan Anda sebagai PIC</p></div>
+      <a class="small" href="{{ url_for('projects.index', mine=1) }}">Lihat semua</a></div>
+    {% if not my_work %}
+      {{ ui.empty('Tidak ada tugas aktif', 'Proses yang di-assign ke Anda akan muncul di sini.') }}
+    {% else %}
+      <ul class="list">
+        {% for v in my_work[:6] %}
+          <li><a class="list-item" href="{{ url_for('projects.detail', code=v.project.code) }}" style="display:block">
+            <span class="title">{{ v.current.name }}</span><br>
+            <span class="small muted">{{ v.project.code }} · {{ v.project.name }}</span><br>
+            <span class="small">{{ v.project.next_action }}</span><br>
+            {{ ui.due_text(v.project.next_action_due, v.next_action_state) }}
+          </a></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+</div>
+
+{# Grafik: bar tipis, nilai di ujung, warna status selalu disertai label #}
+{% macro bar_list(rows, empty_text='Belum ada data') %}
+  {% if not rows %}<p class="subtle" style="padding:16px 0;text-align:center">{{ empty_text }}</p>{% else %}
+  <ul class="bars">
+    {% for r in rows %}
+      <li title="{{ r.label }}: {{ r.value }}">
+        <div class="head"><span class="truncate">{{ r.label }}</span><span class="v">{{ r.value }}</span></div>
+        <div class="track"><div class="bar mark-{{ r.tone or 'blue' }}" style="width: {{ r.pct }}%"></div></div>
+      </li>
+    {% endfor %}
+  </ul>{% endif %}
+{% endmacro %}
+{% macro distribution(rows) %}
+  {% if not rows %}<p class="subtle">Belum ada data</p>{% else %}
+  <div class="stackbar" role="img" aria-label="{% for r in rows %}{{ r.label }} {{ r.value }}{{ ', ' if not loop.last }}{% endfor %}">
+    {% for r in rows %}<span class="mark-{{ r.tone }}" style="width: {{ r.pct }}%" title="{{ r.label }}: {{ r.value }}"></span>{% endfor %}
+  </div>
+  <ul class="legend">
+    {% for r in rows %}<li><span class="sw mark-{{ r.tone }}"></span><span class="grow muted">{{ r.label }}</span><span class="num strong">{{ r.value }}</span><span class="num subtle" style="width:40px;text-align:right">{{ r.pct|round|int }}%</span></li>{% endfor %}
+  </ul>{% endif %}
+{% endmacro %}
+
+<section class="mt-lg" aria-label="Grafik" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+  <div class="card"><div class="card-head"><div><h3>Project by Process</h3><p class="desc">Current process project aktif</p></div></div><div class="card-body">{{ bar_list(by_process) }}</div></div>
+  <div class="card"><div class="card-head"><div><h3>Project by Status</h3><p class="desc">Overdue dihitung dari target date</p></div></div><div class="card-body">{{ distribution(by_status) }}</div></div>
+  <div class="card"><div class="card-head"><h3>Project by Customer</h3></div><div class="card-body">{{ bar_list(by_customer) }}</div></div>
+  <div class="card"><div class="card-head"><div><h3>Project by PIC</h3><p class="desc">PIC proses aktif</p></div></div><div class="card-body">{{ bar_list(by_pic) }}</div></div>
+  <div class="card"><div class="card-head"><h3>Project by Project Type</h3></div><div class="card-body">{{ distribution(by_type) }}</div></div>
+  <div class="card"><div class="card-head"><h3>Project by Priority</h3></div><div class="card-body">{{ bar_list(by_priority) }}</div></div>
+</section>
+<p class="mt" style="text-align:right"><a class="small" href="{{ url_for('reports.index') }}">Lihat laporan &amp; analytics ›</a></p>
+
+<style>@media (max-width: 1180px) { #attention { grid-template-columns: minmax(0, 1fr) !important; } }</style>
+{% endblock %}

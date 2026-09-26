@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Upload Dokumen · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Upload Dokumen', p.code ~ ' · ' ~ p.name, back=(next_url or url_for('projects.detail', code=p.code, tab='documents') ~ '#tabs', 'Kembali')) }}
+
+{# Ganti proses tujuan (memuat ulang daftar dokumen proses tersebut) #}
+<form method="get" class="card card-pad mb row" style="max-width:760px">
+  <label class="small strong" for="pick-process">Proses</label>
+  <select id="pick-process" name="process" class="input grow" style="min-width:220px">
+    {% for x in processes %}<option value="{{ x.id }}" {{ 'selected' if x.id == proc.id }}>{{ '%02d'|format(x.sequence) }} · {{ x.name }}{{ ' (current)' if x.id == p.current_process_id }}</option>{% endfor %}
+  </select>
+  {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+  <button class="btn btn-sm" type="submit">Ganti proses</button>
+</form>
+
+<form method="post" enctype="multipart/form-data" class="card card-pad" style="max-width:760px" novalidate>
+  {{ csrf_field() }}
+  <input type="hidden" name="process" value="{{ proc.id }}">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <p class="small muted mb">Folder <strong>{{ proc.folder }}</strong>{% if proc.requires_document %} · dokumen wajib: {{ proc.required_doc_types|labels(C.DOC_TYPES)|join(' / ') }}{% endif %}</p>
+
+  <fieldset class="mb">
+    <legend>Jenis upload</legend>
+    <div class="radio-cards" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+      <label class="radio-card"><input type="radio" name="mode" value="new" {{ 'checked' if mode == 'new' }}><span class="title">Dokumen baru</span><span class="sub">Mulai dari Rev 00</span></label>
+      <label class="radio-card"><input type="radio" name="mode" value="revision" {{ 'checked' if mode == 'revision' }} {{ 'disabled' if not process_docs }}><span class="title">Revisi baru</span><span class="sub">Rev +1, revisi lama → Superseded</span></label>
+      <label class="radio-card"><input type="radio" name="mode" value="version" {{ 'checked' if mode == 'version' }} {{ 'disabled' if not process_docs }}><span class="title">Versi baru</span><span class="sub">File pengganti di revisi yang sama</span></label>
+    </div>
+  </fieldset>
+
+  <div class="stack">
+    <div class="field">
+      <label for="f-file">File<span class="req" aria-hidden="true">*</span></label>
+      <input id="f-file" name="file" type="file" class="input {{ 'invalid' if errors.file }}" style="padding:8px 12px;height:auto" required
+             accept="{{ accept }}">
+      {% if errors.file %}<p class="error">{{ errors.file }}</p>{% else %}<p class="help">Maks. 25 MB · PDF, gambar, AI/EPS/SVG, DWG/DXF/STEP/STL, Office, video, ZIP</p>{% endif %}
+    </div>
+
+    {% if process_docs %}
+      {{ ui.select('document', 'Dokumen yang direvisi (untuk revisi / versi baru)', doc_options, document_id, errors, blank='Pilih dokumen') }}
+    {% endif %}
+
+    <div class="form-grid">
+      {{ ui.select('type', 'Document Type (dokumen baru)', doc_types, values.type, errors) }}
+      {{ ui.field('name', 'Nama dokumen (dokumen baru)', values.name, errors=errors, placeholder='mis. Artwork Kymm Tube 50ml') }}
+    </div>
+    {{ ui.field('description', 'Deskripsi', values.description, 'textarea', errors) }}
+    {{ ui.field('note', 'Catatan revisi', values.note, errors=errors, placeholder='mis. Revisi warna logo sesuai feedback customer') }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ next_url or url_for('projects.detail', code=p.code, tab='documents') }}">Batal</a>
+    <button class="btn btn-primary" type="submit">{{ icon('upload') }} Upload</button>
+  </div>
+</form>
+{% endblock %}

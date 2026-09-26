@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "assistant/_answer.html" as ai %}
+{% block title %}Ringkasan AI · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Ringkasan AI', 'Disusun dari data project di sistem — tanpa data fiktif.', back=(url_for('projects.detail', code=p.code), p.code ~ ' · ' ~ p.name)) }}
+<div class="card card-pad" style="max-width:760px">
+  {{ ai.answer(answer) }}
+  <div class="form-actions">
+    <a class="btn" href="{{ url_for('assistant.index') }}">{{ icon('sparkles') }} Tanya AI Assistant</a>
+    <a class="btn btn-primary" href="{{ url_for('projects.detail', code=p.code) }}">Kembali ke project</a>
+  </div>
+</div>
+{% endblock %}

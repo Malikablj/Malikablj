@@ -1,76 +1,197 @@
-# NPD Project Control
+# NPD Project Control (Python)
 
-Web application internal untuk mengelola, memonitor, dan mendokumentasikan project **New Product Development** — **New Mold** dan **Subcont** dalam satu sistem (PRD v2.1, Apple-inspired UI/UX).
+Aplikasi web internal untuk memantau project **New Product Development** — tipe **New Mold** dan **Subcont** —
+dari request sampai project selesai (PRD v2.1). Semua kode ditulis dengan **Python** (Flask) dan
+halaman HTML dirender di server, jadi tidak ada JavaScript yang perlu dipelajari.
 
-> Konsep utama: **ONE PROJECT = ONE DIGITAL RECORD** — status, current process, PIC, waiting for, next action, timeline, approval, dokumen & revisi, serta activity history dalam satu halaman project.
+> Satu project = satu catatan digital: current process, PIC, waiting for, next action, approval customer,
+> dokumen & revisi, timeline, dan riwayat aktivitas.
 
-## Menjalankan
+---
+
+## Cara menjalankan
+
+Butuh **Python 3.10+**.
 
 ```bash
-npm install
-npm run dev          # http://localhost:5173
-npm test             # unit test workflow engine, business rules, AI assistant
-npm run build        # production build (dist/), route-level code splitting
-npm run build:single # satu file HTML mandiri (dist-single/index.html) untuk demo
-npm run build:artifact # fragment untuk hosting sandbox (MemoryRouter, tanpa download/print)
+# 1. Buat virtual environment & install library
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# 2. Jalankan aplikasi
+python app.py
 ```
 
-Login memakai akun demo (password semua `demo123`), atau klik salah satu akun di halaman login:
+Buka **http://127.0.0.1:5000**. Saat pertama kali dijalankan, database SQLite dibuat otomatis di
+folder `data/` dan diisi **13 project contoh** (tanggalnya relatif terhadap hari ini).
 
-| Role | Akun | Scope |
-|---|---|---|
-| Admin | andi@npd.local | Semua project + Pengaturan (user, customer, workflow, sistem) |
-| Admin Sales | sari@npd.local, budi@npd.local | Project dengan dirinya sebagai Sales PIC |
-| NPD Staff | rizky@npd.local, maya@npd.local | Semua project, project control |
-| Drafter | dimas@npd.local, nadia@npd.local | Project dengan dirinya sebagai Drafter |
-| Purchasing | hendra@npd.local | Semua project, material request & purchasing status |
-| Production | agus@npd.local | Trial / T0 / commissioning / validation |
-| Quality | lestari@npd.local | Trial / validation |
-| Management | bambang@npd.local | Read-only: dashboard, report, analytics |
+**Login demo** — semua akun memakai password `demo123` (akun juga bisa dipilih langsung di halaman login):
 
-Data demo (13 project dengan loop revisi artwork, T0 NG → mold correction, trial rejection, masterbatch, project Hold/overdue/completed) dibuat relatif terhadap tanggal hari ini dengan menjalankan command yang sama dengan UI melalui workflow engine. Reset di **Pengaturan → Sistem**.
+| Email | Role |
+| --- | --- |
+| andi@npd.local | Admin |
+| sari@npd.local, budi@npd.local | Admin Sales |
+| rizky@npd.local, maya@npd.local | NPD Staff |
+| dimas@npd.local, nadia@npd.local | Drafter |
+| hendra@npd.local | Purchasing |
+| agus@npd.local | Production |
+| lestari@npd.local | Quality |
+| bambang@npd.local | Management (read-only) |
+
+**Menjalankan test**
+
+```bash
+python -m pytest -q
+```
+
+**Pengaturan lewat environment variable** (opsional)
+
+| Variable | Fungsi | Default |
+| --- | --- | --- |
+| `NPD_SECRET_KEY` | Kunci cookie session — **wajib diganti di production** | `dev-secret-…` |
+| `NPD_DATA_DIR` | Folder database & file upload | `./data` |
+| `NPD_DATABASE_URL` | URL database SQLAlchemy (mis. PostgreSQL) | SQLite di `data/` |
+| `NPD_SEED_DEMO` | `1` = isi data demo saat database kosong | `1` |
+| `NPD_HOST` / `NPD_PORT` | Alamat server | `127.0.0.1` / `5000` |
+| `NPD_DEBUG` | `1` = mode debug Flask | mati |
+
+Untuk memulai dari data kosong: hapus folder `data/` lalu jalankan dengan `NPD_SEED_DEMO=0`
+(buat user Admin pertama lewat `flask --app app shell`), atau pakai **Pengaturan → Sistem → Reset data demo**.
+
+---
+
+## Struktur file
+
+Aplikasi dibagi menjadi 3 lapisan. Setiap lapisan hanya memanggil lapisan di bawahnya:
+
+```
+ Halaman (routes/ + templates/)     ← menerima klik & form, menampilkan HTML
+        │
+ Logika bisnis (services/)          ← aturan workflow, validasi, hak akses, laporan
+        │
+ Data (models.py)                   ← tabel database
+```
+
+```
+app.py                     ← titik masuk: `python app.py`
+requirements.txt           ← daftar library Python
+npd/
+├── __init__.py            ← create_app(): menyiapkan Flask, database, dan semua halaman
+├── config.py              ← konfigurasi (database, folder upload, secret key)
+├── extensions.py          ← objek database (SQLAlchemy)
+├── constants.py           ← daftar nilai tetap + label & warnanya (role, status, tipe dokumen, dll.)
+├── models.py              ← TABEL DATABASE: User, Customer, Project, ProjectProcess, Approval,
+│                            Document, DocumentVersion, ProcessRecord, Activity, Comment,
+│                            Notification, CalendarEvent, Setting, ...
+├── workflows.py           ← TEMPLATE WORKFLOW Subcont (13 proses) & New Mold (16 proses):
+│                            urutan proses, PIC, dokumen wajib, pilihan keputusan & ke mana workflow lanjut
+├── template_helpers.py    ← fungsi/filter yang dipakai di template (format tanggal, ikon, CSRF)
+│
+├── services/              ← LOGIKA BISNIS (tidak tergantung tampilan, mudah di-test)
+│   ├── workflow_engine.py ← jantung aplikasi: menyelesaikan proses, revision loop, cabang,
+│   │                        status otomatis, approval otomatis, Finish project
+│   ├── projects.py        ← buat/ubah project, update status, next action, komentar
+│   ├── documents.py       ← upload dokumen, revisi (Rev 00, 01, …) tanpa menghapus revisi lama
+│   ├── approvals.py       ← ajukan & putuskan approval
+│   ├── permissions.py     ← hak akses per role (siapa boleh melihat/mengubah apa)
+│   ├── metrics.py         ← overdue, due soon, aging, progress, attention required
+│   ├── planning.py        ← menghitung planned start/finish tiap proses
+│   ├── notifications.py   ← notifikasi deadline, overdue, next action, dokumen wajib
+│   ├── analytics.py       ← Weekly NPD Report & analytics (lead time, bottleneck, loop)
+│   ├── assistant.py       ← AI Assistant berbasis data (menjawab dari database, tanpa mengarang)
+│   ├── calendar.py        ← item kalender (deadline, approval, trial, material, meeting, …)
+│   ├── admin.py           ← kelola user, customer, template workflow, pengaturan, event kalender
+│   ├── excel.py           ← export .xlsx
+│   ├── seed.py            ← data demo (13 skenario project)
+│   ├── sample_files.py    ← file contoh (PDF/SVG) untuk dokumen demo
+│   ├── context.py         ← "siapa melakukan aksi & kapan" + pencatatan Activity History
+│   ├── dates.py           ← fungsi tanggal format Indonesia
+│   └── errors.py          ← AppError: pesan error yang ditampilkan ke user
+│
+├── routes/                ← HALAMAN (satu file per menu di sidebar)
+│   ├── __init__.py        ← mendaftarkan semua halaman + cek login + proteksi CSRF
+│   ├── helpers.py         ← fungsi bantu route (transaksi database, pesan sukses/error)
+│   ├── auth.py            ← /login, /logout
+│   ├── dashboard.py       ← /                     Dashboard: KPI, Attention Required, grafik
+│   ├── projects.py        ← /projects             daftar, buat, detail, edit, status, finish, export
+│   ├── process.py         ← /projects/<kode>/process/<id>   detail proses, selesaikan, problem
+│   ├── tracker.py         ← /tracker              Process Tracker (board per proses)
+│   ├── gantt.py           ← /gantt                Timeline / Gantt
+│   ├── calendar.py        ← /calendar             Kalender + meeting/follow-up
+│   ├── documents.py       ← /documents            dokumen, preview, download, upload revisi
+│   ├── approvals.py       ← /approvals            daftar & keputusan approval
+│   ├── reports.py         ← /reports              Weekly report & analytics (+ Excel)
+│   ├── assistant.py       ← /assistant            AI Assistant
+│   ├── settings.py        ← /settings             profil, user, customer, workflow, sistem
+│   └── notifications.py   ← /notifications        notifikasi
+│
+├── templates/             ← TAMPILAN HTML (Jinja2), foldernya sama dengan nama route
+│   ├── base.html          ← kerangka halaman: sidebar, topbar, pesan sukses/error
+│   ├── _macros.html       ← komponen kecil yang dipakai ulang (chip status, field form, dll.)
+│   ├── dashboard.html, tracker.html, gantt.html, error.html
+│   ├── auth/  projects/  process/  documents/  approvals/
+│   └── calendar/  reports/  assistant/  settings/  notifications/
+│
+└── static/css/style.css   ← seluruh desain (warna, layout, responsif mobile/tablet/desktop)
+
+tests/
+├── conftest.py            ← database test di memori
+├── test_workflow.py       ← test logika bisnis (revision loop, cabang, status, finish, AI)
+└── test_routes.py         ← test halaman (login, hak akses, form, upload, export, CSRF)
+```
+
+### Contoh alur: "Selesaikan Proses"
+
+1. User menekan **Selesaikan Proses** → `routes/process.py` fungsi `complete()` menampilkan
+   `templates/process/complete.html` (form berisi field dari `workflows.py`).
+2. Form dikirim → `complete()` memanggil `services/workflow_engine.py` → `complete_process()`.
+3. Engine memeriksa hak akses, field wajib, dokumen wajib, lalu memindahkan current process,
+   mengatur status/waiting for/next action, membuat approval & notifikasi, dan mencatat Activity History.
+4. Jika berhasil, perubahan disimpan (`routes/helpers.py` → `run()`) dan user diarahkan kembali ke detail
+   project dengan pesan sukses. Jika gagal, pesan error ditampilkan di form yang sama.
+
+### Mengubah workflow
+
+- **Tanpa coding**: Admin → **Pengaturan → Workflow** (ubah nama, PIC, durasi, dokumen wajib,
+  tambah/hapus proses tambahan). Setiap perubahan menaikkan versi template; project yang sudah
+  berjalan tetap memakai versi saat project dibuat.
+- **Lewat kode**: edit `npd/workflows.py` (berlaku untuk database baru / setelah reset data demo).
+
+---
 
 ## Fitur
 
-- **Workflow engine configurable** — template Subcont & New Mold (PRD §4–5) dengan decision, cabang (New Masterbatch YES/NO), revision loop (artwork, 3D, mold drawing, masterbatch, trial), T0 loop (Mold Correction → Mold Machining → T0), repeat (Validation FAIL, Commissioning NG). Admin dapat mengubah atribut proses dan menambah proses; project menyimpan snapshot versi workflow.
-- **Project** — create (Project ID otomatis `NPD-YYYY-XXX`), edit, update status (aturan Waiting External/Waiting Approval/Hold/Cancelled), next action, admin override current process, Finish yang menolak bila mandatory process belum selesai.
-- **Project Detail** — current process sebagai focal point, PIC/Waiting For/Deadline/Aging/Next Action, process tracker (horizontal desktop, vertikal mobile), timeline planned vs actual (grafik & tabel), approval history, dokumen per folder proses, revision history, record trial/material/validation, activity & komentar, ringkasan AI.
-- **Dokumen** — upload per proses (IndexedDB), revisi baru / versi baru tanpa menghapus revisi lama, status Current/Superseded/Rejected/Approved otomatis dari approval, preview (gambar/PDF/teks) & download.
-- **Approval** — record otomatis saat workflow masuk proses approval, keputusan dengan komentar wajib untuk penolakan & bukti approval, approval manual (mis. 2D Approval).
-- **Dashboard** — 8 KPI, filter real-time, Attention Required (Overdue, Due Soon, Waiting Approval/External, No Update, Missing Mandatory Document), 6 chart, tugas saya.
-- **Process Tracker** board, **Timeline/Gantt** (filter customer/type/PIC/status/priority/date range, zoom, expand proses), **Kalender** (deadline, approval, trial/T0, commissioning, material arrival, validation + CRUD meeting/follow-up).
-- **Laporan** — Weekly NPD Report (salin teks, print/PDF, export Excel), analytics (lead time, durasi per proses, bottleneck, waiting approval customer, artwork revision, T0 loop, trial rejection, overdue).
-- **AI Assistant** — menjawab pertanyaan natural language dari database sesuai scope role, tidak mengarang data ("Data tersebut belum tersedia di sistem."), read-only.
-- **Notifikasi** — event (assignment, approval requested/approved/rejected, revisi artwork, dokumen baru/revisi) + scan waktu (deadline mendekat, overdue, next action due/overdue, dokumen wajib belum ada).
-- **Export Excel** `.xlsx` asli tanpa dependency (daftar project, weekly report, analytics).
+- **Dashboard** — KPI (total, New Mold, Subcont, On Progress, Waiting, Overdue, Due Soon, Completed),
+  Attention Required (overdue, due soon, waiting approval/external, no update, dokumen wajib belum ada),
+  tugas saya, grafik per proses/status/customer/PIC/type/priority, filter.
+- **Project** — daftar dengan pencarian, filter, sort, export Excel; form project dengan validasi &
+  cek duplikat; Project ID otomatis `NPD-YYYY-XXX`.
+- **Detail project** — current process sebagai fokus (PIC, waiting for, deadline, aging, next action),
+  process tracker, timeline planned vs actual, tab Approval / Dokumen / Revision History / Trial &
+  Material / Activity + komentar, Ringkasan AI.
+- **Workflow engine** — revision loop (mis. artwork ditolak → kembali ke Artwork), cabang New Mold
+  (masterbatch YES/NO, T0 OK/NG → Mold Correction), Problem, status otomatis (Waiting Customer /
+  Waiting External), approval otomatis, Finish ditolak bila proses mandatory belum selesai,
+  koreksi current process oleh Admin.
+- **Dokumen** — per proses & folder, revisi Rev 00/01/… (revisi lama tidak dihapus), versi,
+  preview PDF/gambar, download, validasi format & ukuran (maks. 25 MB).
+- **Approval** — daftar "perlu keputusan saya", semua pending, riwayat; waiting time; lampiran keputusan.
+- **Process Tracker**, **Timeline/Gantt** (zoom minggu/bulan/kuartal, expand proses), **Kalender**
+  (deadline, approval, trial, commissioning, material, validation, meeting, follow-up).
+- **Laporan** — Weekly NPD Report (top issues, action required, teks siap salin, Excel) dan analytics
+  (lead time, durasi proses, bottleneck, waktu tunggu customer, loop artwork/T0/trial).
+- **AI Assistant** — tanya jawab berbahasa Indonesia berdasarkan data yang boleh dilihat user.
+- **Hak akses 8 role** (PRD §11), **notifikasi in-app**, **Pengaturan** (user, customer, workflow, threshold).
+- **Keamanan dasar** — password di-hash, session login, proteksi CSRF di semua form, validasi file upload,
+  data project dibatasi sesuai role (Admin Sales & Drafter hanya melihat project miliknya).
+- **Responsif** — desktop, tablet, dan mobile (menu ☰, tombol aksi utama di bawah layar).
 
-## Arsitektur
+## Asumsi & batasan
 
-```
-src/
-  types/            domain model (tabel PRD §14)
-  config/           label/tone, workflow template default
-  domain/           logika murni & dapat diuji: workflow engine, command, permission,
-                    metrics, analytics, seed
-  assistant/        engine AI berbasis data (di belakang interface AssistantProvider)
-  services/
-    storage/        localStorage (atomic draft → commit) & IndexedDB file store
-    api/            service/API abstraction: auth, latency & failure simulation,
-                    permission check, read model
-  hooks/            TanStack Query hooks, auth context
-  components/       ui/, layout/, project/, documents/, approvals/, charts/, assistant/
-  pages/            satu file per halaman (lazy loaded)
-```
-
-Mengganti ke backend sungguhan cukup mengganti implementasi di `src/services/api/*` (signature tetap `Promise`); UI dan domain tidak berubah. Permission diterapkan di command (backend), query (scope data), UI, dokumen, dan AI.
-
-## Asumsi utama
-
-- **New Masterbatch** diputuskan pada NPD Feedback (outcome “Accepted · New Masterbatch YES/NO”). Mengikuti diagram PRD, cabang YES = Masterbatch Development → Customer Masterbatch Approval, cabang NO = 3D Prototype → Customer 3D Approval; keduanya bertemu di 2D Drawing. Cabang yang tidak dipilih ditandai *Tidak dijalankan*.
-- **Overdue** dihitung otomatis dari Target Finish dan ditampilkan bersama status dasar (mis. “Overdue 5 hari · Waiting External”) agar informasi menunggu siapa tidak hilang.
-- **Customer Trial Approval Not Approved** kembali ke Trial & Evaluation (default) atau Trial Material Preparation (dipilih user). **Validation FAIL** & **Commissioning Not OK** mengulang proses (status Problem). **NPD Feedback Rejected** → project Cancelled.
-- Status project otomatis dari current process: approval customer → Waiting Approval, proses eksternal (Mold Machining, Mold Correction, Mold Shipment, Material Preparation) → Waiting External, lainnya → On Progress.
-- Planned date tiap proses dibuat otomatis dari durasi template dan diskalakan ke Target Finish; dapat diedit per proses oleh Admin/NPD Staff.
-- Label utama UI berbahasa Indonesia; istilah domain (status, approval type, document type, nama proses) mengikuti PRD.
-- AI Assistant memakai engine deterministik berbasis data (tidak memerlukan API key) di balik interface `AssistantProvider`, sehingga dapat diganti LLM dengan tool yang memakai data ber-scope sama.
-- Tanpa backend, data disimpan di browser (localStorage + IndexedDB) per perangkat.
+- AI Assistant memakai aturan berbasis data (bukan model bahasa eksternal) agar jawaban selalu dari
+  database. Fungsi `answer_question()` di `services/assistant.py` bisa diganti LLM dengan data yang sama.
+- Notifikasi hanya di dalam aplikasi (belum email/WhatsApp). Notifikasi deadline dibuat saat user login.
+- File upload disimpan di folder `data/uploads/` (bukan cloud storage).
+- Server bawaan `python app.py` untuk penggunaan lokal/intranet. Untuk production gunakan WSGI server,
+  misalnya `pip install waitress` lalu `waitress-serve --port=8000 app:app`, dan set `NPD_SECRET_KEY`.

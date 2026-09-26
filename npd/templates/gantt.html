@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Timeline / Gantt{% endblock %}
+{% block content %}
+{{ ui.page_head('Timeline / Gantt', 'Timeline project dan proses — planned vs actual.') }}
+
+<form method="get" class="card card-pad mb">
+  <div class="filters" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+    <div class="field"><label for="g-type">Project Type</label><select id="g-type" name="type" class="input"><option value="">Semua</option>
+      {% for k, v in C.PROJECT_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if f.type == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="g-cus">Customer</label><select id="g-cus" name="customer" class="input"><option value="">Semua</option>
+      {% for c in customers %}<option {{ 'selected' if f.customer == c }}>{{ c }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="g-pic">NPD PIC</label><select id="g-pic" name="pic" class="input"><option value="">Semua</option>
+      {% for c in pics %}<option {{ 'selected' if f.pic == c }}>{{ c }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="g-st">Status</label><select id="g-st" name="status" class="input">
+      <option value="active" {{ 'selected' if f.status == 'active' }}>Semua aktif</option><option value="" {{ 'selected' if f.status == '' }}>Semua status</option>
+      {% for k, v in statuses.items() %}<option value="{{ k }}" {{ 'selected' if f.status == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="g-pr">Priority</label><select id="g-pr" name="priority" class="input"><option value="">Semua</option>
+      {% for k, v in C.PRIORITIES.items() %}<option value="{{ k }}" {{ 'selected' if f.priority == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="g-from">Dari</label><input id="g-from" type="date" name="from" class="input {{ 'invalid' if range_invalid }}" value="{{ start.isoformat() }}"></div>
+    <div class="field"><label for="g-to">Sampai</label><input id="g-to" type="date" name="to" class="input {{ 'invalid' if range_invalid }}" value="{{ end.isoformat() }}"></div>
+    <div class="field"><label for="g-view">Tampilan</label><select id="g-view" name="view" class="input">
+      <option value="" {{ 'selected' if f.view != 'list' }}>Gantt</option><option value="list" {{ 'selected' if f.view == 'list' }}>Daftar</option></select></div>
+  </div>
+  <input type="hidden" name="zoom" value="{{ zoom }}">
+  <div class="row mt"><button class="btn btn-sm btn-primary" type="submit">Terapkan</button><a class="small" href="{{ url_for('gantt.index') }}">Reset</a></div>
+</form>
+
+{% if range_invalid %}
+  <div class="card">{{ ui.empty('Rentang tanggal tidak valid', 'Tanggal awal harus sebelum tanggal akhir.') }}</div>
+{% elif not total %}
+  <div class="card">{{ ui.empty('Belum ada project') }}</div>
+{% elif not list_rows %}
+  <div class="card">{{ ui.empty('Tidak ada project pada rentang/filter ini', 'Coba ubah filter atau rentang tanggal.') }}</div>
+{% elif chart %}
+  <div class="card" style="overflow:hidden">
+    <div class="row-between" style="padding:12px 16px;border-bottom:1px solid var(--line)">
+      <div class="row small subtle" style="gap:14px">
+        <span class="row" style="gap:6px"><span style="width:24px;height:10px;border-radius:99px;background:rgba(42,120,214,.25)"></span> Rentang project (start → target)</span>
+        <span class="row" style="gap:6px"><span class="mark-blue" style="width:24px;height:10px;border-radius:99px"></span> Progress proses</span>
+        <span class="row" style="gap:6px"><span class="mark-red" style="width:24px;height:10px;border-radius:99px"></span> Overdue</span>
+        <span class="row" style="gap:6px"><span class="mark-green" style="width:24px;height:10px;border-radius:99px"></span> Completed</span>
+        <span>Klik ▸ untuk melihat proses</span>
+      </div>
+      <div class="row">
+        <div class="segmented" role="group" aria-label="Zoom">
+          {% for k, l in [('week', 'Minggu'), ('month', 'Bulan'), ('quarter', 'Kuartal')] %}<a href="{{ url_with(zoom=k) }}" class="{{ 'active' if zoom == k }}">{{ l }}</a>{% endfor %}
+        </div>
+        {% if chart.today_x is not none %}<a class="small" href="#today">Hari ini</a>{% endif %}
+      </div>
+    </div>
+    <div class="gantt" role="region" aria-label="Gantt chart" tabindex="0">
+      <div class="gantt-inner" style="width:{{ chart.width + chart.label_width }}px">
+        <div class="gantt-row" style="position:sticky;top:0;background:var(--surface);z-index:3">
+          <div class="gantt-label small subtle strong" style="display:flex;align-items:center">Project</div>
+          <div class="gantt-head" style="width:{{ chart.width }}px">
+            {% for m in chart.months %}<div class="month" style="left:{{ m.left }}px;width:{{ m.width }}px">{{ m.label }}</div>{% endfor %}
+            {% for w in chart.weeks %}<div class="week" style="left:{{ w.left }}px">{{ w.label }}</div>{% endfor %}
+            {% if chart.today_x is not none %}<span id="today" style="position:absolute;left:{{ chart.today_x - 300 if chart.today_x > 300 else 0 }}px;top:0"></span>{% endif %}
+          </div>
+        </div>
+        <div style="position:relative">
+          {% if chart.today_x is not none %}<div class="gantt-today" style="left:{{ chart.label_width + chart.today_x }}px" aria-hidden="true"></div>{% endif %}
+          {% for r in chart.rows %}{% set v = r.view %}{% set p = v.project %}
+            <div class="gantt-row">
+              <div class="gantt-label row" style="flex-wrap:nowrap;gap:4px;padding:6px 8px">
+                <a class="icon-btn" style="width:28px;height:28px" href="{{ url_with(expand=r.toggle) }}" aria-expanded="{{ 'true' if r.expanded else 'false' }}" aria-label="{{ 'Tutup' if r.expanded else 'Buka' }} proses {{ p.name }}">{{ '▾' if r.expanded else '▸' }}</a>
+                <a class="grow" style="min-width:0;color:var(--ink)" href="{{ url_for('projects.detail', code=p.code) }}">
+                  <span class="truncate strong" style="display:block;font-size:13px">{{ p.name }}</span>
+                  <span class="truncate subtle" style="display:block;font-size:11px">{{ p.code }} · {{ v.current.short_name if v.current else '—' }}</span>
+                </a>
+              </div>
+              <div class="gantt-lane" style="width:{{ chart.width }}px;height:48px">
+                <div class="gantt-bar {{ 'mark-green' if r.done }}" style="top:18px;height:12px;left:{{ r.left }}px;width:{{ r.width }}px;{{ '' if r.done else 'background:rgba(42,120,214,.25)' }}"
+                     title="{{ p.name }}: {{ p.start_date|date }} → {{ p.target_date|date }} · {{ v.progress.pct }}%">
+                  {% if not r.done %}<div class="mark-blue" style="height:100%;border-radius:99px;width:{{ v.progress.pct }}%"></div>{% endif %}
+                </div>
+                {% if r.overdue_width %}<div class="gantt-bar mark-red" style="top:18px;height:12px;left:{{ r.overdue_left }}px;width:{{ r.overdue_width }}px;border-radius:0 99px 99px 0" title="Overdue {{ v.overdue_days }} hari"></div>{% endif %}
+              </div>
+            </div>
+            {% for pr in r.processes %}
+              <div class="gantt-row">
+                <div class="gantt-label proc truncate">{{ '%02d'|format(pr.proc.sequence) }} · {{ pr.proc.short_name }}</div>
+                <div class="gantt-lane" style="width:{{ chart.width }}px;height:32px;background:rgba(245,245,247,.5)">
+                  {% if pr.plan %}<div class="gantt-bar" style="top:9px;height:8px;background:var(--m-track);left:{{ pr.plan[0] }}px;width:{{ pr.plan[1] }}px" title="Planned {{ pr.proc.planned_start|date }} – {{ pr.proc.planned_finish|date }}"></div>{% endif %}
+                  {% if pr.actual %}<div class="gantt-bar mark-{{ pr.tone }}" style="top:17px;height:8px;left:{{ pr.actual[0] }}px;width:{{ pr.actual[1] }}px" title="Actual {{ pr.proc.actual_start|date }} – {{ pr.proc.actual_finish|date if pr.proc.actual_finish else 'berjalan' }}"></div>{% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <ul class="stack" style="list-style:none;padding:0;margin:0">
+    {% for r in list_rows %}{% set v = r.view %}{% set p = v.project %}
+      <li><a class="card card-pad" style="display:block;color:var(--ink)" href="{{ url_for('projects.detail', code=p.code) }}">
+        <p class="small subtle">{{ p.code }} · {{ v.customer }}</p>
+        <p class="strong" style="font-size:15px">{{ p.name }}</p>
+        <p class="small muted">{{ p.start_date|date }} → {{ p.target_date|date }} · {{ v.current.name if v.current else '—' }}</p>
+        <div class="row-between small subtle mt"><span>Progress proses {{ v.progress.pct }}%</span><span>Waktu berjalan {{ r.elapsed }}%</span></div>
+        <div style="margin-top:6px">{{ ui.progress(v.progress.pct, 'red' if v.overdue_days else 'blue') }}</div>
+        <div style="margin-top:6px">{{ ui.progress(r.elapsed, 'gray') }}</div>
+        <div class="mt">{{ ui.project_status(v, small=true) }}</div>
+      </a></li>
+    {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}

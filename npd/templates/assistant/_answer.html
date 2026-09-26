@@ -1,0 +1,32 @@
+{#- Menampilkan jawaban AI Assistant (blok: text, list, stats, projects, summary, report). -#}
+{% import "_macros.html" as ui %}
+{% macro answer(ans) -%}
+<div class="stack-sm">
+  {% for b in ans.blocks %}
+    {% if b.type == 'text' %}<p>{{ b.text }}</p>
+    {% elif b.type == 'list' %}<ul style="margin:0;padding-left:18px">{% for it in b['items'] %}<li>{{ it }}</li>{% endfor %}</ul>
+    {% elif b.type == 'stats' %}
+      <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:8px 0">
+        {% for s in b['items'] %}<div style="background:var(--surface-2);border-radius:12px;padding:8px 12px"><dt class="small subtle">{{ s.label }}</dt><dd class="num strong" style="margin:0;font-size:18px">{{ s.value }}</dd></div>{% endfor %}
+      </dl>
+    {% elif b.type == 'projects' %}
+      <ul class="list" style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
+        {% for p in b['items'] %}
+          <li><a class="list-item" href="{{ url_for('projects.detail', code=p.code) }}" style="padding:10px 12px">
+            <span class="grow"><span class="title truncate" style="display:block">{{ p.name }}</span><span class="meta">{{ p.code }} · {{ p.customer }}</span><br><span class="small muted">{{ p.meta }}</span></span>
+            {% if p.badge %}{{ ui.chip(p.badge.label, p.badge.tone, dot=true, small=true) }}{% endif %}<span class="subtle" aria-hidden="true">›</span></a></li>
+        {% endfor %}
+      </ul>
+    {% elif b.type == 'summary' %}
+      <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden">
+        <div class="row-between" style="background:var(--surface-2);padding:8px 14px"><span class="small strong muted" style="letter-spacing:.04em">{{ b.title }}</span>
+          {% if b.code %}<a class="small" href="{{ url_for('projects.detail', code=b.code) }}">Buka project</a>{% endif %}</div>
+        <table class="summary-table">{% for k, v in b.rows %}<tr><th scope="row">{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</table>
+      </div>
+    {% elif b.type == 'report' %}
+      <textarea class="report-text" rows="14" readonly aria-label="{{ b.title }}">{{ b.text }}</textarea>
+    {% endif %}
+  {% endfor %}
+  <p class="small subtle">{{ ans.basis }}</p>
+</div>
+{%- endmacro %}

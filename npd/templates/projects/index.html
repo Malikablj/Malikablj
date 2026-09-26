@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% set title = 'Project ' ~ C.PROJECT_TYPES[f.type] if f.type else 'Semua Project' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{% set desc = {
+  'new_mold': 'Workflow New Mold: request → 3D/masterbatch → drawing → mold → T0 → validation.',
+  'subcont': 'Workflow Subcont: NPR → artwork → customer approval → trial → material → validation.',
+}.get(f.type, 'New Mold dan Subcont dalam satu sistem.') %}
+{% call ui.page_head(title, desc) %}
+  <a class="btn {{ 'disabled' if not items }}" href="{{ url_for('projects.export', **request.args) }}">{{ icon('download') }} Export Excel</a>
+  {% if perm.can_create_project(current_user) %}<a class="btn btn-primary" href="{{ url_for('projects.create', type=f.type or None) }}">{{ icon('plus') }} Project Baru</a>{% endif %}
+{% endcall %}
+
+<form method="get" class="card card-pad mb" aria-label="Cari & filter project">
+  <div class="row">
+    <div class="search grow" style="min-width:220px">
+      {{ icon('search') }}
+      <label class="sr-only" for="q">Cari project</label>
+      <input id="q" class="input" style="padding-left:36px" type="search" name="q" value="{{ f.q }}" placeholder="Cari kode, nama project, customer, produk…">
+    </div>
+    <button class="btn" type="submit">Cari</button>
+  </div>
+  <div class="filters mt">
+    <select class="input" name="type" aria-label="Project type">
+      <option value="">Semua type</option>
+      {% for k, v in C.PROJECT_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if f.type == k }}>{{ v }}</option>{% endfor %}
+    </select>
+    <select class="input" name="status" aria-label="Status">
+      <option value="">Semua status</option>
+      {% for k, v in status_filters.items() %}<option value="{{ k }}" {{ 'selected' if f.status == k }}>{{ v }}</option>{% endfor %}
+    </select>
+    <select class="input" name="priority" aria-label="Priority">
+      <option value="">Semua priority</option>
+      {% for k, v in C.PRIORITIES.items() %}<option value="{{ k }}" {{ 'selected' if f.priority == k }}>{{ v }}</option>{% endfor %}
+    </select>
+    <select class="input" name="customer" aria-label="Customer">
+      <option value="">Semua customer</option>
+      {% for c in options.customers %}<option {{ 'selected' if f.customer == c }}>{{ c }}</option>{% endfor %}
+    </select>
+    <select class="input" name="pic" aria-label="NPD PIC">
+      <option value="">Semua NPD PIC</option>
+      {% for c in options.pics %}<option {{ 'selected' if f.pic == c }}>{{ c }}</option>{% endfor %}
+    </select>
+    <select class="input" name="process" aria-label="Current process">
+      <option value="">Semua current process</option>
+      {% for c in options.processes %}<option {{ 'selected' if f.process == c }}>{{ c }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="row-between mt">
+    <div class="row">
+      <label class="check-pill"><input type="checkbox" name="mine" value="1" {{ 'checked' if f.mine }}> Project saya</label>
+      <label class="small muted" for="sort">Urutkan</label>
+      <select id="sort" name="sort" class="input" style="width:auto;height:32px">
+        {% for k, v in sorts.items() %}<option value="{{ k }}" {{ 'selected' if (f.sort or 'code_desc') == k }}>{{ v }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-sm btn-primary" type="submit">Terapkan</button>
+      {% if active_filters or f.q %}<a class="small" href="{{ url_for('projects.index', type=f.type or None) }}">Reset filter</a>{% endif %}
+    </div>
+    <p class="small muted">{{ items|length }} dari {{ total }} project</p>
+  </div>
+</form>
+
+{% if total == 0 %}
+  <div class="card">{{ ui.empty('Belum ada project', 'Project yang Anda buat atau di-assign ke Anda akan muncul di sini.') }}</div>
+{% elif not items %}
+  <div class="card">{{ ui.empty('Tidak ada project yang cocok', 'Coba ubah kata kunci atau reset filter.') }}</div>
+{% else %}
+  <div class="card table-scroll">
+    <table class="table table-cards" style="width:100%;min-width:900px">
+      <thead><tr>
+        <th scope="col" style="width:27%">Project</th>
+        <th scope="col" style="width:20%">Current Process</th>
+        <th scope="col" style="width:15%">Status</th>
+        <th scope="col" style="width:8%">Priority</th>
+        <th scope="col" style="width:18%">Next Action</th>
+        <th scope="col" style="width:12%">Target</th>
+      </tr></thead>
+      <tbody>
+      {% for v in items %}{% set p = v.project %}
+        <tr class="clickable">
+          <td>
+            <a class="strong" style="color:var(--ink);font-size:14px" href="{{ url_for('projects.detail', code=p.code) }}">{{ p.name }}</a>
+            <div class="small muted">{{ p.code }} · {{ v.customer }} · <span class="tag">{{ C.PROJECT_TYPES[p.type] }}</span></div>
+          </td>
+          <td>
+            <div>{{ v.current.name if v.current else '—' }}</div>
+            <div class="small muted">{{ v.current.pic.name if v.current and v.current.pic else '—' }} · {{ v.progress.done }}/{{ v.progress.total }} proses</div>
+            <div style="max-width:160px;margin-top:6px">{{ ui.progress(v.progress.pct, 'green' if p.status == 'completed' else 'blue') }}</div>
+          </td>
+          <td>
+            {{ ui.project_status(v, small=true) }}
+            {% if p.waiting_for and p.is_active %}<div class="small muted mt" style="margin-top:4px">{{ p.waiting_for }}</div>{% endif %}
+          </td>
+          <td>{{ ui.priority_chip(p.priority, small=true) }}</td>
+          <td>
+            <div>{{ p.next_action }}</div>
+            {% if p.is_active %}{{ ui.due_text(p.next_action_due, v.next_action_state) }}{% endif %}
+          </td>
+          <td>
+            <div class="num">{{ p.target_date|date }}</div>
+            <div class="small {{ 'text-red strong' if v.overdue_days else ('text-yellow strong' if v.flags.due_soon else 'muted') }}">
+              {% if p.status == 'completed' %}Selesai {{ p.actual_finish|date }}{% elif p.status == 'cancelled' %}Cancelled{% elif v.overdue_days %}Terlambat {{ v.overdue_days }} hari{% else %}{{ v.days_to_target }} hari lagi{% endif %}
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Analytics{% endblock %}
+{% macro loop_list(rows, empty_text) -%}
+  {% if not rows %}<p class="subtle small">{{ empty_text }}</p>{% else %}
+  <ul class="bars">{% for r in rows %}
+    <li title="{{ r.code }} · {{ r.name }}: {{ r.count }}"><div class="head"><a class="truncate" style="color:var(--ink)" href="{{ url_for('projects.detail', code=r.code) }}">{{ r.code }} · {{ r.name }}</a><span class="v">{{ r.count }}</span></div>
+      <div class="track"><div class="bar mark-orange" style="width:{{ r.pct }}%"></div></div></li>
+  {% endfor %}</ul>{% endif %}
+{%- endmacro %}
+{% block content %}
+{{ ui.page_head('Laporan', 'Weekly NPD Report & analytics · ' ~ scope) }}
+{% include "reports/_tabs.html" %}
+<div class="row mb" style="justify-content:flex-end"><a class="btn" href="{{ url_for('reports.analytics_xlsx') }}">{{ icon('download') }} Export Excel</a></div>
+
+<section class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))" aria-label="KPI analytics">
+  <div class="kpi"><span class="label">Avg Project Lead Time</span><span class="value">{{ a.avg_lead_time ~ ' hari' if a.avg_lead_time is not none else '—' }}</span><span class="hint">{{ a.completed_count }} project completed</span></div>
+  <div class="kpi"><span class="label">Avg Customer Approval Waiting</span><span class="value">{{ a.avg_customer_approval_wait ~ ' hari' if a.avg_customer_approval_wait is not none else '—' }}</span>
+    <span class="hint">{{ 'Pending saat ini rata-rata ' ~ a.pending_customer_approval_wait ~ ' hari' if a.pending_customer_approval_wait is not none else a.customer_approval_samples ~ ' keputusan' }}</span></div>
+  <div class="kpi"><span class="label"><span class="dot mark-red"></span>Overdue</span><span class="value">{{ a.overdue_count }}</span>
+    <span class="hint">{{ 'Rata-rata ' ~ a.avg_overdue_days ~ ' hari · maks ' ~ a.max_overdue_days ~ ' hari' if a.avg_overdue_days is not none else 'Tidak ada overdue' }}</span></div>
+  <div class="kpi"><span class="label">Bottleneck Process</span><span class="value" style="font-size:20px;line-height:1.2">{{ a.bottleneck.name if a.bottleneck else '—' }}</span>
+    {% if a.bottleneck %}<span class="hint">{{ C.PROJECT_TYPES[a.bottleneck.type] }} · aktual {{ a.bottleneck.avg_duration }} hari vs plan {{ a.bottleneck.avg_planned }} hari</span>{% endif %}</div>
+</section>
+
+<section class="card mt-lg">
+  <div class="card-head">
+    <div><h2>Average Process Duration</h2><p class="desc">Durasi aktual rata-rata per proses (proses berjalan dihitung s/d hari ini)</p></div>
+    <div class="segmented" role="group" aria-label="Workflow">
+      <a href="{{ url_with(type='subcont') }}" class="{{ 'active' if ptype == 'subcont' }}">Subcont</a>
+      <a href="{{ url_with(type='new_mold') }}" class="{{ 'active' if ptype == 'new_mold' }}">New Mold</a>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if not bars %}<p class="subtle">Belum ada proses yang berjalan / selesai.</p>{% else %}
+    <ul class="bars">{% for s in bars %}
+      <li title="{{ s.name }}: {{ s.avg_duration }} hari · plan {{ s.avg_planned }} hari · {{ s.samples }} sampel · maks {{ s.max_duration }} hari">
+        <div class="head"><span class="truncate">{{ s.name }} <span class="subtle small">· plan {{ s.avg_planned }} hari · {{ s.samples }} sampel</span></span><span class="v">{{ s.avg_duration }} hari</span></div>
+        <div class="track"><div class="bar mark-{{ s.tone }}" style="width:{{ s.pct }}%"></div></div></li>
+    {% endfor %}</ul>
+    <p class="small subtle mt">Oranye = rata-rata aktual &gt; 120% dari plan.</p>{% endif %}
+  </div>
+</section>
+
+<div class="mt-lg" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px">
+  <section class="card"><div class="card-head"><div><h3>Artwork Revisions</h3><p class="desc">Per project Subcont</p></div></div><div class="card-body">{{ loop_list(loops.artwork, 'Belum ada project Subcont.') }}</div></section>
+  <section class="card"><div class="card-head"><div><h3>T0 Loops</h3><p class="desc">Per project New Mold</p></div></div><div class="card-body">{{ loop_list(loops.t0, 'Belum ada project New Mold.') }}</div></section>
+  <section class="card"><div class="card-head"><div><h3>Trial Rejection Loops</h3><p class="desc">Per project Subcont</p></div></div><div class="card-body">{{ loop_list(loops.trial, 'Belum ada project Subcont.') }}</div></section>
+</div>
+{% endblock %}

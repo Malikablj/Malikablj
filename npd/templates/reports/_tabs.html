@@ -1,0 +1,4 @@
+<nav class="tabs mb no-print" aria-label="Jenis laporan">
+  <a href="{{ url_for('reports.index') }}" class="{{ 'active' if tab == 'weekly' }}">Weekly NPD Report</a>
+  <a href="{{ url_for('reports.index', tab='analytics') }}" class="{{ 'active' if tab == 'analytics' }}">Analytics</a>
+</nav>

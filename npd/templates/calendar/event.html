@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ 'Edit Event' if item else 'Tambah Event' }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Edit Event' if item else 'Tambah Event', 'Meeting atau follow-up — tampil di kalender semua user yang dapat melihat project terkait.', back=(url_for('calendar.index', month=values.date[:7], day=values.date), 'Kalender')) }}
+<form method="post" class="card card-pad" style="max-width:680px" novalidate>
+  {{ csrf_field() }}
+  <div class="form-grid">
+    {{ ui.field('title', 'Judul', values.title, errors=errors, required=true, class='span-2') }}
+    {{ ui.select('category', 'Kategori', [('meeting', 'Meeting'), ('follow_up', 'Follow-up')], values.category, errors, required=true) }}
+    {{ ui.select('project_id', 'Project', projects, values.project_id, errors, blank='— Tanpa project —', help='Opsional') }}
+    {{ ui.field('date', 'Tanggal', values.date, 'date', errors, required=true) }}
+    {{ ui.field('time', 'Jam', values.time, 'time', errors, help='Opsional') }}
+    {{ ui.field('notes', 'Catatan', values.notes, 'textarea', errors, class='span-2') }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('calendar.index', month=values.date[:7], day=values.date) }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Simpan</button>
+  </div>
+</form>
+{% if item %}
+  <form method="post" action="{{ url_for('calendar.delete_event', event_id=item.id) }}" class="mt" style="max-width:680px;text-align:right">
+    {{ csrf_field() }}<button class="btn btn-danger btn-sm" type="submit">Hapus event</button>
+  </form>
+{% endif %}
+{% endblock %}

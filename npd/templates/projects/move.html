@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Pindahkan Proses · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Pindahkan Current Process', p.code ~ ' · ' ~ p.name, back=(url_for('projects.detail', code=p.code), 'Kembali ke project')) }}
+<form method="post" class="card card-pad" style="max-width:680px" novalidate>
+  {{ csrf_field() }}
+  <div class="alert tone-yellow mb"><strong>Koreksi workflow (khusus Admin)</strong>Approval Pending dari workflow akan dibatalkan. Mandatory process yang dilewati tidak otomatis dianggap selesai, sehingga project tetap tidak bisa di-Finish sebelum proses tersebut dikerjakan.</div>
+  <div class="stack">
+    {{ ui.select('process_id', 'Proses tujuan', options, values.process_id, errors, required=true, blank='Pilih proses') }}
+    {{ ui.field('reason', 'Alasan', values.reason, 'textarea', errors, required=true) }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=p.code) }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Pindahkan</button>
+  </div>
+</form>
+{% endblock %}

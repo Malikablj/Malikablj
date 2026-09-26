@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ 'Edit Customer' if item else 'Customer Baru' }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Edit Customer' if item else 'Customer Baru', item.name if item else 'Master data customer.', back=(url_for('settings.index', tab='customers'), 'Customer')) }}
+<form method="post" class="card card-pad" style="max-width:680px" novalidate>{{ csrf_field() }}
+  <div class="form-grid">
+    {{ ui.field('name', 'Nama customer', values.name, errors=errors, required=true) }}
+    {{ ui.field('code', 'Kode', values.code, errors=errors, required=true, help='2–12 huruf/angka, mis. KYM') }}
+    {{ ui.field('contact_name', 'Contact person', values.contact_name, errors=errors) }}
+    {{ ui.field('contact_email', 'Email contact', values.contact_email, 'email', errors) }}
+    <div class="field span-2"><label class="check-row"><input type="checkbox" name="active" value="1" {{ 'checked' if values.active }}> Aktif <span class="small subtle">(customer nonaktif tidak dapat dipilih untuk project baru)</span></label></div>
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('settings.index', tab='customers') }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Simpan</button>
+  </div>
+</form>
+{% if item %}
+  <form method="post" action="{{ url_for('settings.delete_customer', customer_id=item.id) }}" class="mt" style="max-width:680px;text-align:right">{{ csrf_field() }}
+    {% if usage %}<p class="small muted">Dipakai {{ usage }} project — nonaktifkan customer sebagai gantinya.</p>
+    {% else %}<button class="btn btn-danger btn-sm" type="submit">Hapus customer</button>{% endif %}
+  </form>
+{% endif %}
+{% endblock %}

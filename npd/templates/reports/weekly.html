@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Weekly NPD Report{% endblock %}
+{% block content %}
+{{ ui.page_head('Laporan', 'Weekly NPD Report & analytics · ' ~ scope) }}
+{% include "reports/_tabs.html" %}
+
+<div class="row-between mb no-print">
+  <div class="row">
+    <a class="icon-btn" href="{{ url_for('reports.index', week=prev_week.isoformat()) }}" aria-label="Minggu sebelumnya">{{ icon('chevron-left') }}</a>
+    <p class="strong" style="min-width:210px;text-align:center;font-size:15px">{{ r.period_start|date }} – {{ r.period_end|date }}</p>
+    {% if not is_current %}<a class="icon-btn" href="{{ url_for('reports.index', week=next_week.isoformat()) }}" aria-label="Minggu berikutnya">{{ icon('chevron-right') }}</a>
+      <a class="btn btn-sm btn-ghost" href="{{ url_for('reports.index') }}">Minggu ini</a>{% endif %}
+  </div>
+  <div class="row">
+    <a class="btn" href="{{ url_for('reports.weekly_txt', week=r.period_start.isoformat()) }}">Download teks</a>
+    <a class="btn btn-primary" href="{{ url_for('reports.weekly_xlsx', week=r.period_start.isoformat()) }}">{{ icon('download') }} Export Excel</a>
+  </div>
+</div>
+
+<section class="kpis" aria-label="Ringkasan minggu ini">
+  {% for label, value, tone, hint in [
+    ('Total Project', r.total_project, '', ''), ('New Project', r.new_project, '', 'Dibuat pada periode'),
+    ('Completed', r.completed, 'green', 'Selesai pada periode'), ('On Progress', r.on_progress, 'blue', ''),
+    ('Waiting Customer', r.waiting_customer, 'yellow', ''), ('Waiting Supplier', r.waiting_supplier, 'yellow', ''),
+    ('Overdue', r.overdue, 'red', ''), ('Due Soon', r.due_soon, 'yellow', '')] %}
+    <div class="kpi"><span class="label">{% if tone %}<span class="dot mark-{{ tone }}"></span>{% endif %}{{ label }}</span><span class="value">{{ value }}</span>{% if hint %}<span class="hint">{{ hint }}</span>{% endif %}</div>
+  {% endfor %}
+</section>
+
+<div class="mt-lg" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px">
+  <section class="card">
+    <div class="card-head"><div><h2>Top Issues</h2><p class="desc">Overdue, problem proses, dan rejection pada periode</p></div></div>
+    {% if not r.top_issues %}{{ ui.empty('Tidak ada issue') }}{% else %}
+      <ul class="list">{% for i in r.top_issues %}
+        <li><a class="list-item" href="{{ url_for('projects.detail', code=i.code) }}" style="align-items:flex-start">
+          <span class="dot mark-{{ 'red' if i.severity == 'high' else 'orange' }}" style="width:8px;height:8px;border-radius:50%;margin-top:7px;flex-shrink:0"></span>
+          <span class="grow"><span class="title">{{ i.title }}</span><br><span class="small muted">{{ i.code }} · {{ i.detail }}</span></span></a></li>
+      {% endfor %}</ul>
+    {% endif %}
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Action Required</h2><p class="desc">Next action yang jatuh tempo s/d akhir periode</p></div></div>
+    {% if not r.action_required %}{{ ui.empty('Tidak ada action') }}{% else %}
+      <ul class="list">{% for a in r.action_required %}
+        <li><a class="list-item" href="{{ url_for('projects.detail', code=a.code) }}" style="align-items:flex-start">
+          <span class="grow"><span class="title">{{ a.action }}</span><br><span class="small muted">{{ a.code }} · {{ a.project_name }} · {{ a.owner }}</span></span>
+          <span class="small nowrap {{ 'text-red strong' if a.overdue else 'muted' }}">{{ a.due|date }}{{ ' · terlambat' if a.overdue }}</span></a></li>
+      {% endfor %}</ul>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card mt-lg">
+  <div class="card-head"><div><h2>Versi teks</h2><p class="desc">Pilih semua (Ctrl/Cmd + A di dalam kotak) lalu salin ke email / chat, atau gunakan tombol Download teks.</p></div></div>
+  <div class="card-body"><label class="sr-only" for="report-text">Weekly report (teks)</label>
+    <textarea id="report-text" class="report-text" rows="16" readonly>{{ text }}</textarea></div>
+</section>
+{% endblock %}

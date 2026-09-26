@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ 'Tandai Problem' if flag else 'Problem Selesai' }} · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Tandai Problem' if flag else 'Problem Selesai', proc.name ~ ' · ' ~ p.code ~ ' · ' ~ p.name, back=(url_for('projects.detail', code=p.code), 'Kembali ke project')) }}
+<form method="post" class="card card-pad" style="max-width:640px" novalidate>
+  {{ csrf_field() }}
+  <p class="muted mb">{{ 'Proses tetap aktif dengan status Problem dan tercatat sebagai issue di Weekly Report.' if flag else 'Status proses kembali ke Current / Revision.' }}</p>
+  {% if not flag and proc.problem_note %}<div class="alert tone-red mb"><strong>Problem saat ini</strong>{{ proc.problem_note }}</div>{% endif %}
+  {{ ui.field('note', 'Catatan problem' if flag else 'Catatan penyelesaian', note, 'textarea', errors, required=true) }}
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=p.code) }}">Batal</a>
+    <button class="btn {{ 'btn-danger' if flag else 'btn-primary' }}" type="submit">{{ 'Tandai Problem' if flag else 'Tandai selesai' }}</button>
+  </div>
+</form>
+{% endblock %}

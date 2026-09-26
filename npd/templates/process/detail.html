@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ proc.name }} · {{ p.code }}{% endblock %}
+{% block content %}
+{% set running = proc.is_running and p.is_active %}
+<div class="page-head">
+  <div>
+    <a class="eyebrow" href="{{ url_for('projects.detail', code=p.code) }}">‹ {{ p.code }} · {{ p.name }}</a>
+    <h1>{{ proc.name }}</h1>
+    <div class="row desc" style="margin-top:8px">
+      <span class="num">Proses {{ '%02d'|format(proc.sequence) }} dari {{ p.processes|length }}</span>
+      {{ ui.process_chip(proc.status) }}
+      <span class="tag">{{ {'task': 'Task', 'decision': 'Decision', 'finish': 'Finish'}[proc.kind] }}</span>
+      {% if proc.is_mandatory %}<span class="tag">Mandatory</span>{% endif %}
+      {% if proc.loop_count %}<span class="loop-badge">Loop {{ proc.loop_count }}×</span>{% endif %}
+    </div>
+  </div>
+  <div class="actions no-print">
+    {% if running and can_act and p.status != 'hold' %}
+      <a class="btn btn-primary" href="{{ url_for('process.complete', code=p.code, process_id=proc.id) }}">{{ 'Catat Keputusan' if proc.kind == 'decision' else ('Selesaikan Project' if proc.kind == 'finish' else 'Selesaikan Proses') }}</a>
+    {% endif %}
+    {% if can_upload %}<a class="btn" href="{{ url_for('documents.upload', code=p.code, process=proc.id) }}">{{ icon('upload') }} Upload Dokumen</a>{% endif %}
+  </div>
+</div>
+
+<div class="detail-grid">
+  <div class="stack" style="min-width:0">
+    <section class="card card-pad">
+      {% if proc.description %}<p class="muted mb">{{ proc.description }}</p>{% endif %}
+      {% if proc.status == 'problem' and proc.problem_note %}<div class="alert tone-red mb"><strong>Problem</strong>{{ proc.problem_note }}</div>{% endif %}
+      {% if proc.requires_document %}
+        <div class="alert {{ 'tone-green' if has_required_doc else 'tone-yellow' }} mb"><strong>Dokumen wajib: {{ proc.required_doc_types|labels(C.DOC_TYPES)|join(' / ') }}</strong>{{ 'Sudah tersedia.' if has_required_doc else 'Belum diupload — proses tidak dapat diselesaikan sebelum dokumen tersedia.' }}</div>
+      {% endif %}
+      <dl class="info-list">
+        <div><dt>PIC</dt><dd>{{ proc.pic.name if proc.pic else '—' }}<br><span class="small subtle">{{ C.ROLES[proc.pic_role] }}</span></dd></div>
+        <div><dt>Dikerjakan oleh</dt><dd>{{ proc.actor_roles|labels(C.ROLES)|join(', ') }}</dd></div>
+        <div><dt>Planned</dt><dd class="num">{{ proc.planned_start|date }} – {{ proc.planned_finish|date }}</dd></div>
+        <div><dt>Actual</dt><dd class="num">{{ proc.actual_start|date }} – {{ proc.actual_finish|date if proc.actual_finish else ('berjalan' if proc.actual_start else '—') }}</dd></div>
+        <div><dt>Durasi</dt><dd>{{ duration ~ ' hari' if duration is not none else '—' }}</dd></div>
+        <div><dt>Iterasi</dt><dd>{{ proc.iteration or '—' }}</dd></div>
+        <div><dt>Waiting For</dt><dd>{{ (p.waiting_for if running else proc.waiting_for) or '—' }}</dd></div>
+        {% if proc.requires_approval %}<div><dt>Approval</dt><dd>{{ C.APPROVAL_TYPES[proc.approval_type] }} · {{ 'Customer' if proc.approver_type == 'customer' else 'Internal' }}</dd></div>{% endif %}
+        <div class="full"><dt>Next Action</dt><dd>{{ (p.next_action if running else proc.next_action) or proc.default_next_action }}{% if running %} <span class="small subtle">· due {{ p.next_action_due|date }}</span>{% endif %}</dd></div>
+        {% if proc.remarks %}<div class="full"><dt>Remarks</dt><dd class="pre">{{ proc.remarks }}</dd></div>{% endif %}
+      </dl>
+    </section>
+
+    {% if proc.fields %}
+    <section class="card">
+      <div class="card-head"><div><h2>{{ 'Draft / data saat ini' if running else 'Data terakhir' }}</h2><p class="desc">Isian form proses</p></div></div>
+      <div class="card-body">
+        <dl class="info-list">
+          {% for f in proc.fields %}<div class="{{ 'full' if f.type in ('textarea', 'multiselect') }}"><dt>{{ f.label }}</dt><dd class="pre">{{ display_value(f, (proc.data or {}).get(f.key)) }}</dd></div>{% endfor %}
+        </dl>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if records %}
+    <section class="card">
+      <div class="card-head"><h2>Record per iterasi</h2></div>
+      <ul class="list">
+        {% for r in records %}
+          <li style="padding:12px 20px">
+            <div class="row"><span class="strong">{{ r.number }}</span>{% if r.outcome_label %}{{ ui.chip(r.outcome_label, 'red' if r.outcome in ('fail', 'not_approved', 'ng', 't0_ng') else 'green', small=true) }}{% endif %}
+              <span class="small subtle">iterasi {{ r.iteration }} · {{ r.created_by.name if r.created_by }} · {{ r.created_at|datetime }}</span></div>
+            <p class="small muted" style="margin-top:4px">
+              {% for f in proc.fields %}{% set val = (r.data or {}).get(f.key) %}{% if val not in (none, '', []) %}{{ f.label }}: {{ display_value(f, val) }}{{ ' · ' if not loop.last }}{% endif %}{% endfor %}
+            </p>
+            {% if r.comment %}<p class="small">{{ r.comment }}</p>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <div class="card-head"><div><h2>Dokumen proses</h2><p class="desc">Folder {{ proc.folder }}</p></div>
+        {% if can_upload %}<a class="btn btn-sm" href="{{ url_for('documents.upload', code=p.code, process=proc.id) }}">{{ icon('upload') }} Upload</a>{% endif %}</div>
+      {% if not documents %}{{ ui.empty('Belum ada dokumen', 'Dokumen yang disarankan: ' ~ (proc.suggested_doc_types|labels(C.DOC_TYPES)|join(', ') or '—')) }}
+      {% else %}
+        <ul class="list">
+          {% for d in documents %}{% set v = d.latest %}
+            <li class="list-item">
+              <div class="grow">
+                <a class="strong" style="color:var(--ink)" href="{{ url_for('documents.detail', doc_id=d.id) }}">{{ d.name }}</a>
+                <div class="small muted">{{ C.DOC_TYPES[d.type] }} · {{ d.versions|length }} versi{% if v %} · terbaru {{ v.revision|rev }}{{ ' v' ~ v.version if v.version > 1 }} ({{ v.uploaded_at|date }}){% endif %}</div>
+              </div>
+              {% if v %}{{ ui.doc_chip(v.status) }}{% endif %}
+              {% if can_upload %}<a class="btn btn-sm btn-ghost" href="{{ url_for('documents.upload', code=p.code, process=proc.id, document=d.id) }}">Revisi</a>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>History</h2></div>
+      {% if approvals %}<ul class="list">{% for a in approvals %}{{ ui.approval_item(a) }}{% endfor %}</ul><hr class="divider" style="margin:0">{% endif %}
+      <div class="card-body" style="padding-top:16px">
+        {% if not history %}<p class="subtle small">Belum ada aktivitas pada proses ini.</p>
+        {% else %}
+          <ol class="feed">
+            {% for a in history %}
+              <li class="{{ 'loop' if 'loop' in a.type or 'problem' in a.type else ('approval' if 'approval' in a.type) }}">
+                <p>{{ a.message }}</p>{% if a.detail %}<p class="small muted pre">{{ a.detail }}</p>{% endif %}
+                <p class="small subtle">{{ a.user.name if a.user else 'Sistem' }} · {{ a.at|datetime }}</p>
+              </li>
+            {% endfor %}
+          </ol>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <aside class="stack">
+    {% if can_remark %}
+    <form method="post" class="card card-pad" novalidate>
+      {{ csrf_field() }}
+      <h2 style="font-size:15px;font-weight:600" class="mb">{{ 'Planning & PIC' if can_plan else 'Remarks' }}</h2>
+      <div class="stack">
+        {% if can_plan %}
+          {{ ui.select('pic_id', 'PIC', users, proc.pic_id, errors, required=true) }}
+          {{ ui.field('planned_start', 'Planned Start', proc.planned_start, 'date', errors) }}
+          {{ ui.field('planned_finish', 'Planned Finish', proc.planned_finish, 'date', errors) }}
+        {% endif %}
+        {{ ui.field('remarks', 'Remarks', proc.remarks, 'textarea', errors) }}
+      </div>
+      <div class="form-actions"><button class="btn btn-primary btn-sm" type="submit">Simpan</button></div>
+    </form>
+    {% endif %}
+    {% if running and can_act and proc.kind != 'finish' and p.status != 'hold' %}
+      <div class="card card-pad">
+        <h2 style="font-size:15px;font-weight:600">Kendala?</h2>
+        <p class="small muted" style="margin:4px 0 12px">Tandai proses sebagai Problem agar muncul di laporan & dashboard.</p>
+        <a class="btn btn-sm" href="{{ url_for('process.problem', code=p.code, process_id=proc.id) }}">{{ 'Problem selesai' if proc.status == 'problem' else 'Tandai problem' }}</a>
+      </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Notifikasi{% endblock %}
+{% block content %}
+{% call ui.page_head('Notifikasi', 'Project baru, approval, revisi dokumen, deadline, overdue, dan next action.') %}
+  {% if unread_notifications %}<form method="post" action="{{ url_for('notifications.read_all') }}">{{ csrf_field() }}<button class="btn" type="submit">Tandai semua dibaca</button></form>{% endif %}
+{% endcall %}
+<div class="card" style="max-width:860px">
+  <nav class="tabs" style="padding:0 12px" aria-label="Filter notifikasi">
+    <a href="{{ url_for('notifications.index') }}" class="{{ 'active' if not only_unread }}">Semua</a>
+    <a href="{{ url_for('notifications.index', filter='unread') }}" class="{{ 'active' if only_unread }}">Belum dibaca <span class="n">{{ unread_notifications }}</span></a>
+  </nav>
+  {% if not items %}{{ ui.empty('Tidak ada notifikasi', 'Notifikasi baru akan muncul di sini.') }}
+  {% else %}
+    <ul class="list">
+      {% for n in items %}
+        <li>
+          <form method="post" action="{{ url_for('notifications.open_item', notification_id=n.id) }}">{{ csrf_field() }}
+            <button type="submit" class="list-item" style="width:100%;border:0;background:{{ 'var(--accent-soft)' if not n.read else 'none' }};text-align:left;cursor:pointer;font:inherit;align-items:flex-start">
+              <span class="dot mark-{{ C.NOTIFICATION_TONE.get(n.type, 'gray') }}" style="width:8px;height:8px;border-radius:50%;margin-top:7px;flex-shrink:0"></span>
+              <span class="grow">
+                <span class="title">{{ n.title }}</span>{% if not n.read %} <span class="sr-only">(belum dibaca)</span>{% endif %}<br>
+                <span class="small muted">{{ n.body }}</span><br>
+                <span class="small subtle">{{ C.NOTIFICATION_TYPES.get(n.type, n.type) }} · {{ n.created_at|relative }}{% if n.project_id and codes.get(n.project_id) %} · {{ codes[n.project_id] }}{% endif %}</span>
+              </span>
+            </button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>
+{% endblock %}

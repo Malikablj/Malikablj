@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ 'Edit User' if item else 'User Baru' }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Edit User' if item else 'User Baru', item.email if item else 'Tambahkan user dan tentukan role-nya.', back=(url_for('settings.index', tab='users'), 'User & Role')) }}
+<form method="post" class="card card-pad" style="max-width:680px" novalidate>{{ csrf_field() }}
+  <div class="form-grid">
+    {{ ui.field('name', 'Nama', values.name, errors=errors, required=true) }}
+    {{ ui.field('email', 'Email', values.email, 'email', errors, required=true) }}
+    {{ ui.select('role', 'Role', roles, values.role, errors, required=true, help=C.ROLE_DESCRIPTION[values.role] if values.role in C.ROLE_DESCRIPTION else '') }}
+    {{ ui.field('title', 'Jabatan', values.title, errors=errors) }}
+    {{ ui.field('password', 'Password baru' if item else 'Password', '', 'password', errors, required=not item, help='Kosongkan jika tidak diubah' if item else 'Minimal 6 karakter', attrs='autocomplete="new-password"') }}
+    <div class="field"><span class="label">Status</span><label class="check-row"><input type="checkbox" name="active" value="1" {{ 'checked' if values.active }}> Aktif <span class="small subtle">(user nonaktif tidak dapat login)</span></label></div>
+  </div>
+  <details class="mt small"><summary class="muted" style="cursor:pointer">Deskripsi akses per role</summary>
+    <ul>{% for k, v in C.ROLE_DESCRIPTION.items() %}<li><strong>{{ C.ROLES[k] }}</strong> — {{ v }}</li>{% endfor %}</ul></details>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('settings.index', tab='users') }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Simpan</button>
+  </div>
+</form>
+{% endblock %}

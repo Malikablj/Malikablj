@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Approval{% endblock %}
+{% block content %}
+{{ ui.page_head('Approval', 'Semua approval & rejection Customer maupun internal — setiap loop tercatat dengan komentar.') }}
+
+<section class="kpis mb" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))" aria-label="Ringkasan approval">
+  <a class="kpi" href="{{ url_with(tab='mine') }}"><span class="label"><span class="dot mark-yellow"></span>Menunggu keputusan Anda</span><span class="value">{{ stats.mine }}</span></a>
+  <a class="kpi" href="{{ url_with(tab='pending') }}"><span class="label"><span class="dot mark-yellow"></span>Total pending</span><span class="value">{{ stats.pending }}</span></a>
+  <div class="kpi"><span class="label">Rata-rata menunggu (pending)</span><span class="value">{{ stats.avg_pending ~ ' hari' if stats.avg_pending is not none else '—' }}</span></div>
+  <div class="kpi"><span class="label"><span class="dot mark-red"></span>Ditolak bulan ini</span><span class="value">{{ stats.rejected_month }}</span>
+    {% if stats.avg_customer is not none %}<span class="hint">Avg waiting customer {{ stats.avg_customer }} hari</span>{% endif %}</div>
+</section>
+
+<div class="card">
+  <nav class="tabs" style="padding:0 12px" aria-label="Filter approval">
+    {% for k, l, n in [('mine', 'Perlu keputusan saya', stats.mine), ('pending', 'Semua pending', stats.pending), ('all', 'Semua', stats.all)] %}
+      <a href="{{ url_with(tab=k) }}" class="{{ 'active' if tab == k }}">{{ l }} <span class="n">{{ n }}</span></a>
+    {% endfor %}
+  </nav>
+  <form method="get" class="row" style="padding:12px 20px;border-bottom:1px solid var(--line)">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <label class="sr-only" for="aq">Cari approval</label>
+    <input id="aq" class="input grow" style="min-width:200px" type="search" name="q" value="{{ f.q }}" placeholder="Cari kode, project, customer, revisi…">
+    <select class="input" style="width:auto" name="type" aria-label="Approval type"><option value="">Semua type</option>
+      {% for k, v in C.APPROVAL_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if f.type == k }}>{{ v }}</option>{% endfor %}</select>
+    <select class="input" style="width:auto" name="status" aria-label="Status"><option value="">Semua status</option>
+      {% for k, v in C.APPROVAL_STATUSES.items() %}<option value="{{ k }}" {{ 'selected' if f.status == k }}>{{ v }}</option>{% endfor %}</select>
+    <select class="input" style="width:auto" name="approver" aria-label="Approver"><option value="">Customer & internal</option>
+      <option value="customer" {{ 'selected' if f.approver == 'customer' }}>Customer</option><option value="internal" {{ 'selected' if f.approver == 'internal' }}>Internal</option></select>
+    <button class="btn btn-sm" type="submit">Terapkan</button>
+  </form>
+  {% if not rows %}
+    {{ ui.empty('Tidak ada approval yang perlu Anda putuskan' if tab == 'mine' else 'Tidak ada approval', 'Approval yang menunggu keputusan Anda akan muncul di sini.' if tab == 'mine' else 'Coba ubah filter.') }}
+  {% else %}
+    <ul class="list">{% for a in rows %}{{ ui.approval_item(a, a.id in decidable, show_project=true) }}{% endfor %}</ul>
+  {% endif %}
+</div>
+{% endblock %}

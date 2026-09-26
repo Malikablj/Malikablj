@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% set is_edit = mode == 'edit' %}
+{% block title %}{{ 'Edit ' ~ project.code if is_edit else 'Project Baru' }}{% endblock %}
+{% block content %}
+{% if is_edit %}
+  {{ ui.page_head('Edit Project', project.code ~ ' · ' ~ project.name, back=(url_for('projects.detail', code=project.code), 'Kembali ke project')) }}
+{% else %}
+  {{ ui.page_head('Project Baru', 'Project ID dibuat otomatis (NPD-YYYY-XXX). Workflow disalin dari template sesuai Project Type.') }}
+{% endif %}
+
+<form method="post" class="card card-pad" style="max-width:920px" novalidate>
+  {{ csrf_field() }}
+  <div class="stack">
+    {% if not is_edit %}
+    <fieldset>
+      <legend>Project Type<span class="req" style="color:var(--red)">*</span></legend>
+      <div class="radio-cards">
+        {% for key, label in C.PROJECT_TYPES.items() %}
+          {% set wf = templates.get(key) %}
+          <label class="radio-card">
+            <input type="radio" name="type" value="{{ key }}" {{ 'checked' if values.type == key }} required>
+            <span class="title">{{ label }}</span>
+            <span class="sub">{{ wf.name ~ ' v' ~ wf.version ~ ' · ' ~ (wf.processes|length) ~ ' proses' if wf else 'Template belum tersedia' }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      {% if errors.type %}<p class="error small text-red mt" style="margin-top:6px">{{ errors.type }}</p>{% endif %}
+    </fieldset>
+    {% else %}
+      <p class="small muted">Project Type: <strong>{{ C.PROJECT_TYPES[project.type] }}</strong> (tidak dapat diubah setelah project dibuat)</p>
+    {% endif %}
+
+    <fieldset>
+      <legend>Informasi project</legend>
+      <div class="form-grid">
+        {{ ui.select('customer_id', 'Customer', opts.customers, values.customer_id, errors, required=true, blank='Pilih customer') }}
+        {{ ui.field('name', 'Project Name', values.name, errors=errors, required=true, placeholder='mis. Kymm Tube 50ml', attrs='maxlength="120"') }}
+        {{ ui.field('product_name', 'Product Name', values.product_name, errors=errors, required=true) }}
+        {{ ui.field('supplier', 'Mold Maker / Supplier', values.supplier, errors=errors, help='Opsional — dipakai untuk Waiting For saat menunggu pihak eksternal') }}
+        {{ ui.field('customer_request', 'Customer Request', values.customer_request, 'textarea', errors, required=true, class='span-2') }}
+        {{ ui.field('product_description', 'Product Description', values.product_description, 'textarea', errors, class='span-2') }}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>PIC</legend>
+      <div class="form-grid-3">
+        {{ ui.select('npd_pic_id', 'NPD PIC', opts.npd, values.npd_pic_id, errors, required=true, blank='Pilih NPD PIC') }}
+        {{ ui.select('sales_pic_id', 'Sales PIC', opts.sales, values.sales_pic_id, errors, required=true, blank='Pilih Sales PIC') }}
+        {{ ui.select('drafter_id', 'Drafter', opts.drafter, values.drafter_id, errors, required=true, blank='Pilih Drafter') }}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Jadwal &amp; prioritas</legend>
+      <div class="form-grid-3">
+        {{ ui.field('start_date', 'Start Date', values.start_date, 'date', errors, required=true) }}
+        {{ ui.field('target_date', 'Target Finish', values.target_date, 'date', errors, required=true, help='Planned date tiap proses dihitung otomatis dari rentang ini') }}
+        {{ ui.select('priority', 'Priority', opts.priorities, values.priority, errors, required=true) }}
+      </div>
+    </fieldset>
+
+    {% if not is_edit %}
+    <fieldset>
+      <legend>Next Action awal <span class="small muted" style="font-weight:400">(opsional)</span></legend>
+      <div class="form-grid">
+        {{ ui.field('next_action', 'Next Action', values.next_action, errors=errors, help='Kosongkan untuk memakai next action default proses pertama') }}
+        {{ ui.field('next_action_due', 'Due', values.next_action_due, 'date', errors) }}
+      </div>
+    </fieldset>
+    {% endif %}
+
+    {{ ui.field('remarks', 'Remarks', values.remarks, 'textarea', errors) }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=project.code) if is_edit else url_for('projects.index') }}">Batal</a>
+    <button class="btn btn-primary" type="submit">{{ 'Simpan perubahan' if is_edit else 'Buat Project' }}</button>
+  </div>
+</form>
+{% endblock %}

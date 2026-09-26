@@ -1,0 +1,107 @@
+{#- Layout utama: sidebar kiri, topbar, konten, dan pesan (flash). -#}
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}{% endblock %} · NPD Project Control</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231d1d1f'/%3E%3Ctext x='32' y='40' font-family='Arial' font-weight='700' font-size='20' fill='white' text-anchor='middle'%3ENPD%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Lewati ke konten</a>
+  {% set path = request.path %}
+  {% set nav = [
+      ('dashboard.index', 'Dashboard', 'dashboard', path == '/'),
+      ('projects.index', 'Project', 'folder', path.startswith('/projects')),
+      ('tracker.index', 'Process Tracker', 'workflow', path.startswith('/tracker')),
+      ('gantt.index', 'Timeline / Gantt', 'gantt', path.startswith('/gantt')),
+      ('calendar.index', 'Kalender', 'calendar', path.startswith('/calendar')),
+      ('documents.index', 'Dokumen', 'file', path.startswith('/documents')),
+      ('approvals.index', 'Approval', 'check', path.startswith('/approvals')),
+      ('reports.index', 'Laporan', 'chart', path.startswith('/reports')),
+      ('assistant.index', 'AI Assistant', 'sparkles', path.startswith('/assistant')),
+      ('settings.index', 'Pengaturan', 'settings', path.startswith('/settings')),
+  ] %}
+
+  {# Menu mobile memakai checkbox (tanpa JavaScript) #}
+  <input type="checkbox" id="nav-toggle" class="sr-only" aria-label="Buka menu">
+  <aside class="sidebar" aria-label="Navigasi utama">
+    <a class="brand" href="{{ url_for('dashboard.index') }}">
+      <span class="brand-mark">NPD</span>
+      <span><span class="brand-name">NPD Project Control</span><br><span class="brand-sub">New Mold &amp; Subcont</span></span>
+    </a>
+    <nav class="nav">
+      {% for endpoint, label, ic, active in nav %}
+        <a href="{{ url_for(endpoint) }}" class="{{ 'active' if active }}" {% if active %}aria-current="page"{% endif %}>
+          {{ icon(ic) }} <span>{{ label }}</span>
+          {% if endpoint == 'approvals.index' and pending_approvals %}<span class="count" title="Approval menunggu keputusan Anda">{{ pending_approvals }}</span>{% endif %}
+        </a>
+        {% if endpoint == 'projects.index' and active %}
+          {% set t = request.args.get('type', '') %}
+          <div class="sub">
+            <a href="{{ url_for('projects.index') }}" class="{{ 'active' if path == '/projects' and not t }}">Semua Project</a>
+            <a href="{{ url_for('projects.index', type='new_mold') }}" class="{{ 'active' if t == 'new_mold' }}">New Mold</a>
+            <a href="{{ url_for('projects.index', type='subcont') }}" class="{{ 'active' if t == 'subcont' }}">Subcont</a>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </nav>
+    <div class="user-card">
+      <span class="avatar">{{ current_user.initials }}</span>
+      <div class="grow">
+        <div class="name truncate">{{ current_user.name }}</div>
+        <div class="subtle">{{ C.ROLES[current_user.role] }}</div>
+      </div>
+      <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}
+        <button class="icon-btn" type="submit" title="Keluar" aria-label="Keluar">{{ icon('logout') }}</button>
+      </form>
+    </div>
+  </aside>
+  <label for="nav-toggle" class="nav-backdrop" aria-hidden="true"></label>
+
+  <div class="main-wrap">
+    <header class="topbar no-print">
+      <div class="topbar-inner">
+        <label for="nav-toggle" class="icon-btn menu-toggle" title="Menu">{{ icon('menu') }}<span class="sr-only">Menu</span></label>
+        <a class="brand mobile-brand" href="{{ url_for('dashboard.index') }}" style="padding:0;height:auto"><span class="brand-mark">NPD</span></a>
+        <form class="search" method="get" action="{{ url_for('projects.index') }}" role="search">
+          {{ icon('search') }}
+          <label class="sr-only" for="global-q">Cari project</label>
+          <input id="global-q" class="input" type="search" name="q" placeholder="Cari project, kode, customer…" value="{{ request.args.get('q', '') if path == '/projects' }}">
+        </form>
+        <div style="margin-left:auto" class="row">
+          <a class="icon-btn show-mobile" href="{{ url_for('projects.index') }}" title="Cari project">{{ icon('search') }}</a>
+          <a class="icon-btn" href="{{ url_for('notifications.index') }}" title="Notifikasi">
+            {{ icon('bell') }}
+            {% if unread_notifications %}<span class="badge-dot">{{ unread_notifications if unread_notifications < 10 else '9+' }}</span>{% endif %}
+            <span class="sr-only">{{ unread_notifications }} notifikasi belum dibaca</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {# Pesan sukses / error setelah aksi #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-stack" role="status" aria-live="polite">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}" {% if category == 'error' %}role="alert"{% endif %}>
+            {% if message is mapping %}
+              <strong>{{ message.title }}</strong>
+              {% if message.details %}<ul>{% for d in message.details %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+            {% else %}
+              <strong>{{ message }}</strong>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+</body>
+</html>

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Dokumen{% endblock %}
+{% block content %}
+{% call ui.page_head('Dokumen', 'Semua dokumen project per proses — revisi lama tetap tersimpan.') %}
+  {% if uploadable %}
+    <details class="menu">
+      <summary class="btn btn-primary">{{ icon('upload') }} Upload Dokumen</summary>
+      <div class="menu-panel" style="max-height:360px;overflow:auto;min-width:300px">
+        <p class="small subtle" style="padding:6px 10px">Pilih project</p>
+        {% for p in uploadable %}<a href="{{ url_for('documents.upload', code=p.code, next=request.full_path) }}"><span class="num strong small">{{ p.code }}</span> · {{ p.name }}</a>{% endfor %}
+      </div>
+    </details>
+  {% endif %}
+{% endcall %}
+
+<form method="get" class="card card-pad mb" aria-label="Cari & filter dokumen">
+  <div class="row">
+    <div class="search grow" style="min-width:220px">{{ icon('search') }}
+      <label class="sr-only" for="q">Cari dokumen</label>
+      <input id="q" class="input" style="padding-left:36px" type="search" name="q" value="{{ f.q }}" placeholder="Cari nama dokumen, file, project, proses…">
+    </div>
+    <button class="btn" type="submit">Cari</button>
+  </div>
+  <div class="filters mt" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <select class="input" name="project" aria-label="Project"><option value="">Semua project</option>
+      {% for p in projects %}<option value="{{ p.code }}" {{ 'selected' if f.project == p.code }}>{{ p.code }} · {{ p.name }}</option>{% endfor %}</select>
+    <select class="input" name="folder" aria-label="Folder"><option value="">Semua folder</option>
+      {% for x in folders %}<option {{ 'selected' if f.folder == x }}>{{ x }}</option>{% endfor %}</select>
+    <select class="input" name="type" aria-label="Document type"><option value="">Semua type</option>
+      {% for k, v in C.DOC_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if f.type == k }}>{{ v }}</option>{% endfor %}</select>
+    <select class="input" name="status" aria-label="Status"><option value="">Semua status</option>
+      {% for k, v in C.DOC_STATUSES.items() %}<option value="{{ k }}" {{ 'selected' if f.status == k }}>{{ v }}</option>{% endfor %}</select>
+    <select class="input" name="sort" aria-label="Urutkan">
+      {% for k, v in [('recent', 'Upload terbaru'), ('name', 'Nama A–Z'), ('revisions', 'Revisi terbanyak')] %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ v }}</option>{% endfor %}</select>
+  </div>
+  <div class="row-between mt">
+    <div class="row"><button class="btn btn-sm btn-primary" type="submit">Terapkan</button>
+      {% if f.q or f.project or f.folder or f.type or f.status %}<a class="small" href="{{ url_for('documents.index') }}">Reset filter</a>{% endif %}</div>
+    <p class="small muted">{{ rows|length }} dari {{ total }} dokumen</p>
+  </div>
+</form>
+
+{% if not rows %}
+  <div class="card">{{ ui.empty('Tidak ada dokumen' if total else 'Belum ada dokumen', 'Coba ubah filter.' if total else 'Dokumen yang diupload pada proses project akan muncul di sini.') }}</div>
+{% else %}
+  <div class="card table-scroll">
+    <table class="table table-cards" style="width:100%;min-width:860px">
+      <thead><tr><th>Dokumen</th><th>Project</th><th>Proses / Folder</th><th>Revisi terbaru</th><th>Upload</th><th></th></tr></thead>
+      <tbody>
+      {% for d in rows %}{% set v = d.latest %}
+        <tr>
+          <td><a class="strong" style="color:var(--ink)" href="{{ url_for('documents.detail', doc_id=d.id) }}">{{ d.name }}</a>
+            <div class="small muted">{{ C.DOC_TYPES[d.type] }} · {{ v.file_name }}</div></td>
+          <td><a href="{{ url_for('projects.detail', code=d.project.code, tab='documents') }}">{{ d.project.code }}</a><div class="small muted">{{ d.project.customer.name }}</div></td>
+          <td>{{ d.process.name }}<div class="small muted">{{ d.process.folder }}</div></td>
+          <td><span class="strong num">{{ v.revision|rev }}{{ ' v' ~ v.version if v.version > 1 }}</span> {{ ui.doc_chip(v.status) }}<div class="small muted">{{ d.versions|length }} versi tersimpan</div></td>
+          <td class="small">{{ v.uploaded_at|datetime }}<div class="muted">{{ v.uploaded_by.name if v.uploaded_by }}</div></td>
+          <td><a class="btn btn-sm btn-ghost" href="{{ url_for('documents.file', version_id=v.id, download=1) }}" aria-label="Download {{ d.name }}">{{ icon('download') }}</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Keputusan Approval · {{ a.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Keputusan ' ~ C.APPROVAL_TYPES[a.type], a.code ~ ' · ' ~ a.project.code ~ ' · ' ~ a.project.name, back=(url_for('approvals.index'), 'Approval')) }}
+<form method="post" class="card card-pad" style="max-width:680px" novalidate>
+  {{ csrf_field() }}
+  <dl class="info-list mb">
+    <div class="full"><dt>Diajukan</dt><dd>{{ a.revision }}{% if a.document_version_id %} · <a href="{{ url_for('documents.version', version_id=a.document_version_id) }}">lihat dokumen</a>{% endif %}</dd></div>
+    <div><dt>Proses</dt><dd>{{ a.process.name }}</dd></div>
+    <div><dt>Approver</dt><dd>{{ a.approver_name }}</dd></div>
+    <div><dt>Tanggal request</dt><dd>{{ a.requested_date|date }} ({{ diff_days(a.requested_date, today) }} hari)</dd></div>
+    {% if a.comment %}<div class="full"><dt>Catatan pengaju</dt><dd>{{ a.comment }}</dd></div>{% endif %}
+  </dl>
+  <fieldset class="mb">
+    <legend>Keputusan</legend>
+    <div class="radio-cards" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+      {% for k, l, tone in [('approved', 'Approved', ''), ('revision_required', 'Revision Required', 'neutral'), ('rejected', 'Rejected', 'negative')] %}
+        <label class="radio-card {{ tone }}"><input type="radio" name="decision" value="{{ k }}" {{ 'checked' if values.decision == k }}><span class="title">{{ l }}</span></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <div class="stack">
+    {{ ui.field('comment', 'Komentar', values.comment, 'textarea', errors, help='Wajib untuk Rejected / Revision Required') }}
+    {% if attachments %}{{ ui.select('attachment_version_id', 'Lampiran keputusan (opsional)', attachments, values.attachment_version_id, errors, blank='— Tanpa lampiran —') }}{% endif %}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('approvals.index') }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Simpan keputusan</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Finish · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Selesaikan Project', p.code ~ ' · ' ~ p.name, back=(url_for('projects.detail', code=p.code), 'Kembali ke project')) }}
+<form method="post" class="card card-pad" style="max-width:680px">
+  {{ csrf_field() }}
+  {% if missing %}
+    <div class="alert tone-red mb" role="alert"><strong>Project belum dapat diselesaikan</strong>Proses mandatory berikut belum selesai:
+      <ul>{% for m in missing %}<li>{{ '%02d'|format(m.sequence) }} · {{ m.name }} — {{ C.PROCESS_STATUSES[m.status] }}</li>{% endfor %}</ul>
+    </div>
+  {% else %}
+    <div class="alert tone-green mb"><strong>Semua proses mandatory sudah selesai</strong>Status project akan menjadi Completed dan Actual Finish diisi hari ini.</div>
+  {% endif %}
+  {{ ui.field('closing_note', 'Catatan penutupan', note, 'textarea', {}, help='Opsional — mis. ringkasan hasil validasi atau serah terima ke produksi') }}
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=p.code) }}">Batal</a>
+    <button class="btn btn-primary" type="submit" {{ 'disabled' if missing }}>Finish Project</button>
+  </div>
+</form>
+{% endblock %}

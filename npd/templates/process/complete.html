@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ proc.name }} · {{ p.code }}{% endblock %}
+{% block content %}
+{% set title = ('Catat Keputusan Customer' if proc.approver_type == 'customer' else 'Catat Hasil / Keputusan') if proc.kind == 'decision' else 'Selesaikan Proses' %}
+{{ ui.page_head(title, proc.name ~ ' · ' ~ p.code ~ ' · ' ~ p.name, back=(url_for('projects.detail', code=p.code), 'Kembali ke project')) }}
+
+<form method="post" class="card card-pad" style="max-width:920px" novalidate>
+  {{ csrf_field() }}
+  <div class="stack">
+    {% if proc.description %}<p class="muted">{{ proc.description }}</p>{% endif %}
+
+    {% if proc.requires_document %}
+      <div class="alert {{ 'tone-green' if has_required_doc else 'tone-yellow' }}">
+        <strong>Dokumen wajib: {{ required_types }}</strong>
+        {% if has_required_doc %}Sudah tersedia.{% else %}Belum diupload. {% if can_upload %}<a href="{{ url_for('documents.upload', code=p.code, process=proc.id) }}">Upload sekarang</a>{% endif %}{% endif %}
+      </div>
+    {% endif %}
+    {% if pending %}
+      <div class="alert tone-yellow"><strong>{{ C.APPROVAL_TYPES[pending.type] }} · {{ pending.revision }}</strong>Menunggu {{ pending.approver_name }} sejak {{ pending.requested_date|date }}. Keputusan di bawah akan tercatat di approval ini.</div>
+    {% endif %}
+
+    {% if proc.fields %}
+      <fieldset>
+        <legend>Data {{ proc.short_name }}</legend>
+        <div class="form-grid">
+          {% for f in proc.fields %}{{ ui.process_field(f, data.get(f.key), errors, options) }}{% endfor %}
+        </div>
+      </fieldset>
+    {% endif %}
+
+    {% if outcomes %}
+      <fieldset>
+        <legend>Hasil keputusan<span class="req" style="color:var(--red)">*</span></legend>
+        {% if errors.outcome %}<p class="small text-red mb">{{ errors.outcome }}</p>{% endif %}
+        <div class="radio-cards">
+          {% for o in outcomes %}
+            <label class="radio-card {{ o.tone if o.tone in ('negative', 'neutral') }}">
+              <input type="radio" name="outcome" value="{{ o.key }}" {{ 'checked' if values.outcome == o.key }}>
+              <span class="title">{{ o.label }}</span>
+              <span class="sub">{{ o.target_text }}{{ ' · komentar wajib' if o.requires_comment }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        {% for o in outcomes if o.target_options|length > 1 %}
+          <div class="field mt" style="max-width:420px">
+            <label for="f-target">Jika "{{ o.label }}": kembali ke proses</label>
+            <select id="f-target" name="target" class="input">
+              {% for k, l in o.target_options %}<option value="{{ k }}" {{ 'selected' if values.target == k }}>{{ l }}</option>{% endfor %}
+            </select>
+            <p class="help">Pilih titik revisi yang paling sesuai dengan feedback.</p>
+          </div>
+        {% endfor %}
+      </fieldset>
+    {% endif %}
+
+    <div class="form-grid">
+      {{ ui.field('comment', 'Komentar' ~ (' / feedback customer' if proc.approver_type == 'customer' else ''), values.comment, 'textarea', errors, class='span-2') }}
+      {% if proc.kind == 'decision' and attachments %}
+        {{ ui.select('attachment_version_id', 'Lampiran keputusan (opsional)', attachments, values.attachment_version_id, errors, blank='— Tanpa lampiran —', help='mis. email / form approval customer yang sudah diupload', class='span-2') }}
+      {% endif %}
+    </div>
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=p.code) }}">Batal</a>
+    {% if proc.fields %}<button class="btn" type="submit" name="action" value="draft">Simpan draft</button>{% endif %}
+    <button class="btn btn-primary" type="submit" name="action" value="complete">{{ 'Simpan keputusan' if proc.kind == 'decision' else 'Selesaikan & lanjutkan' }}</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,362 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}{{ p.code }} · {{ p.name }}{% endblock %}
+{% block content %}
+{% set active = p.is_active %}
+{% set hold = p.status == 'hold' %}
+
+{# ------------------------------------------------------------------ Judul & aksi #}
+<div class="page-head">
+  <div>
+    <a class="eyebrow" href="{{ url_for('projects.index', type=p.type) }}">‹ Project {{ C.PROJECT_TYPES[p.type] }}</a>
+    <h1>{{ p.name }}</h1>
+    <div class="row desc" style="margin-top:8px">
+      <span class="strong num" style="color:var(--ink)">{{ p.code }}</span><span aria-hidden="true">·</span>
+      <span>{{ view.customer }}</span>
+      <span class="tag">{{ C.PROJECT_TYPES[p.type] }}</span>
+      {{ ui.project_status(view) }}
+      {{ ui.priority_chip(p.priority) }}
+    </div>
+  </div>
+  <div class="actions no-print">
+    <a class="btn" href="{{ url_for('projects.summary', code=p.code) }}">{{ icon('sparkles') }} Ringkasan AI</a>
+    {% if perm.can_change_status(current_user) and active %}<a class="btn" href="{{ url_for('projects.status', code=p.code) }}">Update Status</a>{% endif %}
+    {% set can_edit = perm.can_edit_project(current_user, p) and p.status != 'cancelled' %}
+    {% set can_req = perm.can_request_approval(current_user) and active %}
+    {% set can_finish = perm.can_finish_project(current_user) and active %}
+    {% set can_move = perm.can_override_workflow(current_user) and active %}
+    {% if can_edit or can_req or can_finish or can_move %}
+    <details class="menu">
+      <summary class="btn" aria-label="Aksi lainnya">{{ icon('more') }}</summary>
+      <div class="menu-panel">
+        {% if can_edit %}<a href="{{ url_for('projects.edit', code=p.code) }}">Edit project</a>{% endif %}
+        {% if can_req %}<a href="{{ url_for('projects.request_approval', code=p.code) }}">Ajukan approval</a>{% endif %}
+        {% if can_finish %}<a href="{{ url_for('projects.finish', code=p.code) }}">Selesaikan project (Finish)</a>{% endif %}
+        {% if can_move %}<a href="{{ url_for('projects.move', code=p.code) }}">Pindahkan current process</a>{% endif %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+</div>
+
+{% if hold %}
+  <div class="alert tone-yellow mb"><strong>Project sedang Hold</strong>{{ p.status_reason or 'Proses tidak dapat dilanjutkan selama Hold.' }}{% if perm.can_change_status(current_user) %} Gunakan Update Status → On Progress untuk melanjutkan.{% endif %}</div>
+{% elif p.status == 'cancelled' %}
+  <div class="alert tone-red mb"><strong>Project Cancelled</strong>{{ p.status_reason or 'Project dibatalkan.' }}</div>
+{% endif %}
+
+<div class="detail-grid">
+  <div class="stack" style="min-width:0">
+
+    {# -------------------------------------------------------------- CURRENT PROCESS (fokus utama) #}
+    <section class="card card-pad {{ 'focal' if running }}" aria-labelledby="current-title">
+      <div class="row-between">
+        <p class="small muted strong">{% if p.status == 'completed' %}Project selesai{% else %}Current Process · {{ current.sequence if current else '—' }} dari {{ p.processes|length }}{% endif %}</p>
+        {% if current %}{{ ui.process_chip('completed' if p.status == 'completed' else current.status) }}{% endif %}
+      </div>
+      <h2 class="process-name" id="current-title" style="font-size:28px;letter-spacing:-0.02em;font-weight:600;line-height:1.2;margin-top:6px">
+        {% if p.status == 'completed' %}Completed {{ p.actual_finish|date }}{% else %}{{ current.name if current else '—' }}{% endif %}
+      </h2>
+      {% if current and p.status != 'completed' %}<p class="muted" style="margin-top:4px">{{ current.description }}</p>{% endif %}
+
+      {% if current and current.status == 'problem' and current.problem_note %}
+        <div class="alert tone-red mt"><strong>Problem</strong>{{ current.problem_note }}</div>
+      {% endif %}
+      {% if running and current.requires_document and not has_required_doc %}
+        <div class="alert tone-yellow mt"><strong>Dokumen wajib belum diupload</strong>{{ current.required_doc_types|labels(C.DOC_TYPES)|join(' / ') }} diperlukan sebelum proses dapat diselesaikan.</div>
+      {% endif %}
+      {% if running and pending_current %}
+        <p class="alert tone-yellow mt" style="color:var(--ink)"><span class="strong">{{ C.APPROVAL_TYPES[pending_current.type] }}</span> · {{ pending_current.revision }} · menunggu {{ pending_current.approver_name }} sejak {{ pending_current.requested_date|date }} ({{ diff_days(pending_current.requested_date, today) }} hari)</p>
+      {% endif %}
+
+      <dl class="blocks" style="margin-bottom:0">
+        <div class="block"><dt class="k">PIC Proses</dt>
+          <dd class="v" style="margin:4px 0 0">{% if current %}{{ current.pic.name if current.pic else '—' }}<small>{{ C.ROLES[current.pic_role] }}</small>{% else %}—{% endif %}</dd></div>
+        <div class="block {{ 'yellow' if p.status in ('waiting_approval', 'waiting_external') }}"><dt class="k">Waiting For</dt>
+          <dd class="v" style="margin:4px 0 0">{{ (p.waiting_for or '—') if active else '—' }}</dd></div>
+        <div class="block {{ 'red' if view.overdue_days else ('yellow' if view.flags.due_soon) }}"><dt class="k">Deadline</dt>
+          <dd class="v" style="margin:4px 0 0">{{ p.target_date|date }}<small>{% if active %}{{ 'Overdue ' ~ view.overdue_days ~ ' hari' if view.overdue_days else describe_due(p.target_date, today) }}{% else %}Selesai {{ p.actual_finish|date }}{% endif %}</small></dd></div>
+        <div class="block"><dt class="k">Aging</dt>
+          <dd class="v" style="margin:4px 0 0">{{ view.aging }} hari<small>{% if aging_in_process is not none and active %}{{ aging_in_process }} hari di proses ini{% else %}sejak {{ p.start_date|date }}{% endif %}</small></dd></div>
+      </dl>
+
+      <div class="next-action {{ 'overdue' if view.next_action_state == 'overdue' and active }}">
+        <div class="row-between" style="align-items:flex-start">
+          <div class="grow">
+            <p class="small muted">Next Action</p>
+            <p class="title">{{ p.next_action }}</p>
+            {% if active %}<p class="small {{ 'text-red strong' if view.next_action_state == 'overdue' else ('text-yellow strong' if view.next_action_state == 'due_soon' else 'muted') }}">Due {{ p.next_action_due|date }} · {{ describe_due(p.next_action_due, today) }}</p>{% endif %}
+          </div>
+          {% if active and not hold and perm.can_update_next_action(current_user, p) %}<a class="btn btn-sm btn-ghost" href="{{ url_for('projects.next_action', code=p.code) }}">Ubah</a>{% endif %}
+        </div>
+      </div>
+
+      {% if running %}
+        <div class="row mt-lg hide-mobile">
+          {% if can_act and not hold %}
+            <a class="btn btn-primary" href="{{ url_for('process.complete', code=p.code, process_id=current.id) }}">
+              {% if current.kind == 'decision' %}{{ 'Catat Keputusan Customer' if current.approver_type == 'customer' else 'Catat Hasil / Keputusan' }}{% elif current.kind == 'finish' %}Selesaikan Project{% else %}Selesaikan Proses{% endif %}</a>
+          {% endif %}
+          {% if perm.can_upload_to_process(current_user, p, current) %}<a class="btn" href="{{ url_for('documents.upload', code=p.code, process=current.id) }}">{{ icon('upload') }} Upload Dokumen</a>{% endif %}
+          {% if can_act and not hold and current.kind != 'finish' %}<a class="btn btn-ghost" href="{{ url_for('process.problem', code=p.code, process_id=current.id) }}">{{ 'Problem selesai' if current.status == 'problem' else 'Tandai problem' }}</a>{% endif %}
+          <a class="btn btn-ghost" href="{{ url_for('process.detail', code=p.code, process_id=current.id) }}">Detail proses</a>
+        </div>
+        {% if not can_act %}<p class="small subtle mt">Proses ini dikerjakan oleh {{ current.actor_roles|labels(C.ROLES)|join(' / ') }}. Anda {{ 'memiliki akses read-only' if current_user.role == 'management' else 'dapat melihat detail' }}.</p>{% endif %}
+      {% endif %}
+    </section>
+
+    {# -------------------------------------------------------------- PROCESS TRACKER #}
+    <section class="card" aria-labelledby="tracker-title">
+      <div class="card-head"><div><h2 id="tracker-title">Process Tracker</h2><p class="desc">{{ workflow_name }} · {{ view.progress.done }}/{{ view.progress.total }} proses selesai</p></div></div>
+      <div class="card-body">
+        <div class="mb">{{ ui.progress(view.progress.pct, 'green' if p.status == 'completed' else 'blue') }}</div>
+        <ol class="stepper" aria-label="Process tracker">
+          {% for proc in p.processes %}
+            {% set is_cur = proc.is_running %}
+            <li class="{{ 'done-line' if proc.status == 'completed' or is_cur }}">
+              <a href="{{ url_for('process.detail', code=p.code, process_id=proc.id) }}" class="{{ 'is-current' if is_cur }}" {% if is_cur %}aria-current="step"{% endif %}
+                 aria-label="{{ '%02d'|format(proc.sequence) }} {{ proc.name }}: {{ C.PROCESS_STATUSES[proc.status] }}">
+                {{ ui.step_icon(proc.status) }}
+                <span><span class="name">{{ proc.short_name }}</span><br class="hide-mobile"><span class="meta"> {{ step_meta(proc) }}</span></span>
+                {% if proc.loop_count %}<span class="loop-badge">Loop {{ proc.loop_count }}×</span>{% endif %}
+              </a>
+            </li>
+          {% endfor %}
+        </ol>
+        <div class="legend-row" aria-label="Legenda">
+          {% for s in ['completed', 'current', 'not_started', 'revision', 'problem', 'skipped'] %}<span>{{ ui.step_icon(s, small=true) }} {{ C.PROCESS_STATUSES[s] }}</span>{% endfor %}
+        </div>
+      </div>
+    </section>
+
+    {# -------------------------------------------------------------- TIMELINE #}
+    {% set tl_view = request.args.get('timeline', 'chart') %}
+    <section class="card" aria-labelledby="timeline-title" id="timeline">
+      <div class="card-head">
+        <div><h2 id="timeline-title">Timeline</h2><p class="desc">Planned vs actual per proses</p></div>
+        <div class="segmented" role="group" aria-label="Tampilan timeline">
+          <a href="{{ url_with(timeline='') }}#timeline" class="{{ 'active' if tl_view != 'table' }}">Grafik</a>
+          <a href="{{ url_with(timeline='table') }}#timeline" class="{{ 'active' if tl_view == 'table' }}">Tabel</a>
+        </div>
+      </div>
+      <div class="card-body">
+        {% if tl_view == 'table' %}
+          <div class="table-scroll" style="margin:0 -20px">
+            <table class="table" style="width:100%;min-width:720px">
+              <thead><tr><th>Proses</th><th>Status</th><th>Planned Start</th><th>Planned Finish</th><th>Actual Start</th><th>Actual Finish</th><th style="text-align:right">Durasi</th></tr></thead>
+              <tbody>
+              {% for r in timeline.rows %}{% set proc = r.proc %}
+                <tr><td><a href="{{ url_for('process.detail', code=p.code, process_id=proc.id) }}" style="color:var(--ink)"><span class="subtle num">{{ '%02d'|format(proc.sequence) }}</span> {{ proc.name }}</a></td>
+                  <td>{{ ui.process_chip(proc.status, small=true) }}</td>
+                  <td class="num muted">{{ proc.planned_start|date }}</td><td class="num muted">{{ proc.planned_finish|date }}</td>
+                  <td class="num muted">{{ proc.actual_start|date }}</td><td class="num muted">{{ proc.actual_finish|date }}</td>
+                  <td class="num" style="text-align:right">{{ r.duration ~ ' hari' if r.duration is not none else '—' }}</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="row small subtle mb" style="gap:16px">
+            <span class="row" style="gap:6px"><span class="mark-gray" style="width:20px;height:8px;border-radius:3px;background:var(--m-track)"></span> Planned</span>
+            <span class="row" style="gap:6px"><span class="mark-blue" style="width:20px;height:8px;border-radius:3px"></span> Actual</span>
+            <span class="row" style="gap:6px"><span class="mark-orange" style="width:20px;height:8px;border-radius:3px"></span> Melewati plan</span>
+            <span class="row" style="gap:6px"><span style="width:2px;height:12px;background:var(--m-red)"></span> Hari ini</span>
+          </div>
+          <div class="row-between small subtle" style="padding-left:34%"><span>{{ timeline.start|date_short }}</span><span>{{ timeline.end|date_short }}</span></div>
+          <ul class="timeline">
+            {% for r in timeline.rows %}{% set proc = r.proc %}
+              <li class="{{ 'skipped' if proc.status == 'skipped' }}">
+                <a href="{{ url_for('process.detail', code=p.code, process_id=proc.id) }}">
+                  <span class="row-between" style="flex-wrap:nowrap"><span class="truncate"><span class="subtle num">{{ '%02d'|format(proc.sequence) }}</span> {{ proc.short_name }}</span>
+                    <span class="small subtle nowrap">{{ r.duration ~ ' hari' if r.duration is not none else ('—' if proc.status == 'skipped' else r.planned_days ~ ' hari plan') }}</span></span>
+                  <span class="lane" aria-hidden="true">
+                    <span class="plan" style="left:{{ r.plan_left }}%;width:{{ r.plan_width }}%"></span>
+                    {% if r.actual_left is not none %}<span class="actual mark-{{ r.tone }}" style="left:{{ r.actual_left }}%;width:{{ r.actual_width }}%"></span>{% endif %}
+                    {% if timeline.today_pos is not none %}<span class="today" style="left:{{ timeline.today_pos }}%"></span>{% endif %}
+                  </span>
+                  <span class="sr-only">Planned {{ proc.planned_start|date }} – {{ proc.planned_finish|date }}; actual {{ proc.actual_start|date if proc.actual_start else 'belum mulai' }} – {{ proc.actual_finish|date if proc.actual_finish else 'berjalan' }}</span>
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+          <p class="small subtle mt">Bar oranye = aktual melewati planned finish. Klik baris untuk detail proses.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    {# -------------------------------------------------------------- TAB: approval, dokumen, revisi, record, activity #}
+    <section class="card" id="tabs" aria-label="Detail project">
+      <nav class="tabs" style="padding:0 12px" aria-label="Detail project">
+        {% for key, label, n in [('approvals', 'Approval', approvals|length), ('documents', 'Dokumen', documents|length), ('revisions', 'Revision History', none), ('records', 'Trial & Material', records|length), ('activity', 'Activity', none)] %}
+          <a href="{{ url_with(tab=key, activity=none) }}#tabs" class="{{ 'active' if tab == key }}" {% if tab == key %}aria-current="page"{% endif %}>{{ label }}{% if n is not none %} <span class="n">{{ n }}</span>{% endif %}</a>
+        {% endfor %}
+      </nav>
+      <div style="padding:12px 0">
+
+      {% if tab == 'approvals' %}
+        {% if perm.can_request_approval(current_user) and active %}<div class="row" style="justify-content:flex-end;padding:0 20px 8px"><a class="btn btn-sm" href="{{ url_for('projects.request_approval', code=p.code) }}">Ajukan approval</a></div>{% endif %}
+        {% if not approvals %}{{ ui.empty('Belum ada approval', 'Approval dibuat otomatis saat workflow masuk proses approval, atau diajukan manual.') }}
+        {% else %}<ul class="list">{% for a in approvals %}{{ ui.approval_item(a, can_decide(a)) }}{% endfor %}</ul>{% endif %}
+
+      {% elif tab == 'documents' %}
+        {% if not folders %}{{ ui.empty('Belum ada dokumen') }}{% endif %}
+        {% for folder, groups in folders.items() %}
+          <div style="padding:8px 20px 4px"><p class="small strong muted">📁 {{ folder }}</p></div>
+          <ul class="list" style="margin-bottom:8px">
+            {% for grp in groups %}{% set proc = grp.proc %}
+              {% set can_up = perm.can_upload_to_process(current_user, p, proc) and p.status != 'cancelled' %}
+              <li class="list-item" style="align-items:flex-start">
+                <div class="grow">
+                  <p class="small muted">{{ '%02d'|format(proc.sequence) }} · {{ proc.name }}{% if proc.requires_document %} · <span class="{{ 'text-orange' }}">wajib: {{ proc.required_doc_types|labels(C.DOC_TYPES)|join(' / ') }}</span>{% endif %}</p>
+                  {% if not grp.documents %}<p class="small subtle">Belum ada dokumen.</p>{% endif %}
+                  {% for d in grp.documents %}{% set v = d.latest %}
+                    <div class="row" style="margin-top:6px">
+                      <a class="strong" href="{{ url_for('documents.detail', doc_id=d.id) }}" style="color:var(--ink)">{{ d.name }}</a>
+                      <span class="tag">{{ C.DOC_TYPES[d.type] }}</span>
+                      {% if v %}<span class="small muted num">{{ v.revision|rev }}{{ ' v' ~ v.version if v.version > 1 }}</span>{{ ui.doc_chip(v.status) }}
+                        <span class="small subtle">{{ v.uploaded_at|datetime }} · {{ v.uploaded_by.name if v.uploaded_by }}</span>{% endif %}
+                      <span class="row small">
+                        {% if v %}<a href="{{ url_for('documents.file', version_id=v.id, download=1) }}">Download</a>{% endif %}
+                        {% if can_up %}<a href="{{ url_for('documents.upload', code=p.code, process=proc.id, document=d.id) }}">Upload revisi</a>{% endif %}
+                      </span>
+                    </div>
+                  {% endfor %}
+                </div>
+                {% if can_up %}<a class="btn btn-sm" href="{{ url_for('documents.upload', code=p.code, process=proc.id) }}">{{ icon('upload') }} Upload</a>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endfor %}
+
+      {% elif tab == 'revisions' %}
+        {% if not documents %}{{ ui.empty('Belum ada dokumen', 'Revision history muncul setelah dokumen diupload.') }}
+        {% else %}
+          <div class="stack" style="padding:4px 20px">
+            <p class="small muted">Semua revisi tetap tersimpan — revisi lama tidak pernah dihapus.</p>
+            {% for d in documents|sort(attribute='created_at') %}
+              <section aria-label="{{ d.name }}">
+                <p class="strong">{{ d.name }} <span class="muted" style="font-weight:400">· {{ C.DOC_TYPES[d.type] }} · {{ d.process.name }}</span></p>
+                <ol class="row" style="list-style:none;padding:0;margin:8px 0 0">
+                  {% for v in d.versions|reverse %}
+                    <li class="row">{% if not loop.first %}<span class="subtle" aria-hidden="true">→</span>{% endif %}
+                      <a class="row" style="border:1px solid var(--line);border-radius:12px;padding:6px 10px;color:var(--ink)" href="{{ url_for('documents.detail', doc_id=d.id, v=v.id) }}" title="{{ v.note or '' }}">
+                        <span class="strong num small">{{ v.revision|rev }}{{ ' v' ~ v.version if v.version > 1 }}</span>{{ ui.doc_chip(v.status) }}<span class="small subtle">{{ v.uploaded_at|date_short }}</span>
+                      </a></li>
+                  {% endfor %}
+                </ol>
+              </section>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+      {% elif tab == 'records' %}
+        {% if not records %}{{ ui.empty('Belum ada record', 'Trial record, material request, dan validation record tercatat saat proses terkait diselesaikan.') }}
+        {% else %}
+          <ul class="list">
+            {% for r in records %}
+              <li style="padding:14px 20px">
+                <div class="row">
+                  <span class="strong">{{ r.number }}</span>
+                  <span class="small muted">· {{ record_label.get(r.record_type, 'Record') }} · {{ r.process.name }}</span>
+                  {% if r.outcome_label %}{{ ui.chip(r.outcome_label, 'red' if (r.outcome in ('fail', 'not_approved', 'ng', 't0_ng')) else 'green', small=true) }}{% endif %}
+                  {% if r.purchasing_status %}{{ ui.chip('Purchasing: ' ~ C.PURCHASING_STATUSES[r.purchasing_status], C.PURCHASING_STATUS_TONE[r.purchasing_status], small=true) }}{% endif %}
+                </div>
+                <p class="small muted" style="margin-top:4px">{{ record_summary(r)|join(' · ') or '—' }}</p>
+                {% set d = r.data or {} %}
+                {% if d.problem or d.evaluation or r.comment %}<p class="small" style="margin-top:4px">{{ [('Problem: ' ~ d.problem) if d.problem, ('Evaluasi: ' ~ d.evaluation) if d.evaluation, r.comment]|select|join(' — ') }}</p>{% endif %}
+                <p class="small subtle" style="margin-top:4px">{{ r.created_by.name if r.created_by }} · {{ r.created_at|datetime }} · iterasi {{ r.iteration }}</p>
+                {% if r.record_type == 'material_request' and perm.can_update_purchasing(current_user) and p.status != 'cancelled' %}
+                  <form method="post" action="{{ url_for('projects.purchasing', code=p.code, record_id=r.id) }}" class="row mt" style="margin-top:8px">{{ csrf_field() }}
+                    <label class="small subtle" for="ps-{{ r.id }}">Purchasing status</label>
+                    <select id="ps-{{ r.id }}" name="status" class="input" style="width:170px;height:32px">
+                      {% for k, v in purchasing_statuses.items() %}<option value="{{ k }}" {{ 'selected' if r.purchasing_status == k }}>{{ v }}</option>{% endfor %}
+                    </select>
+                    <button class="btn btn-sm" type="submit">Simpan</button>
+                  </form>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+      {% elif tab == 'activity' %}
+        <div style="padding:4px 20px">
+          {% if perm.can_comment(current_user) %}
+            <form method="post" action="{{ url_for('projects.comment', code=p.code) }}" class="mb">{{ csrf_field() }}
+              <label class="sr-only" for="comment-box">Tambah komentar</label>
+              <textarea id="comment-box" name="body" class="input" rows="2" maxlength="2000" required placeholder="Tulis update atau catatan untuk tim…"></textarea>
+              <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-sm btn-primary" type="submit">Kirim komentar</button></div>
+            </form>
+          {% endif %}
+          <nav class="pills mb" aria-label="Filter activity">
+            {% for k, l in [('all', 'Semua'), ('workflow', 'Workflow & status'), ('document', 'Dokumen'), ('comment', 'Komentar')] %}
+              <a href="{{ url_with(activity=k if k != 'all' else none) }}#tabs" class="{{ 'active' if activity_kind == k }}">{{ l }}</a>
+            {% endfor %}
+          </nav>
+          {% if not feed %}{{ ui.empty('Belum ada aktivitas') }}
+          {% else %}
+            <ol class="feed">
+              {% for t in feed %}
+                <li class="{{ 'comment' if t.kind == 'comment' else ('loop' if 'loop' in t.type or 'problem' in t.type else ('approval' if 'approval' in t.type)) }}">
+                  {% if t.kind == 'comment' %}
+                    <div class="bubble"><p class="small strong">{{ t.user }}</p><p class="pre">{{ t.message }}</p></div>
+                  {% else %}
+                    <p>{{ t.message }}</p>
+                    {% if t.detail %}<p class="small muted pre">{{ t.detail }}</p>{% endif %}
+                  {% endif %}
+                  <p class="small subtle">{% if t.kind == 'activity' %}{{ t.user }} · {% endif %}{{ t.at|datetime }}{% if t.process %} · {{ t.process }}{% endif %}</p>
+                </li>
+              {% endfor %}
+            </ol>
+          {% endif %}
+        </div>
+      {% endif %}
+      </div>
+    </section>
+  </div>
+
+  {# -------------------------------------------------------------- PROJECT INFORMATION #}
+  <aside aria-label="Informasi project">
+    <details class="card" open>
+      <summary class="card-head" style="cursor:pointer;list-style:none"><h2>Project Information</h2><span class="subtle show-mobile">▾</span></summary>
+      <div class="card-body">
+        <dl class="info-list">
+          <div><dt>Project ID</dt><dd class="num">{{ p.code }}</dd></div>
+          <div><dt>Project Type</dt><dd>{{ C.PROJECT_TYPES[p.type] }}</dd></div>
+          <div class="full"><dt>Customer</dt><dd>{{ view.customer }}</dd></div>
+          <div class="full"><dt>Product</dt><dd>{{ p.product_name }}</dd></div>
+          <div class="full"><dt>Customer Request</dt><dd class="small">{{ p.customer_request }}</dd></div>
+          {% if p.product_description %}<div class="full"><dt>Product Description</dt><dd class="small">{{ p.product_description }}</dd></div>{% endif %}
+        </dl>
+        <hr class="divider">
+        <ul class="list">
+          {% for label, u in [('NPD PIC', p.npd_pic), ('Sales PIC', p.sales_pic), ('Drafter', p.drafter)] %}
+            <li class="row" style="border:0;padding:5px 0"><span class="avatar sm">{{ u.initials }}</span><span class="grow truncate">{{ u.name }}</span><span class="small subtle">{{ label }}</span></li>
+          {% endfor %}
+        </ul>
+        <hr class="divider">
+        <dl class="info-list">
+          <div><dt>Start Date</dt><dd>{{ p.start_date|date }}</dd></div>
+          <div><dt>Target Finish</dt><dd>{{ p.target_date|date }}</dd></div>
+          <div><dt>Actual Finish</dt><dd>{{ p.actual_finish|date }}</dd></div>
+          <div><dt>Priority</dt><dd>{{ ui.priority_chip(p.priority, small=true) }}</dd></div>
+          <div class="full"><dt>Mold Maker / Supplier</dt><dd>{{ p.supplier or '—' }}</dd></div>
+          {% if p.type == 'new_mold' %}<div><dt>New Masterbatch</dt><dd>{{ 'Belum diputuskan' if p.new_masterbatch is none else ('YES' if p.new_masterbatch else 'NO') }}</dd></div>{% endif %}
+          <div><dt>Last Update</dt><dd>{{ 'Hari ini' if last_update == 0 else last_update ~ ' hari lalu' }}</dd></div>
+          {% if p.remarks %}<div class="full"><dt>Remarks</dt><dd class="small">{{ p.remarks }}</dd></div>{% endif %}
+        </dl>
+        <p class="small subtle mt">{{ workflow_name }}</p>
+      </div>
+    </details>
+  </aside>
+</div>
+
+{# Tombol aksi utama di bawah layar (mobile, mudah dijangkau satu tangan) #}
+{% if running and can_act and not hold %}
+  <div class="sticky-actions no-print">
+    <a class="btn" href="{{ url_for('process.detail', code=p.code, process_id=current.id) }}">Detail</a>
+    {% if perm.can_upload_to_process(current_user, p, current) %}<a class="btn" href="{{ url_for('documents.upload', code=p.code, process=current.id) }}" aria-label="Upload dokumen">{{ icon('upload') }}</a>{% endif %}
+    <a class="btn btn-primary" style="flex:2" href="{{ url_for('process.complete', code=p.code, process_id=current.id) }}">{{ 'Catat Keputusan' if current.kind == 'decision' else ('Finish' if current.kind == 'finish' else 'Selesaikan') }}</a>
+  </div>
+{% endif %}
+{% endblock %}

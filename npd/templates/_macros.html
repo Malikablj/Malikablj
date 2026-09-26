@@ -1,0 +1,150 @@
+{#- Komponen kecil yang dipakai berulang. Import: {% import "_macros.html" as ui with context %} -#}
+
+{% macro chip(label, tone='gray', dot=false, small=false) -%}
+  <span class="chip tone-{{ tone }} {{ 'sm' if small }}">{% if dot %}<span class="dot" aria-hidden="true"></span>{% endif %}{{ label }}</span>
+{%- endmacro %}
+
+{% macro status_chip(status, small=false) -%}
+  {{ chip(C.STATUSES[status], C.STATUS_TONE[status], dot=true, small=small) }}
+{%- endmacro %}
+
+{#- Status project + jumlah hari terlambat (warna hanya sinyal tambahan, teks tetap jelas) -#}
+{% macro project_status(view, small=false) -%}
+  {% if view.display_status == 'overdue' %}
+    <span class="row" style="gap:4px">{{ chip('Overdue ' ~ view.overdue_days ~ ' hari', 'red', dot=true, small=small) }}{{ status_chip(view.project.status, small) }}</span>
+  {% else %}{{ status_chip(view.display_status, small) }}{% endif %}
+{%- endmacro %}
+
+{% macro priority_chip(priority, small=false) -%}
+  {{ chip(C.PRIORITIES[priority], C.PRIORITY_TONE[priority], small=small) }}
+{%- endmacro %}
+
+{% macro process_chip(status, small=false) -%}
+  {{ chip(C.PROCESS_STATUSES[status], C.PROCESS_STATUS_TONE[status], small=small) }}
+{%- endmacro %}
+
+{% macro approval_chip(status, small=false) -%}
+  {{ chip(C.APPROVAL_STATUSES[status], C.APPROVAL_STATUS_TONE[status], dot=true, small=small) }}
+{%- endmacro %}
+
+{% macro doc_chip(status, small=true) -%}
+  {{ chip(C.DOC_STATUSES[status], C.DOC_STATUS_TONE[status], small=small) }}
+{%- endmacro %}
+
+{% macro step_icon(status, small=false) -%}
+  <span class="step-icon {{ status }} {{ 'sm' if small }}" aria-hidden="true">{% if status == 'completed' %}✓{% elif status == 'revision' %}↻{% elif status == 'problem' %}!{% endif %}</span>
+{%- endmacro %}
+
+{% macro due_text(date, state) -%}
+  <span class="small {{ 'text-red strong' if state == 'overdue' else ('text-yellow strong' if state == 'due_soon' else 'muted') }}">{{ date|date }} · {{ describe_due(date, today) }}</span>
+{%- endmacro %}
+
+{% macro progress(pct, tone='blue') -%}
+  <div class="progress" role="progressbar" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress {{ pct }}%"><span class="mark-{{ tone }}" style="width: {{ pct }}%"></span></div>
+{%- endmacro %}
+
+{% macro empty(title, desc='') -%}
+  <div class="empty"><p class="title">{{ title }}</p>{% if desc %}<p class="desc">{{ desc }}</p>{% endif %}</div>
+{%- endmacro %}
+
+{#- back = (url, label) menampilkan tautan kembali di atas judul -#}
+{% macro page_head(title, desc='', eyebrow='', back=none) -%}
+  <div class="page-head">
+    <div>
+      {% if back %}<a class="eyebrow" href="{{ back[0] }}">‹ {{ back[1] }}</a>{% elif eyebrow %}<div class="eyebrow">{{ eyebrow }}</div>{% endif %}
+      <h1>{{ title }}</h1>
+      {% if desc %}<p class="desc">{{ desc }}</p>{% endif %}
+    </div>
+    {% if caller %}<div class="actions no-print">{{ caller() }}</div>{% endif %}
+  </div>
+{%- endmacro %}
+
+{#- ====================== Field form (label + input + pesan error) ====================== -#}
+{% macro field(name, label, value='', type='text', errors={}, required=false, help='', placeholder='', attrs='', class='') -%}
+  <div class="field {{ class }}">
+    <label for="f-{{ name }}">{{ label }}{% if required %}<span class="req" aria-hidden="true">*</span>{% endif %}</label>
+    {% if type == 'textarea' %}
+      <textarea id="f-{{ name }}" name="{{ name }}" class="input {{ 'invalid' if errors.get(name) }}" rows="3" placeholder="{{ placeholder }}" {{ attrs|safe }} {% if errors.get(name) %}aria-invalid="true" aria-describedby="e-{{ name }}"{% endif %}>{{ value if value is not none }}</textarea>
+    {% else %}
+      <input id="f-{{ name }}" name="{{ name }}" type="{{ type }}" class="input {{ 'invalid' if errors.get(name) }}" value="{{ value if value is not none }}" placeholder="{{ placeholder }}" {{ attrs|safe }} {% if errors.get(name) %}aria-invalid="true" aria-describedby="e-{{ name }}"{% endif %}>
+    {% endif %}
+    {% if errors.get(name) %}<p class="error" id="e-{{ name }}">{{ errors[name] }}</p>{% elif help %}<p class="help">{{ help }}</p>{% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro select(name, label, options, value='', errors={}, required=false, help='', blank='', class='') -%}
+  {#- options: list of (value, label) -#}
+  <div class="field {{ class }}">
+    <label for="f-{{ name }}">{{ label }}{% if required %}<span class="req" aria-hidden="true">*</span>{% endif %}</label>
+    <select id="f-{{ name }}" name="{{ name }}" class="input {{ 'invalid' if errors.get(name) }}" {% if errors.get(name) %}aria-invalid="true" aria-describedby="e-{{ name }}"{% endif %}>
+      {% if blank %}<option value="">{{ blank }}</option>{% endif %}
+      {% for v, l in options %}<option value="{{ v }}" {{ 'selected' if v|string == value|string }}>{{ l }}</option>{% endfor %}
+    </select>
+    {% if errors.get(name) %}<p class="error" id="e-{{ name }}">{{ errors[name] }}</p>{% elif help %}<p class="help">{{ help }}</p>{% endif %}
+  </div>
+{%- endmacro %}
+
+{#- ====================== Satu baris approval (dipakai di detail project & menu Approval) ====================== -#}
+{% macro approval_item(a, can_decide=false, show_project=false) -%}
+  <li class="list-item" style="align-items:flex-start">
+    <div class="grow">
+      <div class="row">
+        <span class="title">{{ C.APPROVAL_TYPES[a.type] }}</span>
+        {{ approval_chip(a.status, small=true) }}
+        {% if a.linked_to_workflow %}<span class="tag" title="Keputusan menggerakkan workflow">Workflow</span>{% endif %}
+      </div>
+      {% if show_project %}<div class="small"><a href="{{ url_for('projects.detail', code=a.project.code) }}">{{ a.project.code }} · {{ a.project.name }}</a></div>{% endif %}
+      <div class="small muted">
+        {{ a.code }} · {{ a.revision }} · {{ a.process.name }} · iterasi {{ a.iteration }}
+      </div>
+      <div class="small muted">Diajukan {{ a.requested_date|date }}{% if a.requested_by %} oleh {{ a.requested_by.name }}{% endif %} · Approver: {{ a.approver_name }}
+        {% if a.status == 'pending' %} · <span class="text-yellow strong">menunggu {{ diff_days(a.requested_date, today) }} hari</span>{% endif %}</div>
+      {% if a.decision_date %}<div class="small">Diputuskan {{ a.decision_date|date }}{% if a.decided_by %} oleh {{ a.decided_by.name }}{% endif %}{% if a.comment %} — <span class="muted">{{ a.comment }}</span>{% endif %}</div>
+      {% elif a.comment %}<div class="small muted">{{ a.comment }}</div>{% endif %}
+      <div class="row small" style="margin-top:4px">
+        {% if a.document_version_id %}<a href="{{ url_for('documents.version', version_id=a.document_version_id) }}">Lihat dokumen yang diajukan</a>{% endif %}
+        {% if a.attachment_version_id %}<a href="{{ url_for('documents.version', version_id=a.attachment_version_id) }}">Lampiran keputusan</a>{% endif %}
+      </div>
+    </div>
+    {% if can_decide %}
+      {% if a.linked_to_workflow %}
+        <a class="btn btn-sm btn-primary" href="{{ url_for('process.complete', code=a.project.code, process_id=a.process_id) }}">Putuskan</a>
+      {% else %}
+        <a class="btn btn-sm btn-primary" href="{{ url_for('approvals.decide', approval_id=a.id) }}">Putuskan</a>
+      {% endif %}
+    {% endif %}
+  </li>
+{%- endmacro %}
+
+{#- ====================== Isian dinamis form proses ====================== -#}
+{% macro process_field(f, value, errors, options) -%}
+  {% set name = f.key %}
+  {% set err = errors.get(name) %}
+  <div class="field {{ 'span-2' if f.type in ('textarea', 'multiselect') }}">
+    {% if f.type == 'multiselect' %}
+      <span class="label" id="l-{{ name }}">{{ f.label }}{% if f.required %}<span class="req" aria-hidden="true">*</span>{% endif %}</span>
+      <div class="checks" role="group" aria-labelledby="l-{{ name }}">
+        {% for opt in f.options %}<label class="check-pill"><input type="checkbox" name="{{ name }}" value="{{ opt }}" {{ 'checked' if value and opt in value }}> {{ opt }}</label>{% endfor %}
+      </div>
+    {% else %}
+      <label for="f-{{ name }}">{{ f.label }}{% if f.required %}<span class="req" aria-hidden="true">*</span>{% endif %}</label>
+      {% if f.type == 'textarea' %}
+        <textarea id="f-{{ name }}" name="{{ name }}" class="input {{ 'invalid' if err }}" rows="3" placeholder="{{ f.placeholder or '' }}">{{ value if value is not none }}</textarea>
+      {% elif f.type in ('select', 'user', 'doc_revision') %}
+        {% set opts = options.get(name) if f.type != 'select' else f.options|map('string')|list %}
+        <select id="f-{{ name }}" name="{{ name }}" class="input {{ 'invalid' if err }}">
+          <option value="">{{ 'Belum ada revisi yang berlaku' if f.type == 'doc_revision' and not opts else 'Pilih…' }}</option>
+          {% if f.type == 'select' %}
+            {% for o in opts %}<option {{ 'selected' if value == o }}>{{ o }}</option>{% endfor %}
+          {% else %}
+            {% for v, l in opts %}<option value="{{ v }}" {{ 'selected' if value == v }}>{{ l }}</option>{% endfor %}
+          {% endif %}
+        </select>
+      {% else %}
+        <input id="f-{{ name }}" name="{{ name }}" class="input {{ 'invalid' if err }}" type="{{ 'number' if f.type == 'number' else ('date' if f.type == 'date' else 'text') }}" {% if f.type == 'number' %}step="any"{% endif %}
+               value="{{ value if value is not none }}" placeholder="{{ f.placeholder or '' }}">
+      {% endif %}
+    {% endif %}
+    {% if err %}<p class="error">{{ err }}</p>{% elif f.helper %}<p class="help">{{ f.helper }}</p>{% endif %}
+  </div>
+{%- endmacro %}

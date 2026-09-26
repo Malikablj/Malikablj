@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Next Action · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Ubah Next Action', p.code ~ ' · ' ~ p.name, back=(url_for('projects.detail', code=p.code), 'Kembali ke project')) }}
+<form method="post" class="card card-pad" style="max-width:640px" novalidate>
+  {{ csrf_field() }}
+  <div class="stack">
+    {{ ui.field('next_action', 'Next Action', values.next_action, errors=errors, required=true, attrs='maxlength="300"') }}
+    {{ ui.field('next_action_due', 'Due', values.next_action_due, 'date', errors, required=true) }}
+    {{ ui.field('waiting_for', 'Waiting For', values.waiting_for, errors=errors, required=p.status in ('waiting_approval', 'waiting_external'), help='Pihak yang sedang ditunggu (jika ada)') }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=p.code) }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Simpan</button>
+  </div>
+</form>
+{% endblock %}

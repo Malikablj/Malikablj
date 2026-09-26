@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Ajukan Approval · {{ p.code }}{% endblock %}
+{% block content %}
+{{ ui.page_head('Ajukan Approval', p.code ~ ' · ' ~ p.name, back=(url_for('projects.detail', code=p.code, tab='approvals'), 'Kembali ke project')) }}
+<form method="post" class="card card-pad" style="max-width:720px" novalidate>
+  {{ csrf_field() }}
+  <p class="small muted mb">Approval manual hanya mencatat keputusan (mis. 2D Approval internal). Approval pada proses workflow dibuat otomatis dan diputuskan dari proses tersebut.</p>
+  <div class="form-grid">
+    {{ ui.select('type', 'Approval Type', types, values.type, errors, required=true) }}
+    {{ ui.select('process_id', 'Proses', processes, values.process_id, errors, required=true) }}
+    {{ ui.select('document_version_id', 'Dokumen yang diajukan', versions, values.document_version_id, errors, blank='— Tanpa dokumen —', class='span-2') }}
+    {{ ui.field('revision', 'Revision (jika tanpa dokumen)', values.revision, errors=errors, class='span-2', placeholder='mis. Drawing 2D Rev 01') }}
+    {{ ui.select('approver_type', 'Approver', [('internal', 'Internal'), ('customer', 'Customer')], values.approver_type, errors, required=true) }}
+    {{ ui.field('approver_name', 'Nama approver internal', values.approver_name, errors=errors, help='Wajib untuk approver internal') }}
+    {{ ui.field('comment', 'Catatan', values.comment, 'textarea', errors, class='span-2') }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-ghost" href="{{ url_for('projects.detail', code=p.code, tab='approvals') }}">Batal</a>
+    <button class="btn btn-primary" type="submit">Ajukan</button>
+  </div>
+</form>
+{% endblock %}

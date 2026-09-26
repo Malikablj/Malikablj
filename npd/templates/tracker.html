@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block title %}Process Tracker{% endblock %}
+{% block content %}
+{{ ui.page_head('Process Tracker', 'Project aktif dikelompokkan per current process — lihat di mana project menumpuk.') }}
+
+<form method="get" class="row mb">
+  <div class="segmented" role="group" aria-label="Workflow">
+    <a href="{{ url_with(type='subcont') }}" class="{{ 'active' if ptype == 'subcont' }}">Subcont <span class="subtle">{{ counts.subcont }}</span></a>
+    <a href="{{ url_with(type='new_mold') }}" class="{{ 'active' if ptype == 'new_mold' }}">New Mold <span class="subtle">{{ counts.new_mold }}</span></a>
+  </div>
+  <input type="hidden" name="type" value="{{ ptype }}">
+  <label class="sr-only" for="tq">Cari project</label>
+  <input id="tq" class="input" style="max-width:280px" type="search" name="q" value="{{ q }}" placeholder="Cari project…">
+  <select class="input" style="width:auto" name="hold" aria-label="Project Hold">
+    <option value="1" {{ 'selected' if include_hold }}>Tampilkan project Hold</option>
+    <option value="0" {{ 'selected' if not include_hold }}>Sembunyikan project Hold</option>
+  </select>
+  <button class="btn btn-sm" type="submit">Terapkan</button>
+  <span class="small muted" style="margin-left:auto">{{ total }} project aktif</span>
+</form>
+
+{% if not total %}
+  <div class="card">{{ ui.empty('Tidak ada project aktif', 'Project ' ~ C.PROJECT_TYPES[ptype] ~ ' yang sedang berjalan akan muncul di sini.') }}</div>
+{% else %}
+  <div class="board" role="region" aria-label="Board process tracker" tabindex="0">
+    {% for c in columns %}
+      <section class="board-col {{ 'empty-col' if not c['items'] }}" aria-label="{{ c.name }}">
+        <h2><span>{{ '%02d'|format(loop.index) }} · {{ c.name }}{% if c.loop_only %} <span class="loop-badge">loop</span>{% endif %}</span><span class="subtle">{{ c['items']|length }}</span></h2>
+        {% for v in c['items'] %}{% set p = v.project %}
+          <a class="board-card" href="{{ url_for('projects.detail', code=p.code) }}">
+            <div class="row-between" style="flex-wrap:nowrap"><span class="small subtle num">{{ p.code }}</span>{{ ui.priority_chip(p.priority, small=true) }}</div>
+            <p class="strong" style="margin-top:4px;font-size:14px">{{ p.name }}</p>
+            <p class="small muted">{{ v.customer }}</p>
+            <div class="row" style="margin-top:8px">{{ ui.project_status(v, small=true) }}{% if v.current.loop_count %}<span class="loop-badge">Loop {{ v.current.loop_count }}×</span>{% endif %}</div>
+            <p class="small" style="margin-top:8px">{{ p.next_action }}</p>
+            {{ ui.due_text(p.next_action_due, v.next_action_state) }}
+            <p class="small subtle" style="margin-top:4px">PIC {{ v.current.pic.name if v.current.pic else '—' }}</p>
+          </a>
+        {% endfor %}
+      </section>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}
