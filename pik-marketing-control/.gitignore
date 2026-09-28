@@ -12,7 +12,7 @@ docs/MIGRATION_ISSUES.md
 docs/IMPLEMENTATION_PLAN.md
 
 # Tooling
-node_modules/
+node_modules
 .clasp.json
 .clasprc.json
 .env

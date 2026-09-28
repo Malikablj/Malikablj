@@ -1,0 +1,23 @@
+{
+  "name": "pik-marketing-control",
+  "private": true,
+  "description": "PIK Marketing Control: Google Apps Script + Google Sheets",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "node scripts/typecheck.js",
+    "emulate:init": "node scripts/emulate-initializer.js",
+    "docs:schema": "node scripts/render-schema-doc.js",
+    "profile": "node migration/scripts/profile-workbook.js",
+    "push": "clasp push",
+    "pull": "clasp pull",
+    "open": "clasp open-script"
+  },
+  "devDependencies": {
+    "@google/clasp": "3.4.1",
+    "@types/google-apps-script": "2.0.13",
+    "typescript": "5.9.3"
+  }
+}
