@@ -230,6 +230,25 @@
 .search-bar .input {
   padding-left: 36px;
 }
+/* Searchable select (AsyncSelect): input with clear button and chevron on the right. */
+.combo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.combo .input {
+  flex: 1 1 auto;
+  padding-right: 60px;
+}
+.combo-actions {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
 .filter-bar {
   display: flex;
   gap: var(--space-2);
@@ -280,6 +299,13 @@
   font-size: var(--font-size-sm);
 }
 .card + .card {
+  margin-top: var(--space-5);
+}
+/* Cards placed directly in a grid are aligned by the grid, not stacked. */
+:where(.kpi-grid, .section-grid, .grid-2, .grid-3) > .card + .card {
+  margin-top: 0;
+}
+.card + .section-grid {
   margin-top: var(--space-5);
 }
 
@@ -898,6 +924,7 @@ a.mobile-card:hover {
   background: var(--color-success);
 }
 .dl {
+  margin: 0;
   display: grid;
   grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
   gap: var(--space-2) var(--space-4);

@@ -34,6 +34,8 @@ function formatValue(column, value) {
 }
 
 const isNumeric = (column) => column.type === 'money' || column.type === 'number';
+/** Free-text columns may wrap; everything else stays on one line and the table scrolls sideways. */
+const WRAPPING_COLUMNS = new Set(['description', 'notes', 'lost_reason', 'subject', 'reason']);
 
 function ReportView({ report, params, setParams }) {
   const { user } = useAuth();
@@ -99,6 +101,7 @@ function ReportView({ report, params, setParams }) {
             key: column.key,
             header: column.header,
             align: isNumeric(column) ? 'right' : undefined,
+            className: WRAPPING_COLUMNS.has(column.key) ? '' : 'nowrap',
             render: (row) => formatValue(column, row[column.key]),
           }))}
           mobileCard={(row) => (

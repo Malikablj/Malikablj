@@ -198,9 +198,9 @@ function LeadList({ filters, params, setParams }) {
               ),
           },
           { key: 'estimated_value', header: 'Estimasi', sortKey: 'estimated_value', align: 'right', render: (row) => formatCurrency(row.estimated_value) },
-          { key: 'expected_closing_date', header: 'Closing', sortKey: 'expected_closing_date', render: (row) => formatDate(row.expected_closing_date) },
+          { key: 'expected_closing_date', header: 'Closing', className: 'nowrap', sortKey: 'expected_closing_date', render: (row) => formatDate(row.expected_closing_date) },
           { key: 'owner_name', header: 'PIC' },
-          { key: 'next_follow_up_date', header: 'Follow up', render: (row) => formatDate(row.next_follow_up_date) },
+          { key: 'next_follow_up_date', header: 'Follow up', className: 'nowrap', render: (row) => formatDate(row.next_follow_up_date) },
         ]}
         mobileCard={(row) => (
           <div className="stack-sm">

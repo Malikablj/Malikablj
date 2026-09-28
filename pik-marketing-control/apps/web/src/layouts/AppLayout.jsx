@@ -110,7 +110,8 @@ export function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [tick, setTick] = useState(0);
-  const { data: notifications } = useApi('/notifications', { t: `${location.pathname}#${tick}` });
+  // Re-checked on every navigation and periodically.
+  const { data: notifications } = useApi('/notifications', undefined, { refreshKey: `${location.pathname}#${tick}` });
   const followUpBadge = notifications?.items.filter((item) => item.type.startsWith('FOLLOW_UP')).length ?? 0;
 
   useEffect(() => {
@@ -201,7 +202,7 @@ export function AppLayout() {
               PIK
             </span>
           </Link>
-          <div className="desktop-only grow" style={{ display: 'flex' }}>
+          <div className="desktop-only grow topbar-search">
             <GlobalSearch />
           </div>
           <div className="grow mobile-only" />

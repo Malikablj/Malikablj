@@ -83,9 +83,24 @@ describe('session', () => {
     expect(me.body.data.user).toMatchObject({ id: sales.user.id, role: 'SALES' });
     expect(me.body.meta.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
+    const session = await sales.get('/api/auth/session');
+    expect(session.status).toBe(200);
+    expect(session.body.data.user).toMatchObject({ id: sales.user.id, role: 'SALES' });
+    expect(session.body.data.user).not.toHaveProperty('sessionId');
+
     const logout = await sales.post('/api/auth/logout');
     expect(logout.status).toBe(200);
     expect((await sales.get('/api/auth/me')).status).toBe(401);
+    const ended = await sales.get('/api/auth/session');
+    expect(ended.status).toBe(200);
+    expect(ended.body.data).toEqual({ user: null });
+  });
+
+  it('reports an anonymous session check without an error status', async () => {
+    const res = await request(app).get('/api/auth/session');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ user: null });
+    expect(res.body.meta.timezone).toBe('Asia/Jakarta');
   });
 
   it('rejects requests without a session, with a forged token, or with an expired session', async () => {

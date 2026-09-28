@@ -130,9 +130,9 @@ function ContactsTab({ customer, canWrite }) {
   );
 }
 
-function ActivitiesTab({ customer, canWrite, onChanged }) {
+function ActivitiesTab({ customer, canWrite, onChanged, refreshKey }) {
   const [page, setPage] = useState(1);
-  const { data, meta, error, reload } = useApi('/activities', { customer_id: customer.id, page, page_size: 20 });
+  const { data, meta, error, reload } = useApi('/activities', { customer_id: customer.id, page, page_size: 20 }, { refreshKey });
   const [form, setForm] = useState(null);
   return (
     <Card>
@@ -166,8 +166,8 @@ function ActivitiesTab({ customer, canWrite, onChanged }) {
   );
 }
 
-function LeadsTab({ customer, canWrite, onChanged }) {
-  const { data, error, loading, reload } = useApi('/leads', { customer_id: customer.id, page_size: 100 });
+function LeadsTab({ customer, canWrite, onChanged, refreshKey }) {
+  const { data, error, loading, reload } = useApi('/leads', { customer_id: customer.id, page_size: 100 }, { refreshKey });
   const [creating, setCreating] = useState(false);
   return (
     <Card>
@@ -192,7 +192,7 @@ function LeadsTab({ customer, canWrite, onChanged }) {
           { key: 'name', header: 'Lead' },
           { key: 'status', header: 'Status', render: (row) => <StatusBadge enumDef={LEAD_STATUS} value={row.status} /> },
           { key: 'estimated_value', header: 'Estimasi', align: 'right', render: (row) => formatCurrency(row.estimated_value) },
-          { key: 'expected_closing_date', header: 'Closing', render: (row) => formatDate(row.expected_closing_date) },
+          { key: 'expected_closing_date', header: 'Closing', className: 'nowrap', render: (row) => formatDate(row.expected_closing_date) },
           { key: 'owner_name', header: 'PIC' },
         ]}
         mobileCard={(row) => (
@@ -222,14 +222,18 @@ function LeadsTab({ customer, canWrite, onChanged }) {
   );
 }
 
-function FollowUpsTab({ customer, canWrite, today, onChanged }) {
+function FollowUpsTab({ customer, canWrite, today, onChanged, refreshKey }) {
   const [view, setView] = useState('open');
-  const { data, error, reload } = useApi('/follow-ups', {
-    customer_id: customer.id,
-    state: view === 'open' ? 'OVERDUE,TODAY,UPCOMING' : 'DONE,CANCELLED',
-    sort: view === 'open' ? 'follow_up_date' : '-follow_up_date',
-    page_size: 50,
-  });
+  const { data, error, reload } = useApi(
+    '/follow-ups',
+    {
+      customer_id: customer.id,
+      state: view === 'open' ? 'OVERDUE,TODAY,UPCOMING' : 'DONE,CANCELLED',
+      sort: view === 'open' ? 'follow_up_date' : '-follow_up_date',
+      page_size: 50,
+    },
+    { refreshKey },
+  );
   const [form, setForm] = useState(null);
   const changed = () => {
     reload();
@@ -298,9 +302,21 @@ function PurchaseOrdersTab({ customer, canCreate }) {
         onRetry={reload}
         rowHref={(row) => `/purchase-orders/${row.id}`}
         empty={{ title: 'Belum ada PO' }}
+        mobileCard={(row) => (
+          <div className="stack-sm">
+            <div className="row-between">
+              <span className="cell-title">{row.po_number}</span>
+              <StatusBadge enumDef={PO_STATUS} value={row.status} />
+            </div>
+            <Progress value={row.ordered_quantity - row.outstanding_quantity} total={row.ordered_quantity} />
+            <div className="cell-sub num">
+              {formatDate(row.po_date)} · outstanding {formatNumber(row.outstanding_quantity)}
+            </div>
+          </div>
+        )}
         columns={[
           { key: 'po_number', header: 'No PO' },
-          { key: 'po_date', header: 'Tanggal', render: (row) => formatDate(row.po_date) },
+          { key: 'po_date', header: 'Tanggal', className: 'nowrap', render: (row) => formatDate(row.po_date) },
           { key: 'status', header: 'Status', render: (row) => <StatusBadge enumDef={PO_STATUS} value={row.status} /> },
           {
             key: 'progress',
@@ -328,8 +344,19 @@ function DeliveriesTab({ customer }) {
         error={error}
         onRetry={reload}
         empty={{ title: 'Belum ada pengiriman' }}
+        mobileCard={(row) => (
+          <div className="stack-sm">
+            <div className="row-between">
+              <span className="cell-title">
+                {formatDate(row.delivery_date)} · {formatQuantity(row.quantity, row.unit)}
+              </span>
+              <StatusBadge enumDef={DELIVERY_STATUS} value={row.status} />
+            </div>
+            <div className="cell-sub">{[row.po_number, row.product_name, row.delivery_number].filter(Boolean).join(' · ')}</div>
+          </div>
+        )}
         columns={[
-          { key: 'delivery_date', header: 'Tanggal', render: (row) => formatDate(row.delivery_date) },
+          { key: 'delivery_date', header: 'Tanggal', className: 'nowrap', render: (row) => formatDate(row.delivery_date) },
           { key: 'po_number', header: 'No PO', render: (row) => <Link to={`/purchase-orders/${row.purchase_order_id}`}>{row.po_number}</Link> },
           { key: 'product_name', header: 'Produk' },
           { key: 'quantity', header: 'Qty', align: 'right', render: (row) => formatQuantity(row.quantity, row.unit) },
@@ -354,8 +381,19 @@ function ReturnsTab({ customer }) {
         error={error}
         onRetry={reload}
         empty={{ title: 'Belum ada retur' }}
+        mobileCard={(row) => (
+          <div className="stack-sm">
+            <div className="row-between">
+              <span className="cell-title">
+                {formatDate(row.return_date)} · {formatQuantity(row.quantity, row.unit)}
+              </span>
+              <StatusBadge enumDef={RETURN_STATUS} value={row.status} />
+            </div>
+            <div className="cell-sub">{[row.product_name, row.reason].filter(Boolean).join(' · ')}</div>
+          </div>
+        )}
         columns={[
-          { key: 'return_date', header: 'Tanggal', render: (row) => formatDate(row.return_date) },
+          { key: 'return_date', header: 'Tanggal', className: 'nowrap', render: (row) => formatDate(row.return_date) },
           { key: 'po_number', header: 'No PO', render: (row) => (row.po_number ? <Link to={`/purchase-orders/${row.purchase_order_id}`}>{row.po_number}</Link> : '–') },
           { key: 'product_name', header: 'Produk' },
           { key: 'quantity', header: 'Qty', align: 'right', render: (row) => formatQuantity(row.quantity, row.unit) },
@@ -368,8 +406,8 @@ function ReturnsTab({ customer }) {
   );
 }
 
-function OverviewTab({ customer, today }) {
-  const { data: activities } = useApi('/activities', { customer_id: customer.id, page_size: 5 });
+function OverviewTab({ customer, today, refreshKey }) {
+  const { data: activities } = useApi('/activities', { customer_id: customer.id, page_size: 5 }, { refreshKey });
   const s = customer.summary;
   return (
     <div className="section-grid">
@@ -428,6 +466,8 @@ export function CustomerDetailPage() {
   const tab = searchParams.get('tab') ?? 'overview';
   const { data: customer, error, reload } = useApi(`/customers/${id}`);
   const [modal, setModal] = useState(null); // edit | activity | follow-up
+  // Bumped when the header actions save, so the open tab re-fetches its list.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   if (error && !customer) return <ErrorState error={error} onRetry={reload} />;
   if (!customer) return <LoadingState rows={8} />;
@@ -512,11 +552,13 @@ export function CustomerDetailPage() {
 
       <Tabs label="Bagian customer" tabs={tabs} value={tab} onChange={(next) => setSearchParams(next === 'overview' ? {} : { tab: next }, { replace: true })} />
 
-      {tab === 'overview' && <OverviewTab customer={customer} today={today} />}
+      {tab === 'overview' && <OverviewTab customer={customer} today={today} refreshKey={refreshKey} />}
       {tab === 'contacts' && <ContactsTab customer={customer} canWrite={can(MODULE.CONTACTS, 'write')} />}
-      {tab === 'activities' && <ActivitiesTab customer={customer} canWrite={can(MODULE.ACTIVITIES, 'write')} onChanged={reload} />}
-      {tab === 'leads' && <LeadsTab customer={customer} canWrite={can(MODULE.LEADS, 'write')} onChanged={reload} />}
-      {tab === 'follow-ups' && <FollowUpsTab customer={customer} canWrite={can(MODULE.FOLLOW_UPS, 'write')} today={today} onChanged={reload} />}
+      {tab === 'activities' && <ActivitiesTab customer={customer} canWrite={can(MODULE.ACTIVITIES, 'write')} onChanged={reload} refreshKey={refreshKey} />}
+      {tab === 'leads' && <LeadsTab customer={customer} canWrite={can(MODULE.LEADS, 'write')} onChanged={reload} refreshKey={refreshKey} />}
+      {tab === 'follow-ups' && (
+        <FollowUpsTab customer={customer} canWrite={can(MODULE.FOLLOW_UPS, 'write')} today={today} onChanged={reload} refreshKey={refreshKey} />
+      )}
       {tab === 'purchase-orders' && <PurchaseOrdersTab customer={customer} canCreate={Boolean(access(MODULE.PURCHASE_ORDERS)?.match(/RW|OWN/))} />}
       {tab === 'deliveries' && <DeliveriesTab customer={customer} />}
       {tab === 'returns' && <ReturnsTab customer={customer} />}
@@ -542,6 +584,7 @@ export function CustomerDetailPage() {
             onSaved={() => {
               setModal(null);
               reload();
+              setRefreshKey((value) => value + 1);
               if (tab !== 'activities') setSearchParams({ tab: 'activities' }, { replace: true });
             }}
           />
@@ -556,6 +599,7 @@ export function CustomerDetailPage() {
             onSaved={() => {
               setModal(null);
               reload();
+              setRefreshKey((value) => value + 1);
               if (tab !== 'follow-ups') setSearchParams({ tab: 'follow-ups' }, { replace: true });
             }}
           />

@@ -176,7 +176,7 @@ function DeliveriesCard({ po, canWrite, onAction }) {
         rows={po.deliveries}
         empty={{ icon: Truck, title: 'Belum ada pengiriman' }}
         columns={[
-          { key: 'delivery_date', header: 'Tanggal', render: (row) => formatDate(row.delivery_date) },
+          { key: 'delivery_date', header: 'Tanggal', className: 'nowrap', render: (row) => formatDate(row.delivery_date) },
           { key: 'product_name', header: 'Item', render: (row) => `${row.line_no ? `#${row.line_no} · ` : ''}${row.product_name ?? '–'}` },
           { key: 'quantity', header: 'Qty', align: 'right', render: (row) => formatQuantity(row.quantity, row.unit) },
           { key: 'delivery_number', header: 'Surat jalan' },
@@ -234,8 +234,24 @@ function ReturnsCard({ po, canWrite, onAction }) {
         caption="Retur PO"
         rows={po.returns}
         empty={{ icon: Undo2, title: 'Belum ada retur' }}
+        mobileCard={(row) => (
+          <div className="row-between">
+            <div className="grow">
+              <div className="cell-title">
+                {formatDate(row.return_date)} · {formatQuantity(row.quantity, row.unit)}
+              </div>
+              <div className="cell-sub">{[row.product_name, row.reason].filter(Boolean).join(' · ')}</div>
+            </div>
+            <StatusBadge enumDef={RETURN_STATUS} value={row.status} />
+            {canWrite && (
+              <Button size="sm" variant="ghost" icon onClick={() => onAction({ type: 'return', record: row })} aria-label="Ubah retur">
+                <Pencil size={15} />
+              </Button>
+            )}
+          </div>
+        )}
         columns={[
-          { key: 'return_date', header: 'Tanggal', render: (row) => formatDate(row.return_date) },
+          { key: 'return_date', header: 'Tanggal', className: 'nowrap', render: (row) => formatDate(row.return_date) },
           { key: 'product_name', header: 'Produk' },
           { key: 'quantity', header: 'Qty', align: 'right', render: (row) => formatQuantity(row.quantity, row.unit) },
           { key: 'reason', header: 'Alasan' },

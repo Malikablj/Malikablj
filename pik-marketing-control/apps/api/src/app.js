@@ -43,7 +43,15 @@ export function createApp() {
   // In production the API also serves the built web app (single deployable unit).
   const indexHtml = path.join(config.webDistDir, 'index.html');
   if (fs.existsSync(indexHtml)) {
-    app.use(express.static(config.webDistDir, { index: false, maxAge: '1h' }));
+    app.use(
+      express.static(config.webDistDir, {
+        index: false,
+        // Built assets have content hashes in their names, so they can be cached for good.
+        setHeaders: (res, filePath) => {
+          res.setHeader('Cache-Control', filePath.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache');
+        },
+      }),
+    );
     app.use((req, res, next) => {
       if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
       res.setHeader('Cache-Control', 'no-cache');

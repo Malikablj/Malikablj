@@ -9,7 +9,7 @@ const RECHECK_MS = 15 * 60 * 1000;
 
 /**
  * Holds the signed-in user. The role used for showing/hiding actions comes from the server
- * session (/api/auth/me); the API enforces the same permissions independently.
+ * session (/api/auth/session); the API enforces the same permissions independently.
  */
 export function AuthProvider({ children }) {
   const [state, setState] = useState({ status: 'loading', user: null, meta: null });
@@ -18,8 +18,11 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     const check = () =>
       api
-        .get('/auth/me')
-        .then((response) => !cancelled && setState({ status: 'authenticated', user: response.data.user, meta: response.meta }))
+        .get('/auth/session')
+        .then((response) => {
+          if (cancelled) return;
+          setState(response.data.user ? { status: 'authenticated', user: response.data.user, meta: response.meta } : ANONYMOUS);
+        })
         .catch(() => !cancelled && setState(ANONYMOUS));
     check();
     // Re-check periodically: keeps "today" current and notices expired sessions.

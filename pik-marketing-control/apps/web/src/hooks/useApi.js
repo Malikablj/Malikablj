@@ -8,13 +8,16 @@ import { api, buildQuery } from '../services/api.js';
  * `loading` is derived from whether the latest response belongs to the current request, so no
  * state is set synchronously inside the effect.
  *
+ * Options: `enabled` (false skips the request) and `refreshKey` (any value; changing it
+ * re-fetches, e.g. after a parent component saved something). It is never sent to the server.
+ *
  * @returns {{ data, meta, error, loading, reload, setData }}
  */
-export function useApi(path, params, { enabled = true } = {}) {
+export function useApi(path, params, { enabled = true, refreshKey = '' } = {}) {
   const [version, setVersion] = useState(0);
   const [state, setState] = useState({ requestKey: null, data: undefined, meta: undefined, error: null });
   const query = buildQuery(params);
-  const requestKey = enabled && path ? `${path}${query}#${version}` : null;
+  const requestKey = enabled && path ? `${path}${query}#${version}#${refreshKey}` : null;
 
   useEffect(() => {
     if (!requestKey) return undefined;

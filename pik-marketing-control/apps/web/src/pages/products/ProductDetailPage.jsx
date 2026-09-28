@@ -114,6 +114,17 @@ export function ProductDetailPage() {
               rows={product.open_order_lines}
               rowHref={(row) => `/purchase-orders/${row.purchase_order_id}`}
               empty={{ icon: FileText, title: 'Tidak ada PO berjalan', compact: true }}
+              mobileCard={(row) => (
+                <div className="stack-sm">
+                  <div className="row-between">
+                    <span className="cell-title">{row.po_number}</span>
+                    <strong className="num">sisa {formatNumber(row.outstanding_quantity)}</strong>
+                  </div>
+                  <div className="cell-sub">
+                    {row.customer_name} · target {formatDate(row.expected_delivery_date)}
+                  </div>
+                </div>
+              )}
               columns={[
                 {
                   key: 'po_number',
@@ -126,7 +137,7 @@ export function ProductDetailPage() {
                   ),
                 },
                 { key: 'status', header: 'Status', render: (row) => <StatusBadge enumDef={PO_STATUS} value={row.status} /> },
-                { key: 'expected_delivery_date', header: 'Target', render: (row) => formatDate(row.expected_delivery_date) },
+                { key: 'expected_delivery_date', header: 'Target', className: 'nowrap', render: (row) => formatDate(row.expected_delivery_date) },
                 { key: 'order_quantity', header: 'Order', align: 'right', render: (row) => formatQuantity(row.order_quantity, row.unit) },
                 { key: 'outstanding_quantity', header: 'Sisa', align: 'right', render: (row) => <strong>{formatNumber(row.outstanding_quantity)}</strong> },
               ]}

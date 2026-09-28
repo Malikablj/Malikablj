@@ -67,7 +67,7 @@ export function AsyncSelect({
 
   return (
     <div className="popover-anchor" ref={containerRef}>
-      <div className="search-bar">
+      <div className="combo">
         <input
           id={id}
           className="input"
@@ -87,16 +87,15 @@ export function AsyncSelect({
           onKeyDown={onKeyDown}
           disabled={disabled}
           autoComplete="off"
-          style={{ paddingRight: 56 }}
           {...ariaProps}
         />
-        <div style={{ position: 'absolute', right: 6, display: 'flex', gap: 2 }}>
+        <div className="combo-actions">
           {value && !disabled && (
             <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => choose(null)} aria-label="Kosongkan pilihan">
               <X size={14} />
             </button>
           )}
-          <ChevronDown size={16} className="muted" style={{ alignSelf: 'center', marginRight: 4 }} aria-hidden="true" />
+          <ChevronDown size={16} className="muted" aria-hidden="true" />
         </div>
       </div>
       {open && (

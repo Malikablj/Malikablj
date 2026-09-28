@@ -23,6 +23,16 @@ export async function logout(req, res) {
   sendOk(res, null);
 }
 
+/** Session check for the web app: always 200, with the user or null (no 401 noise on the login page). */
+export async function session(req, res) {
+  if (!req.user) {
+    sendOk(res, { user: null }, sessionMeta());
+    return;
+  }
+  const { sessionId, ...user } = req.user;
+  sendOk(res, { user }, sessionMeta());
+}
+
 export async function me(req, res) {
   const { sessionId, ...user } = req.user;
   sendOk(res, { user }, sessionMeta());

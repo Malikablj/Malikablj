@@ -66,7 +66,7 @@ export function InboundMaklonPage() {
             text: filtered ? 'Ubah atau hapus filter.' : undefined,
           }}
           columns={[
-            { key: 'inbound_date', header: 'Tanggal', sortKey: 'inbound_date', render: (row) => formatDate(row.inbound_date) },
+            { key: 'inbound_date', header: 'Tanggal', className: 'nowrap', sortKey: 'inbound_date', render: (row) => formatDate(row.inbound_date) },
             {
               key: 'customer_name',
               header: 'Customer',

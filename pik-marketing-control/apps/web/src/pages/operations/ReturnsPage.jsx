@@ -69,7 +69,7 @@ export function ReturnsPage() {
             text: filtered ? 'Ubah atau hapus filter.' : undefined,
           }}
           columns={[
-            { key: 'return_date', header: 'Tanggal', sortKey: 'return_date', render: (row) => formatDate(row.return_date) },
+            { key: 'return_date', header: 'Tanggal', className: 'nowrap', sortKey: 'return_date', render: (row) => formatDate(row.return_date) },
             {
               key: 'customer_name',
               header: 'Customer',

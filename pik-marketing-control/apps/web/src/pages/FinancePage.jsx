@@ -93,9 +93,10 @@ function InvoicesTab({ result, params, setParams, canWrite, onEdit }) {
                 </>
               ),
             },
-            { key: 'invoice_date', header: 'Tanggal', sortKey: 'invoice_date', render: (row) => formatDate(row.invoice_date) },
+            { key: 'invoice_date', header: 'Tanggal', className: 'nowrap', sortKey: 'invoice_date', render: (row) => formatDate(row.invoice_date) },
             {
               key: 'due_date',
+              className: 'nowrap',
               header: 'Jatuh tempo',
               sortKey: 'due_date',
               render: (row) => <span className={row.is_overdue ? 'text-danger' : ''}>{formatDate(row.due_date)}</span>,
@@ -156,6 +157,24 @@ function PoFinancialsTab({ result, params, setParams, canWrite, onEdit }) {
           error={error}
           onRetry={reload}
           empty={{ icon: Wallet, title: 'Belum ada ringkasan keuangan PO' }}
+          mobileCard={(row) => (
+            <div className="stack-sm">
+              <div className="row-between">
+                <Link to={`/purchase-orders/${row.purchase_order_id}`} className="cell-title">
+                  {row.po_number}
+                </Link>
+                <strong className="num">{formatCurrency(row.total_amount)}</strong>
+              </div>
+              <div className="cell-sub">
+                {row.customer_name} · sisa {formatCurrency(row.outstanding_amount)}
+              </div>
+              {canWrite && (
+                <Button size="sm" onClick={() => onEdit({ type: 'financial', record: row })}>
+                  <Pencil size={14} aria-hidden="true" /> Ubah
+                </Button>
+              )}
+            </div>
+          )}
           columns={[
             {
               key: 'po_number',

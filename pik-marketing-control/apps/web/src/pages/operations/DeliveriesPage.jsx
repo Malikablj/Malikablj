@@ -72,6 +72,7 @@ export function DeliveriesPage() {
           columns={[
             {
               key: 'delivery_date',
+              className: 'nowrap',
               header: 'Tanggal',
               sortKey: 'delivery_date',
               render: (row) => <span className={isLate(row) ? 'text-danger' : ''}>{formatDate(row.delivery_date)}</span>,

@@ -89,9 +89,10 @@ export function PurchaseOrdersPage() {
                 </>
               ),
             },
-            { key: 'po_date', header: 'Tgl PO', sortKey: 'po_date', render: (row) => formatDate(row.po_date) },
+            { key: 'po_date', header: 'Tgl PO', className: 'nowrap', sortKey: 'po_date', render: (row) => formatDate(row.po_date) },
             {
               key: 'expected_delivery_date',
+              className: 'nowrap',
               header: 'Target kirim',
               sortKey: 'expected_delivery_date',
               render: (row) => (

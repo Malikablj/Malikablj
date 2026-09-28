@@ -134,6 +134,9 @@
 .topbar .mobile-only {
   display: none;
 }
+.topbar-search {
+  display: flex;
+}
 
 .content {
   width: 100%;

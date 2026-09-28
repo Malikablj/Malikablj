@@ -8,5 +8,6 @@ export const authRouter = Router();
 
 authRouter.post('/login', validateBody(loginSchema), authController.login);
 authRouter.post('/logout', authController.logout);
+authRouter.get('/session', authController.session);
 authRouter.get('/me', requireAuth, authController.me);
 authRouter.post('/change-password', requireAuth, validateBody(changePasswordSchema), authController.changePassword);

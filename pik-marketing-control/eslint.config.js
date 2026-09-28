@@ -33,4 +33,9 @@ export default [
     files: ['apps/web/src/**/*.jsx'],
     ...reactRefresh.configs.vite,
   },
+  {
+    // Playwright specs run in Node but pass callbacks to page.evaluate(), which run in the browser.
+    files: ['tests/e2e/**/*.js'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
 ];

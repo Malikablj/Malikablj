@@ -80,7 +80,7 @@ export function StockPage() {
     { key: 'stock_type', header: 'Tipe', sortKey: 'stock_type', render: (row) => <StatusBadge enumDef={STOCK_TYPE} value={row.stock_type} /> },
     { key: 'quantity', header: 'Qty', sortKey: 'quantity', align: 'right', render: (row) => formatQuantity(row.quantity, row.unit) },
     { key: 'warehouse', header: 'Gudang', sortKey: 'warehouse' },
-    { key: 'stock_date', header: view === 'history' ? 'Tanggal hitung' : 'Per tanggal', sortKey: 'stock_date', render: (row) => formatDate(row.stock_date) },
+    { key: 'stock_date', header: view === 'history' ? 'Tanggal hitung' : 'Per tanggal', className: 'nowrap', sortKey: 'stock_date', render: (row) => formatDate(row.stock_date) },
     ...(view === 'history'
       ? [
           { key: 'updated_by_name', header: 'Dicatat oleh', render: (row) => row.updated_by_name ?? (row.source_sheet ? 'Migrasi' : '–') },
