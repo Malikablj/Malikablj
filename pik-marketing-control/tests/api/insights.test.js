@@ -108,7 +108,21 @@ describe('reports', () => {
     expect(res.body.data).toHaveLength(1);
     expect(res.body.meta).toMatchObject({ total: 2, report: 'leads', title: 'Laporan Lead' });
     expect(res.body.meta.totals).toMatchObject({ count: 2, total_value: 6000, won_value: 5000, won: 1 });
-    expect(res.body.meta.columns[0]).toEqual({ key: 'name', header: 'Lead', type: null });
+    expect(res.body.meta.columns[0]).toEqual({ key: 'name', header: 'Lead', type: null, labels: null });
+    const columns = Object.fromEntries(res.body.meta.columns.map((column) => [column.key, column]));
+    expect(columns.status.labels).toMatchObject({ WON: 'Won', LOST: 'Lost' });
+    expect(columns.estimated_value.type).toBe('money');
+    expect(res.body.meta.total_columns.map((column) => column.key)).toEqual(['count', 'total_value', 'won', 'won_value', 'lost']);
+  });
+
+  it('lists the reports a role may open with their filters', async () => {
+    const res = await as.viewer.get('/api/reports');
+    expect(res.status).toBe(200);
+    const byType = Object.fromEntries(res.body.data.map((report) => [report.type, report]));
+    expect(Object.keys(byType)).toEqual(['customers', 'leads', 'activities', 'follow-ups', 'purchase-orders', 'deliveries', 'stock']);
+    expect(byType.deliveries.filters).toMatchObject({ date: 'Tanggal kirim', customer: true, owner: true });
+    expect(byType.stock.filters).toMatchObject({ date: null, customer: false, owner: false });
+    expect(byType['follow-ups'].filters.status.options.map((option) => option.value)).toContain('OVERDUE');
   });
 
   it('applies date ranges in the business timezone', async () => {

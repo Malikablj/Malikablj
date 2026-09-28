@@ -142,6 +142,10 @@ export async function listCurrentStock(filters) {
 /** All snapshots (history), newest first. */
 export async function listStockHistory(filters) {
   const w = conditions();
+  if (filters.q) {
+    const p = w.param(likePattern(filters.q));
+    w.add(`(p.name ILIKE ${p} OR p.product_code ILIKE ${p} OR s.item_name ILIKE ${p} OR s.warehouse ILIKE ${p})`);
+  }
   if (filters.product_id) w.add(`s.product_id = ${w.param(filters.product_id)}`);
   if (filters.stock_type?.length) w.add(`s.stock_type = ANY(${w.param(filters.stock_type)})`);
   if (filters.warehouse) w.add(`s.warehouse = ${w.param(filters.warehouse)}`);

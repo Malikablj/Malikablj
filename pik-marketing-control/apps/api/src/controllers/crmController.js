@@ -48,7 +48,8 @@ export const followUps = {
     sendOk(res, rows, meta);
   },
   async summary(req, res) {
-    const ownerId = req.query.owner === 'me' ? req.user.id : undefined;
+    const { owner, owner_user_id: ownerUserId } = req.validatedQuery;
+    const ownerId = owner === 'me' ? req.user.id : ownerUserId;
     sendOk(res, await followUpService.summary(ownerId));
   },
   async get(req, res) {

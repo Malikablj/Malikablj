@@ -10,6 +10,7 @@ dashboardRouter.get('/summary', requirePermission(MODULE.DASHBOARD, 'read'), ins
 
 // Each report additionally checks read access to its own module (e.g. deliveries).
 export const reportsRouter = Router();
+reportsRouter.get('/', requirePermission(MODULE.REPORTS, 'read'), insightController.reportCatalog);
 reportsRouter.get('/:type', requirePermission(MODULE.REPORTS, 'read'), validateQuery(reportQuery), insightController.report);
 
 export const searchRouter = Router();

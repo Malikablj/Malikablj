@@ -5,6 +5,7 @@
   "description": "Contracts shared by the API and the web app: enums, permission matrix, workflow rules and validation schemas",
   "type": "module",
   "main": "src/index.js",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.js"
   },

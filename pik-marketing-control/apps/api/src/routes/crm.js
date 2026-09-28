@@ -14,7 +14,7 @@ import { Router } from 'express';
 import { activities, followUps, leads } from '../controllers/crmController.js';
 import { requirePermission } from '../middleware/auth.js';
 import { validateBody, validateIdParams, validateQuery } from '../middleware/validate.js';
-import { activityListQuery, followUpListQuery, leadListQuery } from '../validators/crmQueries.js';
+import { activityListQuery, followUpListQuery, followUpSummaryQuery, leadListQuery } from '../validators/crmQueries.js';
 
 const id = validateIdParams('id');
 
@@ -45,7 +45,7 @@ export const followUpsRouter = Router();
   const read = requirePermission(MODULE.FOLLOW_UPS, 'read');
   const write = requirePermission(MODULE.FOLLOW_UPS, 'write');
   followUpsRouter.get('/', read, validateQuery(followUpListQuery), followUps.list);
-  followUpsRouter.get('/summary', read, followUps.summary);
+  followUpsRouter.get('/summary', read, validateQuery(followUpSummaryQuery), followUps.summary);
   followUpsRouter.get('/:id', read, id, followUps.get);
   followUpsRouter.post('/', write, validateBody(followUpCreateSchema), followUps.create);
   followUpsRouter.put('/:id', write, id, validateBody(followUpUpdateSchema), followUps.update);

@@ -8,6 +8,10 @@ export async function dashboard(req, res) {
   sendOk(res, await dashboardService.summary(req.user, req.query.scope === 'me' ? 'me' : 'all'));
 }
 
+export async function reportCatalog(req, res) {
+  sendOk(res, reportService.catalog(req.user));
+}
+
 export async function report(req, res) {
   const { format, ...filters } = req.validatedQuery;
   if (format === 'csv') {

@@ -281,6 +281,11 @@ describe('follow-ups', () => {
 
     const summary = await as.sales.get('/api/follow-ups/summary?owner=me');
     expect(summary.body.data).toMatchObject({ today: 1, overdue: 1, upcoming: 1, upcoming_7_days: 1 });
+    const forUser = await as.viewer.get(`/api/follow-ups/summary?owner_user_id=${as.sales.user.id}`);
+    expect(forUser.body.data).toMatchObject({ today: 1, overdue: 1, upcoming: 1 });
+    const otherUser = await as.viewer.get(`/api/follow-ups/summary?owner_user_id=${as.marketing.user.id}`);
+    expect(otherUser.body.data).toMatchObject({ today: 0, overdue: 0, upcoming: 0 });
+    expect((await as.viewer.get('/api/follow-ups/summary?owner_user_id=bukan-id')).status).toBe(400);
   });
 
   it('completes a follow-up with an outcome and refuses to complete it twice', async () => {

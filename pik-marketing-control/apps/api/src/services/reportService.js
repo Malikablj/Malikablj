@@ -15,25 +15,43 @@ function reportFor(type, user) {
 }
 
 function assertStatuses(report, filters) {
-  const invalid = (filters.status ?? []).filter((status) => !report.statuses.includes(status));
+  const invalid = (filters.status ?? []).filter((status) => !report.statusEnum.values.includes(status));
   if (invalid.length) throw validationError(`Filter status tidak valid: ${invalid.join(', ')}.`);
 }
 
 const context = () => ({ today: businessToday(), timeZone: config.appTimezone });
 
+const describeColumn = ({ key, header, type, labels }) => ({ key, header, type: type ?? null, labels: labels ?? null });
+
+/** What a report shows and which filters it accepts, so the UI can render any report generically. */
+function describe(type, report) {
+  return {
+    type,
+    title: report.title,
+    filters: {
+      date: report.dateColumn?.label ?? null,
+      customer: Boolean(report.customerColumn),
+      owner: Boolean(report.ownerColumn),
+      status: { label: report.statusLabel, options: report.statusEnum.options },
+    },
+    columns: report.columns.map(describeColumn),
+    total_columns: report.totalColumns.map(describeColumn),
+  };
+}
+
+/** Reports the user may open (each report also requires read access to its own module). */
+export function catalog(user) {
+  return Object.entries(reportRepository.REPORTS)
+    .filter(([, report]) => canRead(user.role, report.module))
+    .map(([type, report]) => describe(type, report));
+}
+
 export async function run(type, filters, user) {
   const report = reportFor(type, user);
   assertStatuses(report, filters);
   const result = await reportRepository.page(report, filters, context());
-  return {
-    rows: result.rows,
-    meta: {
-      ...result.meta,
-      report: type,
-      title: report.title,
-      columns: report.columns.map(({ key, header, type: columnType }) => ({ key, header, type: columnType ?? null })),
-    },
-  };
+  const { columns, total_columns: totalColumns, title } = describe(type, report);
+  return { rows: result.rows, meta: { ...result.meta, report: type, title, columns, total_columns: totalColumns } };
 }
 
 const timestampFormat = new Intl.DateTimeFormat('sv-SE', {
@@ -56,7 +74,8 @@ export async function exportCsv(type, filters, user) {
       const value = row[column.key];
       if (value === null || value === undefined) return null;
       if (column.type === 'timestamp') return timestampFormat.format(value);
-      return column.format ? column.format(value) : value;
+      if (column.type === 'time') return String(value).slice(0, 5);
+      return column.labels ? (column.labels[value] ?? value) : value;
     },
   }));
   return {

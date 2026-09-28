@@ -66,6 +66,9 @@ describe('products', () => {
     ]);
     const history = await as.viewer.get(`/api/stock/history?product_id=${bottle.id}`);
     expect(history.body.data).toHaveLength(3);
+    expect(history.body.data[0].stock_date).toBe(today); // newest first
+    const searched = await as.viewer.get('/api/stock/history?q=BTL-100&stock_type=FG');
+    expect(searched.body.data.map((s) => s.quantity)).toEqual([4200, 5000]);
     const overview = await as.viewer.get('/api/stock/overview');
     expect(overview.body.data.totals).toEqual(expect.arrayContaining([expect.objectContaining({ stock_type: 'FG', unit: 'pcs', quantity: 4200 })]));
 

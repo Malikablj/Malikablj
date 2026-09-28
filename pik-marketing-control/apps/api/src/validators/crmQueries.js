@@ -1,6 +1,7 @@
 /** Query-string schemas for CRM list endpoints. */
 import { ACTIVITY_TYPE, CUSTOMER_STATUS, FOLLOW_UP_STATE, LEAD_STATUS, PRIORITY } from '@pik/shared';
-import { listQuery, queryBoolean, queryDate, queryEnumList, queryId, queryText } from './common.js';
+import { z } from 'zod';
+import { listQuery, queryBoolean, queryDate, queryEnum, queryEnumList, queryId, queryText } from './common.js';
 
 export const customerListQuery = listQuery({
   status: queryEnumList(CUSTOMER_STATUS.values),
@@ -36,4 +37,10 @@ export const followUpListQuery = listQuery({
   owner_user_id: queryId(),
   from: queryDate(),
   to: queryDate(),
+});
+
+/** Follow-up counts: everyone, the signed-in user (owner=me) or one user (owner_user_id). */
+export const followUpSummaryQuery = z.object({
+  owner: queryEnum(['me']),
+  owner_user_id: queryId(),
 });
