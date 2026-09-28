@@ -1,5 +1,7 @@
 /**
  * Script lock for every write. Re-entrant within one execution: nested calls reuse the lock that is already held.
+ * Taking the lock drops the per-execution table cache, so every check made inside a locked section (status, quantity
+ * left, last Admin, ...) reads the sheets as they are now, including writes other users made before the lock was free.
  */
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30000;
@@ -21,6 +23,7 @@ function withScriptLock_(callback, timeoutMs) {
   }
   LOCK_DEPTH_ = 1;
   try {
+    resetDbCache_();
     return callback();
   } finally {
     LOCK_DEPTH_ = 0;

@@ -189,14 +189,16 @@ test('verifyDatabase publik mencatat ringkasan ke Logger', () => {
   assert.ok(env.logs.some((line) => line.startsWith('verifyDatabase: {"ok":true')));
 });
 
-test('respons web: health, dashboard belum tersedia, error internal disamarkan', () => {
+test('respons web: health, aksi API tidak dikenal/kosong, error internal disamarkan', () => {
   const { context } = load();
   const health = context.getAppHealth();
   assert.equal(health.success, true);
   assert.equal(health.data.schemaVersion, context.getSchema_().version);
-  const dashboard = context.getDashboardSummary();
-  assert.equal(dashboard.success, false);
-  assert.equal(dashboard.error.code, 'NOT_IMPLEMENTED');
+  const unknown = context.api('tidak.ada', {});
+  assert.equal(unknown.success, false);
+  assert.equal(unknown.error.code, 'NOT_FOUND');
+  assert.equal(context.api('', {}).error.code, 'VALIDATION_ERROR');
+  assert.equal(context.api('session.get', [1, 2]).error.code, 'VALIDATION_ERROR', 'payload array ditolak');
   const internal = context.errorResponse_(new TypeError('x is undefined'));
   assert.equal(internal.error.code, 'INTERNAL_ERROR');
   assert.ok(!internal.error.message.includes('undefined'), 'detail teknis tidak bocor');

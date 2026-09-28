@@ -344,6 +344,49 @@ function withRecordIndex_(error, index) {
 }
 
 /**
+ * Prepares and validates an insert batch against the current table (under the caller's lock). Throws the validation
+ * error when any record is invalid; returns { table, state, records, now } otherwise. Nothing is written.
+ */
+function prepareInsertBatch_(tableName, inputs, ctx) {
+  const table = getTableDef_(tableName);
+  assertTableWritable_(table, ctx, 'insert');
+  const list = Array.isArray(inputs) ? inputs : [inputs];
+  if (list.length > MAX_WRITE_BATCH) {
+    throw appError_(ERROR_CODE.VALIDATION, 'Maksimal ' + MAX_WRITE_BATCH + ' record per penyimpanan.');
+  }
+  const state = loadTable_(tableName);
+  const now = ctx.now || nowIso_();
+  const usedIds = new Set(Object.keys(state.byId).concat(state.duplicateIds));
+  const errors = [];
+  const records = list.map(function (input, index) {
+    const prepared = prepareInsertRecord_(table, input, ctx, usedIds, now, state.timeZone);
+    prepared.errors.forEach(function (error) { errors.push(withRecordIndex_(error, index)); });
+    return prepared.record;
+  });
+  if (errors.length === 0) {
+    const env = createValidationEnv_('insert', ctx, null);
+    records.forEach(function (record, index) {
+      validateRecord_(table, record, env).forEach(function (error) { errors.push(withRecordIndex_(error, index)); });
+    });
+    validateUniqueness_(table, records, state.records, null).forEach(function (error) { errors.push(error); });
+  }
+  if (errors.length > 0) throw validationError_(table, errors);
+  return { table: table, state: state, records: records, now: now };
+}
+
+/**
+ * Validates an insert without writing it (same checks as dbInsert_). Services call it before a multi-step change so a
+ * record that would be rejected stops the whole change before its first write.
+ */
+function dbValidateInsert_(tableName, inputs, context) {
+  const ctx = normalizeWriteContext_(context);
+  return withScriptLock_(function () {
+    prepareInsertBatch_(tableName, inputs, ctx);
+    return true;
+  });
+}
+
+/**
  * Inserts one record or a batch (all-or-nothing). Returns the stored records (with generated ids and timestamps).
  */
 function dbInsert_(tableName, inputs, context) {
@@ -352,28 +395,12 @@ function dbInsert_(tableName, inputs, context) {
   assertTableWritable_(table, ctx, 'insert');
   const list = Array.isArray(inputs) ? inputs : [inputs];
   if (list.length === 0) return [];
-  if (list.length > MAX_WRITE_BATCH) {
-    throw appError_(ERROR_CODE.VALIDATION, 'Maksimal ' + MAX_WRITE_BATCH + ' record per penyimpanan.');
-  }
   return withScriptLock_(function () {
     resetDbCache_();
-    const state = loadTable_(tableName);
-    const now = ctx.now || nowIso_();
-    const usedIds = new Set(Object.keys(state.byId).concat(state.duplicateIds));
-    const errors = [];
-    const records = list.map(function (input, index) {
-      const prepared = prepareInsertRecord_(table, input, ctx, usedIds, now, state.timeZone);
-      prepared.errors.forEach(function (error) { errors.push(withRecordIndex_(error, index)); });
-      return prepared.record;
-    });
-    if (errors.length === 0) {
-      const env = createValidationEnv_('insert', ctx, null);
-      records.forEach(function (record, index) {
-        validateRecord_(table, record, env).forEach(function (error) { errors.push(withRecordIndex_(error, index)); });
-      });
-      validateUniqueness_(table, records, state.records, null).forEach(function (error) { errors.push(error); });
-    }
-    if (errors.length > 0) throw validationError_(table, errors);
+    const batch = prepareInsertBatch_(tableName, list, ctx);
+    const state = batch.state;
+    const records = batch.records;
+    const now = batch.now;
 
     appendRowsToSheet_(state.sheet, table, records.map(function (record) { return recordToRow_(table, record); }));
     if (ctx.audit === 'summary') {

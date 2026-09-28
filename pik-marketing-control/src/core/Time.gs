@@ -54,3 +54,14 @@ function isValidIsoDateTime_(value) {
 function isValidTimeOfDay_(value) {
   return typeof value === 'string' && TIME_OF_DAY_PATTERN.test(value);
 }
+
+/**
+ * Calendar date ('yyyy-MM-dd') of a stored value in the application time zone: dates as they are, ISO timestamps
+ * (stored in UTC) converted, so a date filter on created_at/activity_at matches the day the user saw. Null when empty.
+ */
+function localDateOf_(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const text = String(value);
+  if (!isValidIsoDateTime_(text)) return text.slice(0, 10);
+  return Utilities.formatDate(new Date(text), getAppTimeZone_(), 'yyyy-MM-dd');
+}
