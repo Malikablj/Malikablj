@@ -10,6 +10,8 @@ docs/DATA_PROFILE.md
 docs/MIGRATION_MAPPING.md
 docs/MIGRATION_ISSUES.md
 docs/IMPLEMENTATION_PLAN.md
+# Laporan migrasi Phase 03 (angka, ID, dan nomor dokumen dari data bisnis).
+docs/MIGRATION_REPORT.md
 
 # Tooling
 node_modules

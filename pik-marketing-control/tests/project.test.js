@@ -11,7 +11,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
 
-const { SRC_DIR, listGasFiles, loadGasProject } = require('./helpers/load-gas');
+const { SRC_DIR, listGasFiles, loadGasProject } = require('../tools/gas-emulator/load-gas');
 
 const files = listGasFiles();
 const sources = files.map((file) => ({ file: path.relative(SRC_DIR, file), code: fs.readFileSync(file, 'utf8') }));

@@ -12,6 +12,9 @@
  *   internal           true for trusted server services: may write 'internal' columns (e.g. last_login_at)
  *   expectedUpdatedAt  optimistic concurrency for updates: rejected with CONFLICT when the row changed meanwhile
  *   requestId          correlation id stored in AUDIT_LOG (default: new UUID)
+ *   audit              'record' (default: one AUDIT_LOG entry per record) or 'summary' (one MIGRATION_RUN entry per
+ *                      insert batch listing the ids; migration context only)
+ *   auditNote          note stored with the audit entries
  */
 
 const MAX_WRITE_BATCH = 2000;
@@ -30,7 +33,9 @@ function normalizeWriteContext_(context) {
     internal: ctx.internal === true || ctx.migration === true,
     expectedUpdatedAt: ctx.expectedUpdatedAt || null,
     requestId: ctx.requestId || Utilities.getUuid(),
-    now: ctx.now || null
+    now: ctx.now || null,
+    audit: ctx.migration === true && ctx.audit === 'summary' ? 'summary' : 'record',
+    auditNote: ctx.auditNote || null
   };
 }
 
@@ -222,7 +227,7 @@ function canWriteColumn_(column, ctx, operation) {
     case WRITABLE.MIGRATION:
       return ctx.migration;
     case WRITABLE.ARCHIVE:
-      return operation === 'insert' && ctx.migration;
+      return ctx.migration; // users archive/restore through dbArchive_/dbRestore_; the migration copies the source value
     case WRITABLE.AUTO:
       return column.name === 'id' && operation === 'insert' && ctx.migration;
     default:
@@ -258,6 +263,7 @@ function normalizeInputValue_(column, value, timeZone) {
   if (typeof value !== 'string') return value;
   const text = value.trim();
   if (text === '') return null;
+  if (column.preserveWhitespace) return value;
   switch (column.type) {
     case 'integer':
     case 'quantity':
@@ -370,9 +376,16 @@ function dbInsert_(tableName, inputs, context) {
     if (errors.length > 0) throw validationError_(table, errors);
 
     appendRowsToSheet_(state.sheet, table, records.map(function (record) { return recordToRow_(table, record); }));
-    writeAuditEntries_(records.map(function (record) {
-      return { action: 'CREATE', entityType: table.name, entityId: record.id, changes: compactRecord_(record) };
-    }), ctx, now);
+    if (ctx.audit === 'summary') {
+      writeAuditEntries_([{
+        action: 'MIGRATION_RUN', entityType: table.name, entityId: null, note: ctx.auditNote,
+        changes: { operation: 'insert', count: records.length, ids: records.map(function (record) { return record.id; }) }
+      }], ctx, now);
+    } else {
+      writeAuditEntries_(records.map(function (record) {
+        return { action: 'CREATE', entityType: table.name, entityId: record.id, changes: compactRecord_(record), note: ctx.auditNote };
+      }), ctx, now);
+    }
     resetDbCache_();
     return records.map(copyRecord_);
   });
@@ -398,23 +411,9 @@ function dbUpdate_(tableName, id, patch, context) {
       throw appError_(ERROR_CODE.CONFLICT, 'Data ' + table.label + ' telah diubah pengguna lain. Muat ulang lalu coba lagi.',
         { id: id, updatedAt: current.updated_at });
     }
-    const errors = [];
-    const next = Object.assign({}, current);
-    Object.keys(patch).forEach(function (field) {
-      const column = table.columnByName[field];
-      if (!column) {
-        errors.push({ field: field, code: 'UNKNOWN_FIELD', message: 'Kolom "' + field + '" tidak dikenal pada ' + table.label + '.' });
-        return;
-      }
-      if (patch[field] === undefined) return;
-      if (!canWriteColumn_(column, ctx, 'update')) {
-        errors.push(writeAccessError_(column, 'update'));
-        return;
-      }
-      next[field] = normalizeInputValue_(column, patch[field], state.timeZone);
-    });
-    if (errors.length > 0) throw validationError_(table, errors);
-    applyDerivedColumns_(table, next);
+    const patched = applyPatch_(table, current, patch, ctx, state.timeZone);
+    if (patched.errors.length > 0) throw validationError_(table, patched.errors);
+    const next = patched.record;
     const changes = diffRecords_(table, current, next);
     if (Object.keys(changes).length === 0) return copyRecord_(current);
 
@@ -428,10 +427,104 @@ function dbUpdate_(tableName, id, patch, context) {
     if (validationErrors.length > 0) throw validationError_(table, validationErrors);
 
     writeRecordRow_(state, state.rowNumbers[index], next);
-    writeAuditEntries_([{ action: 'UPDATE', entityType: table.name, entityId: id, changes: changes }], ctx, now);
+    writeAuditEntries_([{ action: 'UPDATE', entityType: table.name, entityId: id, changes: changes, note: ctx.auditNote }], ctx, now);
     resetDbCache_();
     return copyRecord_(next);
   });
+}
+
+/**
+ * Updates several records of one table in a single batch (all-or-nothing): updates = [{ id, patch }]. One read of the
+ * table, validation of every record before anything is written, rows written in contiguous blocks and one AUDIT_LOG
+ * entry per changed record. Patches that change nothing write nothing. Returns the stored records in input order.
+ */
+function dbUpdateMany_(tableName, updates, context) {
+  const ctx = normalizeWriteContext_(context);
+  const table = getTableDef_(tableName);
+  assertTableWritable_(table, ctx, 'update');
+  if (!Array.isArray(updates)) throw appError_(ERROR_CODE.VALIDATION, 'Data perubahan ' + table.label + ' tidak valid.');
+  if (updates.length === 0) return [];
+  if (updates.length > MAX_WRITE_BATCH) {
+    throw appError_(ERROR_CODE.VALIDATION, 'Maksimal ' + MAX_WRITE_BATCH + ' record per penyimpanan.');
+  }
+  return withScriptLock_(function () {
+    resetDbCache_();
+    const state = loadTable_(tableName);
+    const now = ctx.now || nowIso_();
+    const indexById = {};
+    state.records.forEach(function (record, index) {
+      if (typeof record.id === 'string' && indexById[record.id] === undefined) indexById[record.id] = index;
+    });
+    const errors = [];
+    const results = [];
+    const changed = [];
+    const inBatch = {};
+    updates.forEach(function (update, position) {
+      if (!update || typeof update !== 'object' || !update.patch || typeof update.patch !== 'object' || Array.isArray(update.patch)) {
+        errors.push({ index: position, field: null, code: 'TYPE', message: 'Data perubahan ' + table.label + ' tidak valid.' });
+        return;
+      }
+      const index = indexById[update.id];
+      if (index === undefined) throw appError_(ERROR_CODE.NOT_FOUND, table.label + ' ' + update.id + ' tidak ditemukan.', { index: position });
+      if (inBatch[update.id]) {
+        errors.push({ index: position, field: 'id', code: 'UNIQUE', message: 'ID ' + update.id + ' muncul lebih dari sekali dalam satu penyimpanan.' });
+        return;
+      }
+      inBatch[update.id] = true;
+      const current = state.records[index];
+      const patched = applyPatch_(table, current, update.patch, ctx, state.timeZone);
+      patched.errors.forEach(function (error) { errors.push(withRecordIndex_(error, position)); });
+      if (patched.errors.length > 0) return;
+      const next = patched.record;
+      const changes = diffRecords_(table, current, next);
+      if (Object.keys(changes).length === 0) {
+        results[position] = copyRecord_(current);
+        return;
+      }
+      if (table.hasAudit) {
+        next.updated_at = now;
+        next.updated_by = ctx.actor;
+      }
+      validateRecord_(table, next, createValidationEnv_('update', ctx, current)).forEach(function (error) {
+        errors.push(withRecordIndex_(error, position));
+      });
+      changed.push({ position: position, rowNumber: state.rowNumbers[index], current: current, record: next, changes: changes });
+      results[position] = next;
+    });
+    const candidates = changed.map(function (item) { return item.record; });
+    validateUniqueness_(table, candidates, state.records, idSet_(candidates.map(function (record) { return record.id; })))
+      .forEach(function (error) { errors.push(Object.assign({}, error, { index: changed[error.index].position })); });
+    if (errors.length > 0) throw validationError_(table, errors);
+    if (changed.length === 0) return results;
+
+    writeRecordRows_(state, changed);
+    writeAuditEntries_(changed.map(function (item) {
+      return { action: 'UPDATE', entityType: table.name, entityId: item.record.id, changes: item.changes, note: ctx.auditNote };
+    }), ctx, now);
+    resetDbCache_();
+    return results.map(copyRecord_);
+  });
+}
+
+/** The record after applying `patch`: write access checked, input normalized, derived columns recomputed. */
+function applyPatch_(table, current, patch, ctx, timeZone) {
+  const errors = [];
+  const next = Object.assign({}, current);
+  Object.keys(patch).forEach(function (field) {
+    const column = table.columnByName[field];
+    if (!column) {
+      errors.push({ field: field, code: 'UNKNOWN_FIELD', message: 'Kolom "' + field + '" tidak dikenal pada ' + table.label + '.' });
+      return;
+    }
+    if (patch[field] === undefined) return;
+    if (!canWriteColumn_(column, ctx, 'update')) {
+      errors.push(writeAccessError_(column, 'update'));
+      return;
+    }
+    next[field] = normalizeInputValue_(column, patch[field], timeZone);
+  });
+  applyDerivedColumns_(table, next);
+  return { record: next, errors: errors };
 }
 
 function dbArchive_(tableName, id, context) {
@@ -518,6 +611,24 @@ function appendRowsToSheet_(sheet, table, rows) {
 
 /** @param {{ sheet: GoogleAppsScript.Spreadsheet.Sheet, table: * }} state */
 function writeRecordRow_(state, rowNumber, record) {
-  applyNumberFormats_(state.sheet, state.table, rowNumber, 1);
-  state.sheet.getRange(rowNumber, 1, 1, state.table.columns.length).setValues([recordToRow_(state.table, record)]);
+  writeRecordRows_(state, [{ rowNumber: rowNumber, record: record }]);
+}
+
+/**
+ * Rewrites existing rows, one setValues per block of consecutive row numbers.
+ * @param {{ sheet: GoogleAppsScript.Spreadsheet.Sheet, table: * }} state
+ * @param {Array<{ rowNumber: number, record: Object }>} items
+ */
+function writeRecordRows_(state, items) {
+  const sorted = items.slice().sort(function (a, b) { return a.rowNumber - b.rowNumber; });
+  let start = 0;
+  while (start < sorted.length) {
+    let end = start;
+    while (end + 1 < sorted.length && sorted[end + 1].rowNumber === sorted[end].rowNumber + 1) end++;
+    const block = sorted.slice(start, end + 1);
+    applyNumberFormats_(state.sheet, state.table, block[0].rowNumber, block.length);
+    state.sheet.getRange(block[0].rowNumber, 1, block.length, state.table.columns.length)
+      .setValues(block.map(function (item) { return recordToRow_(state.table, item.record); }));
+    start = end + 1;
+  }
 }

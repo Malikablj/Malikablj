@@ -102,7 +102,9 @@ function checkValueType_(column, value) {
 function checkTextValue_(column, value) {
   const label = column.label;
   if (typeof value !== 'string') return fieldError_(column, 'TYPE', label + ' harus berupa teks.');
-  if (value.trim() !== value) return fieldError_(column, 'PATTERN', label + ' tidak boleh diawali/diakhiri spasi.');
+  if (!column.preserveWhitespace && value.trim() !== value) {
+    return fieldError_(column, 'PATTERN', label + ' tidak boleh diawali/diakhiri spasi.');
+  }
   if (column.maxLength && value.length > column.maxLength) {
     return fieldError_(column, 'MAX_LENGTH', label + ' maksimal ' + column.maxLength + ' karakter.');
   }
@@ -279,26 +281,33 @@ function uniqueKey_(constraint, record) {
 /**
  * Unique constraints for `candidates` against `existing` records and against each other.
  * Returns errors with `index` = position in candidates. Existing records whose id is in `excludeIds` are ignored.
+ * For constraints marked legacyExempt, two legacy records may share a key (the duplicate came from the source and
+ * is tracked in MIGRATION_ISSUES); any pair involving a non-legacy record is still a conflict.
  */
 function validateUniqueness_(table, candidates, existing, excludeIds) {
   const errors = [];
   const excluded = excludeIds || {};
   table.unique.forEach(function (constraint) {
-    const seen = {};
+    const seen = {};       // key -> true for every record
+    const seenStrict = {}; // key -> true for records that are not legacy
+    const remember = function (record, key) {
+      seen[key] = true;
+      if (record.is_legacy !== true) seenStrict[key] = true;
+    };
     existing.forEach(function (record) {
       if (record.id && excluded[record.id]) return;
       const key = uniqueKey_(constraint, record);
-      if (key !== null) seen[key] = true;
+      if (key !== null) remember(record, key);
     });
     candidates.forEach(function (record, index) {
       const key = uniqueKey_(constraint, record);
       if (key === null) return;
-      if (seen[key]) {
+      const legacyPair = constraint.legacyExempt && record.is_legacy === true;
+      if (legacyPair ? seenStrict[key] : seen[key]) {
         const field = constraint.field || constraint.columns[constraint.columns.length - 1];
         errors.push({ index: index, field: field, code: 'UNIQUE', message: constraint.message });
-      } else {
-        seen[key] = true;
       }
+      remember(record, key);
     });
   });
   return errors;

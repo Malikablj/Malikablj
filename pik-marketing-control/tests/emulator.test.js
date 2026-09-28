@@ -8,9 +8,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-const { createGasEnvironment } = require('./gas-emulator');
-const { formatDate } = require('./gas-emulator/format-date');
-const { loadGasProject } = require('./helpers/load-gas');
+const { createGasEnvironment } = require('../tools/gas-emulator');
+const { formatDate } = require('../tools/gas-emulator/format-date');
+const { loadGasProject } = require('../tools/gas-emulator/load-gas');
 
 function newSheet() {
   const env = createGasEnvironment();

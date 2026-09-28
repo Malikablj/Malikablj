@@ -7,21 +7,25 @@
  *
  * Standard column layout of a data table:
  *   id | business columns | is_active | lineage (migrated tables) | created_at, created_by, updated_at, updated_by
+ *   | columns added in later schema versions (`appendedColumns`, each with `since`), in the order they were added
  *
  * Column attributes (see col_):
  *   type                  logical type (COLUMN_TYPES): drives the sheet number format and validation
  *   required              must be filled on every row
  *   requiredUnlessLegacy  must be filled on new rows; may stay empty on migrated legacy rows (is_legacy = TRUE, D3)
  *   writable              who may write the column: 'user' (default), 'auto' (repository only), 'internal' (server
- *                         services only), 'migration' (migration engine only), 'archive' (archive/restore only)
+ *                         services only), 'migration' (migration engine only), 'archive' (archive/restore; the migration engine
+ *                         may also set it)
  *   ref / enumName        foreign-key target table / enum in ENUMS
  *   min, minExclusive, max, maxLength, pattern, defaultValue, derive, note
+ *   preserveWhitespace    keep text exactly as supplied (original legacy values); other text is trimmed
+ *   since                 schema version that introduced the column (1 = initial layout)
  * Numeric ranges and table rules apply to new data; legacy rows are only checked structurally (types, enums,
  * references, uniqueness) so migration never rewrites source values. Problems in legacy data are recorded in
  * MIGRATION_ISSUES by the migration engine.
  */
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const COLUMN_TYPES = Object.freeze({
   id: 'ID record, format PREFIX-XXXXXXXXXX (hex huruf besar)',
@@ -95,6 +99,8 @@ function col_(name, type, label, options) {
     patternMessage: null,
     defaultValue: undefined,
     derive: null,
+    preserveWhitespace: false,
+    since: 1,
     note: ''
   };
   const extra = options || {};
@@ -103,11 +109,12 @@ function col_(name, type, label, options) {
   return column;
 }
 
-/** Original legacy value kept for reference (never used in calculations); written by the migration only. */
+/** Original legacy value kept exactly as in the source (reference only, never used in calculations). */
 function legacyCol_(name, type, label, options) {
   return col_(name, type, label, Object.assign({
     writable: WRITABLE.MIGRATION,
-    note: 'Nilai asli data legacy, hanya referensi.'
+    preserveWhitespace: true,
+    note: 'Nilai asli data legacy apa adanya, hanya referensi.'
   }, options || {}));
 }
 
@@ -294,7 +301,10 @@ function defineTables_() {
         columns: ['customer_id', 'po_number_key'],
         where: function (record) { return record.status !== 'CANCELLED'; },
         field: 'po_number',
-        description: '(customer_id, po_number_key) unik untuk PO yang tidak CANCELLED; PO tanpa nomor/customer (legacy) tidak dihitung.',
+        legacyExempt: true,
+        description: '(customer_id, po_number_key) unik untuk PO yang tidak CANCELLED; PO tanpa nomor/customer tidak ' +
+          'dihitung. Nomor ganda yang sudah ada di data legacy diterima dan dicatat di MIGRATION_ISSUES (D7), ' +
+          'tetapi PO baru tidak boleh memakai nomor yang sama.',
         message: 'Nomor PO ini sudah dipakai PO lain milik customer yang sama.'
       }],
       rules: [{
@@ -407,6 +417,9 @@ function defineTables_() {
         col_('notes', 'text', 'Catatan'),
         legacyCol_('po_number_legacy', 'string', 'Nomor PO legacy'),
         legacyCol_('product_legacy', 'string', 'Produk legacy')
+      ],
+      appendedColumns: [
+        legacyCol_('status_legacy', 'string', 'Status legacy', { maxLength: 100, since: 2 })
       ],
       consistency: [
         {
@@ -525,7 +538,9 @@ function defineTables_() {
         }),
         legacyCol_('delivered_qty_legacy', 'quantity', 'Qty terkirim legacy'),
         legacyCol_('undelivered_qty_legacy', 'quantity', 'Qty belum terkirim legacy'),
-        legacyCol_('outstanding_amount_legacy', 'money', 'Outstanding (Rp) legacy'),
+        legacyCol_('outstanding_amount_legacy', 'decimal', 'Outstanding (Rp) legacy', {
+          note: 'Nilai asli tanpa pembulatan (sumber memuat artefak desimal).'
+        }),
         legacyCol_('status_legacy', 'string', 'Status legacy', { maxLength: 100 })
       ]
     },
@@ -662,6 +677,7 @@ function compileSchema_(definitions) {
     if (definition.softDelete) columns.push(standardActiveColumn_());
     if (definition.lineage) standardLineageColumns_().forEach(function (column) { columns.push(column); });
     if (definition.audit) standardAuditColumns_().forEach(function (column) { columns.push(column); });
+    (definition.appendedColumns || []).forEach(function (column) { columns.push(column); });
 
     const columnByName = {};
     columns.forEach(function (column) { columnByName[column.name] = column; });

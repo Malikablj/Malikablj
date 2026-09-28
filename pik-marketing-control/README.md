@@ -13,21 +13,26 @@ Stack: **Google Apps Script + Google Sheets + HTML/CSS/Vanilla JS** (keputusan D
 | Fase | Status |
 |---|---|
 | 01 — Inspect & Profile | ✅ profil data, pemetaan migrasi, daftar isu, rencana implementasi |
-| 02 — Database | ✅ skema 21 sheet, initializer idempoten, ENUMS, SETTINGS, AUDIT_LOG, validasi, repository. Teruji di emulator (59 test); satu run di Apps Script sungguhan masih menunggu (lihat [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)) |
-| 03 — Migration | berikutnya |
+| 02 — Database | ✅ skema 21 sheet, initializer idempoten, ENUMS, SETTINGS, AUDIT_LOG, validasi, repository |
+| 03 — Migration | ✅ pipeline PROFILE → MAP → VALIDATE → DRY RUN → MIGRATE → VERIFY → REPORT; gladi penuh dengan workbook asli di emulator Apps Script lolos semua pemeriksaan |
+| 04 — Backend & modul | berikutnya |
 
-Belum ada migrasi data bisnis yang dijalankan.
+**Migrasi produksi belum dijalankan.** Database Google Sheets produksi belum berisi data. Migrasi dijalankan pemilik dari editor
+Apps Script (lihat [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §7) setelah keputusan D3 dan D4 dikonfirmasi. Semua kode juga belum
+pernah dijalankan di Google Apps Script sungguhan (kredensial Google tidak tersedia di environment pengembangan); langkah verifikasinya
+ada di DEPLOYMENT.
 
 ## Dokumen
 
 | Dokumen | Isi |
 |---|---|
 | [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | Skema final: sheet, kolom, tipe, relasi, keunikan, aturan, ENUMS, SETTINGS (dibuat dari kode) |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Register keputusan bisnis (D1–D14) dan teknis Phase 02 |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Register keputusan bisnis (D1–D14) dan teknis Phase 02–03 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lapisan, berkas, dan aturan penulisan |
 | [docs/TESTING.md](docs/TESTING.md) | Cara menguji, cakupan, hasil, batasan emulator |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | clasp, Script Properties, `setupDatabase`, self-test di Apps Script |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | clasp, Script Properties, `setupDatabase`, self-test, migrasi produksi di Apps Script |
 | `docs/DATA_PROFILE.md`, `docs/MIGRATION_MAPPING.md`, `docs/MIGRATION_ISSUES.md`, `docs/IMPLEMENTATION_PLAN.md` | Phase 01. Rahasia, tidak di-commit (D2) |
+| `docs/MIGRATION_REPORT.md` | Laporan migrasi Phase 03 (dibuat `npm run migrate -- migrate`). Rahasia, tidak di-commit (D2) |
 | `prompts/` | Paket prompt fase dari starter |
 
 ## Perintah
@@ -35,15 +40,17 @@ Belum ada migrasi data bisnis yang dijalankan.
 Butuh Node.js 20+. `npm test` tidak butuh dependency.
 
 ```bash
-npm test                  # 59 test: database (emulator Apps Script), setup/akses/lock/batch, aturan proyek, dokumen
+npm test                  # 85 test: database, migrasi (workbook sintetis), setup/akses/lock/batch, aturan proyek, dokumen
 npm run emulate:init      # jalankan setupDatabase → verify → init ulang → self-test di emulator
+npm run migrate -- migrate   # pipeline migrasi lengkap untuk workbook di migration/source/ (lihat di bawah)
 npm run docs:schema       # buat ulang docs/DATABASE_SCHEMA.md dari src/db/Schema.gs
 npm install && npm run typecheck   # cek pemakaian API Apps Script terhadap typings resmi
 npm run push              # clasp push ke project Apps Script (lihat docs/DEPLOYMENT.md)
 ```
 
 Fungsi Apps Script untuk pemeliharaan (jalankan dari editor; hanya pemilik skrip atau `ADMIN_EMAILS`):
-`setupDatabase`, `initializeDatabase`, `verifyDatabase`, `runDatabaseSelfTest`.
+`setupDatabase`, `initializeDatabase`, `verifyDatabase`, `runDatabaseSelfTest`, dan migrasi: `profileSourceWorkbook`,
+`validateMigrationMapping`, `dryRunMigration`, `runMigration`, `verifyMigration`.
 
 ## Profiler workbook (read-only, Phase 01)
 
@@ -54,3 +61,20 @@ node migration/scripts/profile-workbook.js /path/ke/workbook.xlsx --as-of 2026-0
 
 Output di `migration/reports/`: `data-profile.json` dan `phase01-migration-issues.csv`. Profiler tidak menulis ke workbook dan
 memeriksa hash SHA-256-nya sebelum dan sesudah membaca.
+
+## Migrasi data (Phase 03)
+
+```bash
+npm run migrate -- package    # PROFILE + MAP + VALIDATE → migration/reports/migration-package.json
+npm run migrate -- dry-run    # + DRY RUN di emulator Apps Script (tidak menulis apa pun)
+npm run migrate -- migrate    # + MIGRATE, rerun (idempotensi), VERIFY, laporan docs/MIGRATION_REPORT.md
+# opsi: [path/ke/workbook.xlsx] --out <folder> --report <file.md> --as-of YYYY-MM-DD
+```
+
+- Workbook sumber hanya dibaca; hash SHA-256-nya dibandingkan sebelum dan sesudah. Semua keluaran berisi data bisnis dan di-ignore git.
+- ID record = ID workbook. Relasi hanya dari ID workbook atau kecocokan persis & unik; relasi yang tidak pasti dibiarkan kosong dan
+  dicatat di `MIGRATION_ISSUES`, tidak pernah ditebak.
+- Setiap baris sumber tercatat: dimigrasikan, dikecualikan (baris asli lengkap disimpan di isunya), hanya isu, diwakili, atau dokumentasi.
+- Migrasi nyata hanya berjalan setelah dry run paket yang sama lolos tanpa error. Rerun aman: record yang tidak berubah dilewati,
+  record yang sudah diedit pengguna tidak ditimpa.
+- Paket yang sama dijalankan di Apps Script oleh pemilik untuk migrasi produksi (docs/DEPLOYMENT.md §7).

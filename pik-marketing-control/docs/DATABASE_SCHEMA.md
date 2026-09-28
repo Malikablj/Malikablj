@@ -3,7 +3,7 @@
 > Dibuat otomatis dari `src/db/Schema.gs`, `src/db/Enums.gs`, dan `src/db/Settings.gs` dengan
 > `npm run docs:schema`. Jangan diedit manual; `npm test` gagal bila dokumen ini tidak sesuai kode.
 
-**Versi skema:** 1 · **Jumlah sheet:** 21
+**Versi skema:** 2 · **Jumlah sheet:** 21
 
 ## 1. Konvensi
 
@@ -12,7 +12,7 @@
   diganti nama, atau dihapus.
 - **Tata letak kolom tabel data:** `id` → kolom bisnis → `is_active` → lineage (tabel hasil migrasi:
   `is_legacy`, `source_file`, `source_sheet`, `legacy_row`, `import_ref`, `migrated_at`, `migration_hash`) →
-  `created_at`, `created_by`, `updated_at`, `updated_by`.
+  `created_at`, `created_by`, `updated_at`, `updated_by` → kolom yang ditambahkan di versi skema berikutnya (urut versi).
 - **ID stabil:** `PREFIX-XXXXXXXXXX` (10 digit heksadesimal huruf besar; `AUDIT_LOG` 16 digit). Format ini sama dengan
   ID workbook sehingga ID legacy dipakai apa adanya (D12). ID dibuat dari bit acak UUID, dicek terhadap ID yang sudah
   ada, tidak pernah berasal dari nomor baris, dan tidak dapat diubah.
@@ -64,7 +64,7 @@
 | 11 | `DELIVERIES` | Operasional | `DEL-` | 24 | Transaksi pengiriman per surat jalan (SJ). Satu nomor SJ dapat memuat beberapa produk. |
 | 12 | `RETURNS` | Operasional | `RET-` | 26 | Transaksi retur barang dari customer. |
 | 13 | `STOCK` | Inventori | `STK-` | 24 | Catatan/snapshot stok per produk. |
-| 14 | `LEADTIME` | Inventori | `LT-` | 24 | Jadwal pengiriman terencana per PO/produk (D10). Tidak dihitung sebagai qty terkirim. |
+| 14 | `LEADTIME` | Inventori | `LT-` | 25 | Jadwal pengiriman terencana per PO/produk (D10). Tidak dihitung sebagai qty terkirim. |
 | 15 | `INBOUND_MAKLON` | Inventori | `INB-` | 32 | Penerimaan komponen di maklon. Kolom mengikuti sheet sumber yang diprofil di Phase 01. |
 | 16 | `INVOICES_PAYMENTS` | Keuangan | `PAY-` | 28 | Satu baris per invoice beserta pembayarannya. Prefiks ID PAY- mengikuti workbook (D12). |
 | 17 | `PO_FINANCIALS` | Keuangan | `POF-` | 31 | Ringkasan keuangan PO dari data legacy; referensi read-only (D11). Hanya proses migrasi yang menulis. |
@@ -158,7 +158,7 @@ tidak boleh bertentangan.
 ## 4. Kolom per sheet
 
 Kolom "Ditulis oleh": *aplikasi* = input pengguna melalui layanan; *sistem* = diisi repository; *layanan server* =
-hanya layanan internal; *migrasi* = hanya proses migrasi; *arsip/pulihkan* = hanya fungsi arsip/pulihkan.
+hanya layanan internal; *migrasi* = hanya proses migrasi; *arsip/pulihkan* = hanya fungsi arsip/pulihkan (proses migrasi boleh menyalin nilai sumber).
 
 ### 4.1 `README` — README
 
@@ -168,8 +168,8 @@ dikelola sistem (bukan lewat repository umum)
 
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
-| 1 | `key` | string | wajib | maks 100 karakter |  | aplikasi | Kunci |
-| 2 | `value` | text |  | maks 5000 karakter |  | aplikasi | Keterangan |
+| 1 | `key` | string | wajib | maks 100 karakter |  | aplikasi | Kunci. |
+| 2 | `value` | text |  | maks 5000 karakter |  | aplikasi | Keterangan. |
 
 ### 4.2 `USERS` — User
 
@@ -180,16 +180,16 @@ ID: `USR-` · soft delete
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat USR-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `name` | string | wajib | maks 150 karakter |  | aplikasi | Nama |
-| 3 | `email` | email | wajib | maks 255 karakter |  | aplikasi | Email |
-| 4 | `role` | enum | wajib | enum USER_ROLE |  | aplikasi | Role |
-| 5 | `phone` | phone |  | maks 100 karakter |  | aplikasi | Telepon |
-| 6 | `last_login_at` | datetime |  |  |  | layanan server | Login terakhir |
+| 2 | `name` | string | wajib | maks 150 karakter |  | aplikasi | Nama. |
+| 3 | `email` | email | wajib | maks 255 karakter |  | aplikasi | Email. |
+| 4 | `role` | enum | wajib | enum USER_ROLE |  | aplikasi | Role. |
+| 5 | `phone` | phone |  | maks 100 karakter |  | aplikasi | Telepon. |
+| 6 | `last_login_at` | datetime |  |  |  | layanan server | Login terakhir. |
 | 7 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
-| 8 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 9 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 10 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 11 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 8 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 9 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 10 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 11 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 - **Unik:** email unik (tanpa membedakan huruf besar/kecil).
 
@@ -202,28 +202,28 @@ ID: `CUS-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat CUS-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `customer_code` | string |  | maks 100 karakter |  | aplikasi | Kode customer |
-| 3 | `name` | string | wajib | maks 255 karakter |  | aplikasi | Nama customer |
-| 4 | `industry` | string |  | maks 150 karakter |  | aplikasi | Industri |
-| 5 | `address` | text |  | maks 2000 karakter |  | aplikasi | Alamat |
-| 6 | `phone` | phone |  | maks 100 karakter |  | aplikasi | Telepon |
-| 7 | `email` | email |  | maks 255 karakter |  | aplikasi | Email |
-| 8 | `website` | url |  | maks 255 karakter |  | aplikasi | Website |
-| 9 | `status` | enum |  | enum CUSTOMER_STATUS |  | aplikasi | Status customer |
-| 10 | `owner_user_id` | ref |  | → USERS.id |  | aplikasi | PIC marketing |
-| 11 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
+| 2 | `customer_code` | string |  | maks 100 karakter |  | aplikasi | Kode customer. |
+| 3 | `name` | string | wajib | maks 255 karakter |  | aplikasi | Nama customer. |
+| 4 | `industry` | string |  | maks 150 karakter |  | aplikasi | Industri. |
+| 5 | `address` | text |  | maks 2000 karakter |  | aplikasi | Alamat. |
+| 6 | `phone` | phone |  | maks 100 karakter |  | aplikasi | Telepon. |
+| 7 | `email` | email |  | maks 255 karakter |  | aplikasi | Email. |
+| 8 | `website` | url |  | maks 255 karakter |  | aplikasi | Website. |
+| 9 | `status` | enum |  | enum CUSTOMER_STATUS |  | aplikasi | Status customer. |
+| 10 | `owner_user_id` | ref |  | → USERS.id |  | aplikasi | PIC marketing. |
+| 11 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
 | 12 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 13 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 14 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 15 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 16 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 14 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 15 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 16 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 17 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 18 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 19 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 20 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 21 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 22 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 23 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 18 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 19 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 20 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 21 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 22 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 23 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 - **Unik:** customer_code unik bila diisi (tanpa membedakan huruf).
 
@@ -236,19 +236,19 @@ ID: `CON-` · soft delete
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat CON-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `customer_id` | ref | wajib | → CUSTOMERS.id |  | aplikasi | Customer |
-| 3 | `name` | string | wajib | maks 150 karakter |  | aplikasi | Nama contact |
-| 4 | `position` | string |  | maks 150 karakter |  | aplikasi | Jabatan |
-| 5 | `phone` | phone |  | maks 100 karakter |  | aplikasi | Telepon |
-| 6 | `email` | email |  | maks 255 karakter |  | aplikasi | Email |
-| 7 | `whatsapp` | phone |  | maks 100 karakter |  | aplikasi | WhatsApp |
-| 8 | `is_primary` | boolean | wajib |  | `FALSE` | aplikasi | Contact utama |
-| 9 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
+| 2 | `customer_id` | ref | wajib | → CUSTOMERS.id |  | aplikasi | Customer. |
+| 3 | `name` | string | wajib | maks 150 karakter |  | aplikasi | Nama contact. |
+| 4 | `position` | string |  | maks 150 karakter |  | aplikasi | Jabatan. |
+| 5 | `phone` | phone |  | maks 100 karakter |  | aplikasi | Telepon. |
+| 6 | `email` | email |  | maks 255 karakter |  | aplikasi | Email. |
+| 7 | `whatsapp` | phone |  | maks 100 karakter |  | aplikasi | WhatsApp. |
+| 8 | `is_primary` | boolean | wajib |  | `FALSE` | aplikasi | Contact utama. |
+| 9 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
 | 10 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
-| 11 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 12 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 13 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 14 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 11 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 12 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 13 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 14 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 - **Unik:** maksimal satu contact is_primary = TRUE yang aktif per customer_id.
 
@@ -261,27 +261,27 @@ ID: `PRD-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat PRD-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `product_code` | string |  | maks 100 karakter |  | aplikasi | Kode produk |
+| 2 | `product_code` | string |  | maks 100 karakter |  | aplikasi | Kode produk. |
 | 3 | `product_code_key` | string |  | maks 100 karakter |  | sistem (otomatis) | Kunci kode produk. Otomatis: kode tanpa kurung/spasi, huruf besar; bila kode kosong diambil dari kode di awal nama. |
-| 4 | `name` | string | wajib | maks 255 karakter |  | aplikasi | Nama produk |
-| 5 | `variant` | string |  | maks 255 karakter |  | aplikasi | Varian |
-| 6 | `category` | string |  | maks 150 karakter |  | aplikasi | Kategori |
+| 4 | `name` | string | wajib | maks 255 karakter |  | aplikasi | Nama produk. |
+| 5 | `variant` | string |  | maks 255 karakter |  | aplikasi | Varian. |
+| 6 | `category` | string |  | maks 150 karakter |  | aplikasi | Kategori. |
 | 7 | `customer_id` | ref |  | → CUSTOMERS.id |  | aplikasi | Customer pemilik. Diisi bila produk khusus untuk satu customer. |
-| 8 | `description` | text |  | maks 5000 karakter |  | aplikasi | Deskripsi |
-| 9 | `unit` | string | wajib | maks 50 karakter | `pcs` | aplikasi | Satuan |
-| 10 | `lead_time_days` | integer |  | ≥ 0 |  | aplikasi | Lead time (hari) |
+| 8 | `description` | text |  | maks 5000 karakter |  | aplikasi | Deskripsi. |
+| 9 | `unit` | string | wajib | maks 50 karakter | `pcs` | aplikasi | Satuan. |
+| 10 | `lead_time_days` | integer |  | ≥ 0 |  | aplikasi | Lead time (hari). |
 | 11 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 12 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 13 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 14 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 15 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 13 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 14 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 15 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 16 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 17 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 18 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 19 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 20 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 21 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 22 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 17 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 18 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 19 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 20 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 21 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 22 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.6 `LEADS` — Lead
 
@@ -292,24 +292,24 @@ ID: `LED-` · soft delete
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat LED-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `customer_id` | ref | wajib | → CUSTOMERS.id |  | aplikasi | Customer |
-| 3 | `contact_id` | ref |  | → CONTACTS.id |  | aplikasi | Contact |
-| 4 | `product_id` | ref |  | → PRODUCTS.id |  | aplikasi | Produk |
-| 5 | `name` | string | wajib | maks 255 karakter |  | aplikasi | Nama lead |
-| 6 | `source` | string |  | maks 100 karakter |  | aplikasi | Sumber lead |
-| 7 | `product_interest` | string |  | maks 255 karakter |  | aplikasi | Minat produk |
-| 8 | `estimated_quantity` | quantity |  | ≥ 0 |  | aplikasi | Estimasi kuantitas |
-| 9 | `estimated_value` | money |  | ≥ 0 |  | aplikasi | Estimasi nilai |
-| 10 | `status` | enum | wajib | enum LEAD_STATUS | `NEW` | aplikasi | Status lead |
-| 11 | `priority` | enum |  | enum PRIORITY |  | aplikasi | Prioritas |
-| 12 | `owner_user_id` | ref |  | → USERS.id |  | aplikasi | PIC |
-| 13 | `expected_closing_date` | date |  |  |  | aplikasi | Perkiraan closing |
-| 14 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
+| 2 | `customer_id` | ref | wajib | → CUSTOMERS.id |  | aplikasi | Customer. |
+| 3 | `contact_id` | ref |  | → CONTACTS.id |  | aplikasi | Contact. |
+| 4 | `product_id` | ref |  | → PRODUCTS.id |  | aplikasi | Produk. |
+| 5 | `name` | string | wajib | maks 255 karakter |  | aplikasi | Nama lead. |
+| 6 | `source` | string |  | maks 100 karakter |  | aplikasi | Sumber lead. |
+| 7 | `product_interest` | string |  | maks 255 karakter |  | aplikasi | Minat produk. |
+| 8 | `estimated_quantity` | quantity |  | ≥ 0 |  | aplikasi | Estimasi kuantitas. |
+| 9 | `estimated_value` | money |  | ≥ 0 |  | aplikasi | Estimasi nilai. |
+| 10 | `status` | enum | wajib | enum LEAD_STATUS | `NEW` | aplikasi | Status lead. |
+| 11 | `priority` | enum |  | enum PRIORITY |  | aplikasi | Prioritas. |
+| 12 | `owner_user_id` | ref |  | → USERS.id |  | aplikasi | PIC. |
+| 13 | `expected_closing_date` | date |  |  |  | aplikasi | Perkiraan closing. |
+| 14 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
 | 15 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
-| 16 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 17 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 18 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 19 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 16 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 17 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 18 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 19 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.7 `ACTIVITIES` — Aktivitas
 
@@ -320,20 +320,20 @@ ID: `ACT-` · soft delete
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat ACT-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `customer_id` | ref |  | → CUSTOMERS.id |  | aplikasi | Customer |
-| 3 | `contact_id` | ref |  | → CONTACTS.id |  | aplikasi | Contact |
-| 4 | `lead_id` | ref |  | → LEADS.id |  | aplikasi | Lead |
-| 5 | `type` | enum | wajib | enum ACTIVITY_TYPE |  | aplikasi | Jenis aktivitas |
-| 6 | `subject` | string | wajib | maks 255 karakter |  | aplikasi | Subjek |
-| 7 | `description` | text |  | maks 5000 karakter |  | aplikasi | Deskripsi |
-| 8 | `owner_user_id` | ref | wajib | → USERS.id |  | aplikasi | PIC |
-| 9 | `activity_at` | datetime | wajib |  |  | aplikasi | Waktu aktivitas |
-| 10 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran |
+| 2 | `customer_id` | ref |  | → CUSTOMERS.id |  | aplikasi | Customer. |
+| 3 | `contact_id` | ref |  | → CONTACTS.id |  | aplikasi | Contact. |
+| 4 | `lead_id` | ref |  | → LEADS.id |  | aplikasi | Lead. |
+| 5 | `type` | enum | wajib | enum ACTIVITY_TYPE |  | aplikasi | Jenis aktivitas. |
+| 6 | `subject` | string | wajib | maks 255 karakter |  | aplikasi | Subjek. |
+| 7 | `description` | text |  | maks 5000 karakter |  | aplikasi | Deskripsi. |
+| 8 | `owner_user_id` | ref | wajib | → USERS.id |  | aplikasi | PIC. |
+| 9 | `activity_at` | datetime | wajib |  |  | aplikasi | Waktu aktivitas. |
+| 10 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran. |
 | 11 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
-| 12 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 13 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 14 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 15 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 12 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 13 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 14 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 15 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.8 `FOLLOW_UP` — Follow-up
 
@@ -344,23 +344,23 @@ ID: `FUP-` · soft delete
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat FUP-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `customer_id` | ref |  | → CUSTOMERS.id |  | aplikasi | Customer |
-| 3 | `lead_id` | ref |  | → LEADS.id |  | aplikasi | Lead |
-| 4 | `activity_id` | ref |  | → ACTIVITIES.id |  | aplikasi | Aktivitas asal |
-| 5 | `owner_user_id` | ref | wajib | → USERS.id |  | aplikasi | PIC |
-| 6 | `follow_up_date` | date | wajib |  |  | aplikasi | Tanggal follow-up |
-| 7 | `follow_up_time` | time |  |  |  | aplikasi | Jam follow-up |
-| 8 | `type` | enum |  | enum ACTIVITY_TYPE |  | aplikasi | Jenis follow-up |
-| 9 | `purpose` | string |  | maks 255 karakter |  | aplikasi | Tujuan |
-| 10 | `priority` | enum |  | enum PRIORITY |  | aplikasi | Prioritas |
-| 11 | `status` | enum | wajib | enum FOLLOW_UP_STATUS | `PLANNED` | aplikasi | Status |
-| 12 | `result` | text |  | maks 5000 karakter |  | aplikasi | Hasil |
-| 13 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
+| 2 | `customer_id` | ref |  | → CUSTOMERS.id |  | aplikasi | Customer. |
+| 3 | `lead_id` | ref |  | → LEADS.id |  | aplikasi | Lead. |
+| 4 | `activity_id` | ref |  | → ACTIVITIES.id |  | aplikasi | Aktivitas asal. |
+| 5 | `owner_user_id` | ref | wajib | → USERS.id |  | aplikasi | PIC. |
+| 6 | `follow_up_date` | date | wajib |  |  | aplikasi | Tanggal follow-up. |
+| 7 | `follow_up_time` | time |  |  |  | aplikasi | Jam follow-up. |
+| 8 | `type` | enum |  | enum ACTIVITY_TYPE |  | aplikasi | Jenis follow-up. |
+| 9 | `purpose` | string |  | maks 255 karakter |  | aplikasi | Tujuan. |
+| 10 | `priority` | enum |  | enum PRIORITY |  | aplikasi | Prioritas. |
+| 11 | `status` | enum | wajib | enum FOLLOW_UP_STATUS | `PLANNED` | aplikasi | Status. |
+| 12 | `result` | text |  | maks 5000 karakter |  | aplikasi | Hasil. |
+| 13 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
 | 14 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
-| 15 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 16 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 17 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 18 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 15 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 16 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 17 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 18 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.9 `PURCHASE_ORDERS` — Purchase order
 
@@ -371,31 +371,31 @@ ID: `PO-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat PO-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `po_number` | string | wajib (kecuali legacy) | maks 150 karakter |  | aplikasi | Nomor PO |
+| 2 | `po_number` | string | wajib (kecuali legacy) | maks 150 karakter |  | aplikasi | Nomor PO. |
 | 3 | `po_number_key` | string |  | maks 150 karakter |  | sistem (otomatis) | Kunci nomor PO. Otomatis dari po_number: tanpa spasi, huruf besar. Untuk pencarian dan keunikan. |
-| 4 | `customer_id` | ref | wajib (kecuali legacy) | → CUSTOMERS.id |  | aplikasi | Customer |
-| 5 | `po_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal PO |
-| 6 | `expected_delivery_date` | date |  |  |  | aplikasi | Target kirim |
-| 7 | `status` | enum | wajib | enum PO_STATUS | `OPEN` | aplikasi | Status PO |
-| 8 | `payment_term` | string |  | maks 100 karakter |  | aplikasi | Termin pembayaran |
-| 9 | `owner_user_id` | ref |  | → USERS.id |  | aplikasi | PIC |
-| 10 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 11 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy, hanya referensi. |
-| 12 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status PO legacy. Nilai asli data legacy, hanya referensi. |
+| 4 | `customer_id` | ref | wajib (kecuali legacy) | → CUSTOMERS.id |  | aplikasi | Customer. |
+| 5 | `po_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal PO. |
+| 6 | `expected_delivery_date` | date |  |  |  | aplikasi | Target kirim. |
+| 7 | `status` | enum | wajib | enum PO_STATUS | `OPEN` | aplikasi | Status PO. |
+| 8 | `payment_term` | string |  | maks 100 karakter |  | aplikasi | Termin pembayaran. |
+| 9 | `owner_user_id` | ref |  | → USERS.id |  | aplikasi | PIC. |
+| 10 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 11 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 12 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status PO legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 13 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 14 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 18 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
-- **Unik:** (customer_id, po_number_key) unik untuk PO yang tidak CANCELLED; PO tanpa nomor/customer (legacy) tidak dihitung.
+- **Unik:** (customer_id, po_number_key) unik untuk PO yang tidak CANCELLED; PO tanpa nomor/customer tidak dihitung. Nomor ganda yang sudah ada di data legacy diterima dan dicatat di MIGRATION_ISSUES (D7), tetapi PO baru tidak boleh memakai nomor yang sama.
 - **Aturan (data baru):** expected_delivery_date tidak boleh sebelum po_date.
 
 ### 4.10 `PO_LINES` — Baris PO
@@ -407,30 +407,30 @@ ID: `POL-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat POL-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `purchase_order_id` | ref | wajib | → PURCHASE_ORDERS.id |  | aplikasi | PO |
-| 3 | `product_id` | ref | wajib | → PRODUCTS.id |  | aplikasi | Produk |
-| 4 | `order_quantity` | quantity | wajib | > 0 |  | aplikasi | Qty order |
-| 5 | `unit` | string |  | maks 50 karakter |  | aplikasi | Satuan |
-| 6 | `unit_price` | money |  | ≥ 0 |  | aplikasi | Harga satuan |
-| 7 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 8 | `product_name_legacy` | string |  | maks 255 karakter |  | migrasi | Nama produk legacy. Nilai asli data legacy, hanya referensi. |
-| 9 | `variant_legacy` | string |  | maks 255 karakter |  | migrasi | Varian legacy. Nilai asli data legacy, hanya referensi. |
-| 10 | `delivered_qty_legacy` | quantity |  |  |  | migrasi | Qty terkirim legacy. Nilai asli data legacy, hanya referensi. |
-| 11 | `returned_qty_legacy` | quantity |  |  |  | migrasi | Qty retur legacy. Nilai asli data legacy, hanya referensi. |
-| 12 | `outstanding_qty_legacy` | quantity |  |  |  | migrasi | Outstanding legacy. Nilai asli data legacy, hanya referensi. |
-| 13 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status legacy. Nilai asli data legacy, hanya referensi. |
+| 2 | `purchase_order_id` | ref | wajib | → PURCHASE_ORDERS.id |  | aplikasi | PO. |
+| 3 | `product_id` | ref | wajib | → PRODUCTS.id |  | aplikasi | Produk. |
+| 4 | `order_quantity` | quantity | wajib | > 0 |  | aplikasi | Qty order. |
+| 5 | `unit` | string |  | maks 50 karakter |  | aplikasi | Satuan. |
+| 6 | `unit_price` | money |  | ≥ 0 |  | aplikasi | Harga satuan. |
+| 7 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 8 | `product_name_legacy` | string |  | maks 255 karakter |  | migrasi | Nama produk legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 9 | `variant_legacy` | string |  | maks 255 karakter |  | migrasi | Varian legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 10 | `delivered_qty_legacy` | quantity |  |  |  | migrasi | Qty terkirim legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 11 | `returned_qty_legacy` | quantity |  |  |  | migrasi | Qty retur legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 12 | `outstanding_qty_legacy` | quantity |  |  |  | migrasi | Outstanding legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 13 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 14 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 15 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 16 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 17 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 18 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 16 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 17 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 18 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 19 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 20 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 21 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 22 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 23 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 24 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 25 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 20 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 21 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 22 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 23 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 24 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 25 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.11 `DELIVERIES` — Delivery
 
@@ -441,29 +441,29 @@ ID: `DEL-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat DEL-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO |
-| 3 | `po_line_id` | ref |  | → PO_LINES.id |  | aplikasi | Baris PO |
-| 4 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk |
-| 5 | `delivery_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal kirim |
+| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO. |
+| 3 | `po_line_id` | ref |  | → PO_LINES.id |  | aplikasi | Baris PO. |
+| 4 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk. |
+| 5 | `delivery_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal kirim. |
 | 6 | `quantity` | quantity | wajib (kecuali legacy) | > 0 |  | aplikasi | Qty kirim. Data legacy boleh negatif (koreksi, D9). |
-| 7 | `status` | enum |  | enum DELIVERY_STATUS |  | aplikasi | Status delivery |
-| 8 | `sj_number` | string |  | maks 100 karakter |  | aplikasi | Nomor SJ |
+| 7 | `status` | enum |  | enum DELIVERY_STATUS |  | aplikasi | Status delivery. |
+| 8 | `sj_number` | string |  | maks 100 karakter |  | aplikasi | Nomor SJ. |
 | 9 | `sj_number_key` | string |  | maks 150 karakter |  | sistem (otomatis) | Kunci nomor SJ. Otomatis dari sj_number: tanpa spasi, huruf besar. Untuk pencarian dan keunikan. |
-| 10 | `destination` | string |  | maks 255 karakter |  | aplikasi | Tujuan kirim |
-| 11 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran |
-| 12 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
+| 10 | `destination` | string |  | maks 255 karakter |  | aplikasi | Tujuan kirim. |
+| 11 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran. |
+| 12 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
 | 13 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 14 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 18 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.12 `RETURNS` — Retur
 
@@ -474,31 +474,31 @@ ID: `RET-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat RET-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `purchase_order_id` | ref |  | → PURCHASE_ORDERS.id |  | aplikasi | PO |
-| 3 | `po_line_id` | ref |  | → PO_LINES.id |  | aplikasi | Baris PO |
-| 4 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk |
-| 5 | `return_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal retur |
-| 6 | `quantity` | quantity | wajib | > 0 |  | aplikasi | Qty retur |
-| 7 | `reason` | text |  | maks 5000 karakter |  | aplikasi | Alasan retur |
-| 8 | `status` | enum |  | enum RETURN_STATUS |  | aplikasi | Status retur |
-| 9 | `sj_number` | string |  | maks 100 karakter |  | aplikasi | Nomor SJ |
-| 10 | `destination` | string |  | maks 255 karakter |  | aplikasi | Tujuan |
-| 11 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran |
-| 12 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 13 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy, hanya referensi. |
-| 14 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy, hanya referensi. |
+| 2 | `purchase_order_id` | ref |  | → PURCHASE_ORDERS.id |  | aplikasi | PO. |
+| 3 | `po_line_id` | ref |  | → PO_LINES.id |  | aplikasi | Baris PO. |
+| 4 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk. |
+| 5 | `return_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal retur. |
+| 6 | `quantity` | quantity | wajib | > 0 |  | aplikasi | Qty retur. |
+| 7 | `reason` | text |  | maks 5000 karakter |  | aplikasi | Alasan retur. |
+| 8 | `status` | enum |  | enum RETURN_STATUS |  | aplikasi | Status retur. |
+| 9 | `sj_number` | string |  | maks 100 karakter |  | aplikasi | Nomor SJ. |
+| 10 | `destination` | string |  | maks 255 karakter |  | aplikasi | Tujuan. |
+| 11 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran. |
+| 12 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 13 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 14 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 15 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 16 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 17 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 18 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 19 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 17 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 18 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 19 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 20 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 21 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 22 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 23 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 24 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 25 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 26 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 21 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 22 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 23 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 24 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 25 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 26 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.13 `STOCK` — Stok
 
@@ -509,29 +509,29 @@ ID: `STK-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat STK-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk |
-| 3 | `stock_type` | enum | wajib | enum STOCK_TYPE |  | aplikasi | Jenis stok |
-| 4 | `status` | enum |  | enum STOCK_STATUS |  | aplikasi | Status stok |
-| 5 | `quantity` | quantity | wajib (kecuali legacy) | ≥ 0 |  | aplikasi | Qty |
-| 6 | `box_count` | quantity |  | ≥ 0 |  | aplikasi | Jumlah box |
-| 7 | `qty_per_box` | quantity |  | ≥ 0 |  | aplikasi | Qty per box |
-| 8 | `warehouse` | string |  | maks 150 karakter |  | aplikasi | Gudang |
-| 9 | `stock_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal stok |
-| 10 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 11 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy, hanya referensi. |
-| 12 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status legacy. Nilai asli data legacy, hanya referensi. |
+| 2 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk. |
+| 3 | `stock_type` | enum | wajib | enum STOCK_TYPE |  | aplikasi | Jenis stok. |
+| 4 | `status` | enum |  | enum STOCK_STATUS |  | aplikasi | Status stok. |
+| 5 | `quantity` | quantity | wajib (kecuali legacy) | ≥ 0 |  | aplikasi | Qty. |
+| 6 | `box_count` | quantity |  | ≥ 0 |  | aplikasi | Jumlah box. |
+| 7 | `qty_per_box` | quantity |  | ≥ 0 |  | aplikasi | Qty per box. |
+| 8 | `warehouse` | string |  | maks 150 karakter |  | aplikasi | Gudang. |
+| 9 | `stock_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal stok. |
+| 10 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 11 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 12 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 13 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 14 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 18 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.14 `LEADTIME` — Jadwal lead time
 
@@ -542,29 +542,30 @@ ID: `LT-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat LT-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO |
-| 3 | `po_line_id` | ref |  | → PO_LINES.id |  | aplikasi | Baris PO |
-| 4 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk |
-| 5 | `customer_id` | ref |  | → CUSTOMERS.id |  | aplikasi | Customer |
-| 6 | `planned_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal rencana kirim |
-| 7 | `quantity` | quantity | wajib (kecuali legacy) | > 0 |  | aplikasi | Qty rencana |
-| 8 | `status` | enum |  | enum DELIVERY_STATUS |  | aplikasi | Status |
-| 9 | `lead_time_days` | integer |  | ≥ 0 |  | aplikasi | Lead time (hari) |
-| 10 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 11 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy, hanya referensi. |
-| 12 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy, hanya referensi. |
+| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO. |
+| 3 | `po_line_id` | ref |  | → PO_LINES.id |  | aplikasi | Baris PO. |
+| 4 | `product_id` | ref | wajib (kecuali legacy) | → PRODUCTS.id |  | aplikasi | Produk. |
+| 5 | `customer_id` | ref |  | → CUSTOMERS.id |  | aplikasi | Customer. |
+| 6 | `planned_date` | date | wajib (kecuali legacy) |  |  | aplikasi | Tanggal rencana kirim. |
+| 7 | `quantity` | quantity | wajib (kecuali legacy) | > 0 |  | aplikasi | Qty rencana. |
+| 8 | `status` | enum |  | enum DELIVERY_STATUS |  | aplikasi | Status. |
+| 9 | `lead_time_days` | integer |  | ≥ 0 |  | aplikasi | Lead time (hari). |
+| 10 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 11 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 12 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 13 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 14 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 15 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 16 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 17 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 18 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 19 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 20 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 21 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 22 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 23 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 24 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
+| 25 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status legacy. Nilai asli data legacy apa adanya, hanya referensi. Ditambahkan di skema v2. |
 
 ### 4.15 `INBOUND_MAKLON` — Inbound maklon
 
@@ -575,37 +576,37 @@ ID: `INB-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat INB-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO |
-| 3 | `product_id` | ref |  | → PRODUCTS.id |  | aplikasi | Produk |
-| 4 | `vendor` | string |  | maks 150 karakter |  | aplikasi | Vendor |
-| 5 | `receiver` | string |  | maks 150 karakter |  | aplikasi | Penerima |
-| 6 | `inbound_date` | date | wajib |  |  | aplikasi | Tanggal masuk |
-| 7 | `sj_date` | date |  |  |  | aplikasi | Tanggal SJ |
-| 8 | `sj_number` | string |  | maks 100 karakter |  | aplikasi | Nomor SJ |
+| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO. |
+| 3 | `product_id` | ref |  | → PRODUCTS.id |  | aplikasi | Produk. |
+| 4 | `vendor` | string |  | maks 150 karakter |  | aplikasi | Vendor. |
+| 5 | `receiver` | string |  | maks 150 karakter |  | aplikasi | Penerima. |
+| 6 | `inbound_date` | date | wajib |  |  | aplikasi | Tanggal masuk. |
+| 7 | `sj_date` | date |  |  |  | aplikasi | Tanggal SJ. |
+| 8 | `sj_number` | string |  | maks 100 karakter |  | aplikasi | Nomor SJ. |
 | 9 | `sj_number_key` | string |  | maks 150 karakter |  | sistem (otomatis) | Kunci nomor SJ. Otomatis dari sj_number: tanpa spasi, huruf besar. Untuk pencarian dan keunikan. |
-| 10 | `internal_component_code` | string |  | maks 100 karakter |  | aplikasi | Kode komponen internal |
-| 11 | `component_type` | string |  | maks 100 karakter |  | aplikasi | Jenis komponen |
-| 12 | `component_name` | string |  | maks 255 karakter |  | aplikasi | Nama komponen |
-| 13 | `factory_component_code` | string |  | maks 100 karakter |  | aplikasi | Kode komponen pabrik |
-| 14 | `quantity` | quantity | wajib (kecuali legacy) | ≥ 0 |  | aplikasi | Qty |
-| 15 | `reject_quantity` | quantity |  | ≥ 0 |  | aplikasi | Qty reject |
-| 16 | `total_in` | quantity |  | ≥ 0 |  | aplikasi | Total masuk |
+| 10 | `internal_component_code` | string |  | maks 100 karakter |  | aplikasi | Kode komponen internal. |
+| 11 | `component_type` | string |  | maks 100 karakter |  | aplikasi | Jenis komponen. |
+| 12 | `component_name` | string |  | maks 255 karakter |  | aplikasi | Nama komponen. |
+| 13 | `factory_component_code` | string |  | maks 100 karakter |  | aplikasi | Kode komponen pabrik. |
+| 14 | `quantity` | quantity | wajib (kecuali legacy) | ≥ 0 |  | aplikasi | Qty. |
+| 15 | `reject_quantity` | quantity |  | ≥ 0 |  | aplikasi | Qty reject. |
+| 16 | `total_in` | quantity |  | ≥ 0 |  | aplikasi | Total masuk. |
 | 17 | `attachment` | string |  | maks 255 karakter |  | aplikasi | Lampiran/keterangan SJ. Teks bebas; di data legacy berisi nomor SJ, bukan URL. |
-| 18 | `odoo_checklist` | string |  | maks 100 karakter |  | aplikasi | Checklist Odoo |
-| 19 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 20 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy, hanya referensi. |
+| 18 | `odoo_checklist` | string |  | maks 100 karakter |  | aplikasi | Checklist Odoo. |
+| 19 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 20 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 21 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 22 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 23 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 24 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 25 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 23 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 24 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 25 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 26 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 27 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 28 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 29 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 30 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 31 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 32 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 27 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 28 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 29 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 30 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 31 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 32 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.16 `INVOICES_PAYMENTS` — Invoice & pembayaran
 
@@ -616,33 +617,33 @@ ID: `PAY-` · soft delete · lineage migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat PAY-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO |
-| 3 | `invoice_number` | string | wajib | maks 150 karakter |  | aplikasi | Nomor invoice |
-| 4 | `invoice_type` | enum |  | enum INVOICE_TYPE |  | aplikasi | Jenis invoice |
-| 5 | `invoice_date` | date | wajib |  |  | aplikasi | Tanggal invoice |
-| 6 | `due_date` | date |  |  |  | aplikasi | Jatuh tempo |
-| 7 | `amount` | money | wajib | ≥ 0 |  | aplikasi | Nilai invoice |
-| 8 | `paid_amount` | money |  | ≥ 0 | `0` | aplikasi | Nilai dibayar |
-| 9 | `payment_date` | date |  |  |  | aplikasi | Tanggal bayar |
-| 10 | `payment_receipt_number` | string |  | maks 100 karakter |  | aplikasi | Nomor bukti bayar |
-| 11 | `payment_status` | enum | wajib | enum PAYMENT_STATUS | `UNPAID` | aplikasi | Status bayar |
-| 12 | `invoice_attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran invoice |
-| 13 | `payment_attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran bukti bayar |
-| 14 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 15 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy, hanya referensi. |
-| 16 | `outstanding_legacy` | money |  |  |  | migrasi | Outstanding legacy. Nilai asli data legacy, hanya referensi. |
+| 2 | `purchase_order_id` | ref | wajib (kecuali legacy) | → PURCHASE_ORDERS.id |  | aplikasi | PO. |
+| 3 | `invoice_number` | string | wajib | maks 150 karakter |  | aplikasi | Nomor invoice. |
+| 4 | `invoice_type` | enum |  | enum INVOICE_TYPE |  | aplikasi | Jenis invoice. |
+| 5 | `invoice_date` | date | wajib |  |  | aplikasi | Tanggal invoice. |
+| 6 | `due_date` | date |  |  |  | aplikasi | Jatuh tempo. |
+| 7 | `amount` | money | wajib | ≥ 0 |  | aplikasi | Nilai invoice. |
+| 8 | `paid_amount` | money |  | ≥ 0 | `0` | aplikasi | Nilai dibayar. |
+| 9 | `payment_date` | date |  |  |  | aplikasi | Tanggal bayar. |
+| 10 | `payment_receipt_number` | string |  | maks 100 karakter |  | aplikasi | Nomor bukti bayar. |
+| 11 | `payment_status` | enum | wajib | enum PAYMENT_STATUS | `UNPAID` | aplikasi | Status bayar. |
+| 12 | `invoice_attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran invoice. |
+| 13 | `payment_attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran bukti bayar. |
+| 14 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 15 | `po_number_legacy` | string |  | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 16 | `outstanding_legacy` | money |  |  |  | migrasi | Outstanding legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 17 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 18 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 19 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 20 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 21 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 19 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 20 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 21 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 22 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 23 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 24 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 25 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 26 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 27 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 28 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 23 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 24 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 25 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 26 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 27 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 28 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 - **Unik:** invoice_number unik (tanpa spasi, huruf besar).
 - **Aturan (data baru):** due_date tidak boleh sebelum invoice_date.
@@ -658,36 +659,36 @@ ID: `POF-` · soft delete · lineage migrasi · read-only (hanya migrasi yang me
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat POF-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `purchase_order_id` | ref |  | → PURCHASE_ORDERS.id |  | aplikasi | PO |
-| 3 | `brand` | string |  | maks 150 karakter |  | aplikasi | Brand |
-| 4 | `po_date` | date |  |  |  | aplikasi | Tanggal PO |
-| 5 | `order_quantity` | quantity |  | ≥ 0 |  | aplikasi | Qty order |
-| 6 | `total_order_amount` | money |  | ≥ 0 |  | aplikasi | Total order |
-| 7 | `ppn_amount` | money |  | ≥ 0 |  | aplikasi | PPN |
-| 8 | `total_incl_ppn` | money |  | ≥ 0 |  | aplikasi | Total termasuk PPN |
-| 9 | `payment_status` | enum |  | enum PAYMENT_STATUS |  | aplikasi | Status bayar |
-| 10 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran PO |
-| 11 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
-| 12 | `po_number_legacy` | string | wajib | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy, hanya referensi. |
-| 13 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy, hanya referensi. |
-| 14 | `product_code_legacy` | string |  | maks 100 karakter |  | migrasi | Kode produk legacy. Nilai asli data legacy, hanya referensi. |
+| 2 | `purchase_order_id` | ref |  | → PURCHASE_ORDERS.id |  | aplikasi | PO. |
+| 3 | `brand` | string |  | maks 150 karakter |  | aplikasi | Brand. |
+| 4 | `po_date` | date |  |  |  | aplikasi | Tanggal PO. |
+| 5 | `order_quantity` | quantity |  | ≥ 0 |  | aplikasi | Qty order. |
+| 6 | `total_order_amount` | money |  | ≥ 0 |  | aplikasi | Total order. |
+| 7 | `ppn_amount` | money |  | ≥ 0 |  | aplikasi | PPN. |
+| 8 | `total_incl_ppn` | money |  | ≥ 0 |  | aplikasi | Total termasuk PPN. |
+| 9 | `payment_status` | enum |  | enum PAYMENT_STATUS |  | aplikasi | Status bayar. |
+| 10 | `attachment_url` | url |  | maks 2000 karakter |  | aplikasi | Lampiran PO. |
+| 11 | `notes` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
+| 12 | `po_number_legacy` | string | wajib | maks 255 karakter |  | migrasi | Nomor PO legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 13 | `product_legacy` | string |  | maks 255 karakter |  | migrasi | Produk legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 14 | `product_code_legacy` | string |  | maks 100 karakter |  | migrasi | Kode produk legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 15 | `unit_price_legacy` | decimal |  |  |  | migrasi | Harga satuan legacy. Nilai asli tanpa normalisasi (skala di sumber tidak konsisten). |
-| 16 | `delivered_qty_legacy` | quantity |  |  |  | migrasi | Qty terkirim legacy. Nilai asli data legacy, hanya referensi. |
-| 17 | `undelivered_qty_legacy` | quantity |  |  |  | migrasi | Qty belum terkirim legacy. Nilai asli data legacy, hanya referensi. |
-| 18 | `outstanding_amount_legacy` | money |  |  |  | migrasi | Outstanding (Rp) legacy. Nilai asli data legacy, hanya referensi. |
-| 19 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status legacy. Nilai asli data legacy, hanya referensi. |
+| 16 | `delivered_qty_legacy` | quantity |  |  |  | migrasi | Qty terkirim legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 17 | `undelivered_qty_legacy` | quantity |  |  |  | migrasi | Qty belum terkirim legacy. Nilai asli data legacy apa adanya, hanya referensi. |
+| 18 | `outstanding_amount_legacy` | decimal |  |  |  | migrasi | Outstanding (Rp) legacy. Nilai asli tanpa pembulatan (sumber memuat artefak desimal). |
+| 19 | `status_legacy` | string |  | maks 100 karakter |  | migrasi | Status legacy. Nilai asli data legacy apa adanya, hanya referensi. |
 | 20 | `is_active` | boolean | wajib |  | `TRUE` | arsip/pulihkan | Aktif. FALSE = diarsipkan (soft delete). Data tidak dihapus permanen. |
 | 21 | `is_legacy` | boolean | wajib |  | `FALSE` | migrasi | Data legacy. TRUE untuk record hasil migrasi data legacy (D3). |
-| 22 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy |
-| 23 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy |
-| 24 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy |
+| 22 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber legacy. |
+| 23 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber legacy. |
+| 24 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber legacy. |
 | 25 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. Asal di workbook migrasi: <file>#<SHEET>!<baris>. |
-| 26 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi |
-| 27 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi |
-| 28 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 29 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 30 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 31 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 26 | `migrated_at` | datetime |  |  |  | migrasi | Waktu migrasi. |
+| 27 | `migration_hash` | string |  | maks 64 karakter |  | migrasi | Hash sumber migrasi. |
+| 28 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 29 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 30 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 31 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.18 `MIGRATION_ISSUES` — Isu migrasi
 
@@ -698,30 +699,30 @@ ID: `MIG-` / `PRF-` · record baru hanya dari migrasi
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat MIG/PRF-XXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `severity` | enum | wajib | enum ISSUE_SEVERITY |  | migrasi | Tingkat |
-| 3 | `issue_type` | string | wajib | maks 100 karakter |  | migrasi | Jenis isu |
-| 4 | `entity_type` | string | wajib | maks 100 karakter |  | migrasi | Entitas |
-| 5 | `record_id` | string |  | maks 50 karakter |  | migrasi | ID record |
-| 6 | `field` | string |  | maks 100 karakter |  | migrasi | Kolom |
-| 7 | `value` | text |  | maks 5000 karakter |  | migrasi | Nilai |
-| 8 | `description` | text | wajib | maks 5000 karakter |  | migrasi | Deskripsi |
-| 9 | `candidate_reference` | text |  | maks 5000 karakter |  | migrasi | Kandidat |
-| 10 | `candidate_method` | string |  | maks 100 karakter |  | migrasi | Metode kandidat |
-| 11 | `evidence` | text |  | maks 5000 karakter |  | migrasi | Bukti |
-| 12 | `decision_ref` | string |  | maks 50 karakter |  | migrasi | Referensi keputusan |
-| 13 | `existing_issue_id` | string |  | maks 50 karakter |  | migrasi | ID isu workbook |
-| 14 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber |
-| 15 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber |
-| 16 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber |
-| 17 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor |
-| 18 | `resolution_status` | enum | wajib | enum RESOLUTION_STATUS | `OPEN` | aplikasi | Status penyelesaian |
-| 19 | `resolution_note` | text |  | maks 5000 karakter |  | aplikasi | Catatan penyelesaian |
-| 20 | `resolved_by` | string |  | maks 255 karakter |  | layanan server | Diselesaikan oleh |
-| 21 | `resolved_at` | datetime |  |  |  | layanan server | Diselesaikan pada |
-| 22 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada |
-| 23 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh |
-| 24 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada |
-| 25 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh |
+| 2 | `severity` | enum | wajib | enum ISSUE_SEVERITY |  | migrasi | Tingkat. |
+| 3 | `issue_type` | string | wajib | maks 100 karakter |  | migrasi | Jenis isu. |
+| 4 | `entity_type` | string | wajib | maks 100 karakter |  | migrasi | Entitas. |
+| 5 | `record_id` | string |  | maks 50 karakter |  | migrasi | ID record. |
+| 6 | `field` | string |  | maks 100 karakter |  | migrasi | Kolom. |
+| 7 | `value` | text |  | maks 5000 karakter |  | migrasi | Nilai. |
+| 8 | `description` | text | wajib | maks 5000 karakter |  | migrasi | Deskripsi. |
+| 9 | `candidate_reference` | text |  | maks 5000 karakter |  | migrasi | Kandidat. |
+| 10 | `candidate_method` | string |  | maks 100 karakter |  | migrasi | Metode kandidat. |
+| 11 | `evidence` | text |  | maks 5000 karakter |  | migrasi | Bukti. |
+| 12 | `decision_ref` | string |  | maks 50 karakter |  | migrasi | Referensi keputusan. |
+| 13 | `existing_issue_id` | string |  | maks 50 karakter |  | migrasi | ID isu workbook. |
+| 14 | `source_file` | string |  | maks 255 karakter |  | migrasi | File sumber. |
+| 15 | `source_sheet` | string |  | maks 100 karakter |  | migrasi | Sheet sumber. |
+| 16 | `legacy_row` | integer |  | ≥ 1 |  | migrasi | Baris sumber. |
+| 17 | `import_ref` | string |  | maks 255 karakter |  | migrasi | Referensi impor. |
+| 18 | `resolution_status` | enum | wajib | enum RESOLUTION_STATUS | `OPEN` | aplikasi | Status penyelesaian. |
+| 19 | `resolution_note` | text |  | maks 5000 karakter |  | aplikasi | Catatan penyelesaian. |
+| 20 | `resolved_by` | string |  | maks 255 karakter |  | layanan server | Diselesaikan oleh. |
+| 21 | `resolved_at` | datetime |  |  |  | layanan server | Diselesaikan pada. |
+| 22 | `created_at` | datetime | wajib |  |  | sistem (otomatis) | Dibuat pada. |
+| 23 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
+| 24 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
+| 25 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
 
 ### 4.19 `ENUMS` — Enum
 
@@ -731,12 +732,12 @@ dikelola sistem (bukan lewat repository umum)
 
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
-| 1 | `enum_name` | string | wajib | maks 50 karakter; harus UPPER_SNAKE_CASE |  | aplikasi | Nama enum |
-| 2 | `enum_value` | string | wajib | maks 50 karakter; harus UPPER_SNAKE_CASE |  | aplikasi | Nilai |
-| 3 | `label` | string | wajib | maks 100 karakter |  | aplikasi | Label |
-| 4 | `sort_order` | integer | wajib | ≥ 0 |  | aplikasi | Urutan |
-| 5 | `is_active` | boolean | wajib |  | `TRUE` | aplikasi | Aktif |
-| 6 | `description` | text |  | maks 500 karakter |  | aplikasi | Keterangan |
+| 1 | `enum_name` | string | wajib | maks 50 karakter; harus UPPER_SNAKE_CASE |  | aplikasi | Nama enum. |
+| 2 | `enum_value` | string | wajib | maks 50 karakter; harus UPPER_SNAKE_CASE |  | aplikasi | Nilai. |
+| 3 | `label` | string | wajib | maks 100 karakter |  | aplikasi | Label. |
+| 4 | `sort_order` | integer | wajib | ≥ 0 |  | aplikasi | Urutan. |
+| 5 | `is_active` | boolean | wajib |  | `TRUE` | aplikasi | Aktif. |
+| 6 | `description` | text |  | maks 500 karakter |  | aplikasi | Keterangan. |
 
 - **Unik:** (enum_name, enum_value) unik.
 
@@ -748,13 +749,13 @@ dikelola sistem (bukan lewat repository umum)
 
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
-| 1 | `key` | string | wajib | maks 100 karakter; harus UPPER_SNAKE_CASE |  | aplikasi | Kunci |
-| 2 | `value` | text |  | maks 5000 karakter |  | aplikasi | Nilai |
-| 3 | `value_type` | enum | wajib | enum SETTING_TYPE |  | aplikasi | Tipe nilai |
-| 4 | `description` | text |  | maks 500 karakter |  | aplikasi | Keterangan |
-| 5 | `is_system` | boolean | wajib |  | `FALSE` | aplikasi | Dikelola sistem |
-| 6 | `updated_at` | datetime | wajib |  |  | aplikasi | Diubah pada |
-| 7 | `updated_by` | string | wajib | maks 255 karakter |  | aplikasi | Diubah oleh |
+| 1 | `key` | string | wajib | maks 100 karakter; harus UPPER_SNAKE_CASE |  | aplikasi | Kunci. |
+| 2 | `value` | text |  | maks 5000 karakter |  | aplikasi | Nilai. |
+| 3 | `value_type` | enum | wajib | enum SETTING_TYPE |  | aplikasi | Tipe nilai. |
+| 4 | `description` | text |  | maks 500 karakter |  | aplikasi | Keterangan. |
+| 5 | `is_system` | boolean | wajib |  | `FALSE` | aplikasi | Dikelola sistem. |
+| 6 | `updated_at` | datetime | wajib |  |  | aplikasi | Diubah pada. |
+| 7 | `updated_by` | string | wajib | maks 255 karakter |  | aplikasi | Diubah oleh. |
 
 - **Unik:** key unik.
 
@@ -767,14 +768,14 @@ ID: `AUD-` · dikelola sistem (bukan lewat repository umum)
 | # | Kolom | Tipe | Wajib | Relasi / batasan | Default | Ditulis oleh | Catatan |
 |---:|---|---|---|---|---|---|---|
 | 1 | `id` | id | wajib | harus berformat AUD-XXXXXXXXXXXXXXXX |  | sistem (otomatis) | ID. ID permanen; tidak pernah diubah dan bukan nomor baris. |
-| 2 | `occurred_at` | datetime | wajib |  |  | aplikasi | Waktu |
-| 3 | `actor_email` | string | wajib | maks 255 karakter |  | aplikasi | Pelaku |
-| 4 | `action` | enum | wajib | enum AUDIT_ACTION |  | aplikasi | Aksi |
-| 5 | `entity_type` | string |  | maks 100 karakter |  | aplikasi | Tabel |
-| 6 | `entity_id` | string |  | maks 50 karakter |  | aplikasi | ID record |
-| 7 | `request_id` | string |  | maks 50 karakter |  | aplikasi | ID permintaan |
-| 8 | `changes_json` | json |  | maks 45000 karakter |  | aplikasi | Perubahan (JSON) |
-| 9 | `note` | text |  | maks 5000 karakter |  | aplikasi | Catatan |
+| 2 | `occurred_at` | datetime | wajib |  |  | aplikasi | Waktu. |
+| 3 | `actor_email` | string | wajib | maks 255 karakter |  | aplikasi | Pelaku. |
+| 4 | `action` | enum | wajib | enum AUDIT_ACTION |  | aplikasi | Aksi. |
+| 5 | `entity_type` | string |  | maks 100 karakter |  | aplikasi | Tabel. |
+| 6 | `entity_id` | string |  | maks 50 karakter |  | aplikasi | ID record. |
+| 7 | `request_id` | string |  | maks 50 karakter |  | aplikasi | ID permintaan. |
+| 8 | `changes_json` | json |  | maks 45000 karakter |  | aplikasi | Perubahan (JSON). |
+| 9 | `note` | text |  | maks 5000 karakter |  | aplikasi | Catatan. |
 
 ## 5. ENUMS
 
@@ -992,7 +993,7 @@ Tipe nilai SETTINGS
 | `CURRENCY` | STRING | `IDR` | tidak | Kode mata uang nilai transaksi. |
 | `DEFAULT_PAGE_SIZE` | INTEGER | `25` | tidak | Jumlah baris per halaman bawaan. |
 | `MAX_PAGE_SIZE` | INTEGER | `100` | tidak | Batas jumlah baris per halaman. |
-| `SCHEMA_VERSION` | INTEGER | `1` | ya | Versi skema database. Dikelola initializeDatabase(). |
+| `SCHEMA_VERSION` | INTEGER | `2` | ya | Versi skema database. Dikelola initializeDatabase(). |
 | `DB_INITIALIZED_AT` | DATETIME | (waktu inisialisasi) | ya | Waktu database pertama kali diinisialisasi. |
 
 Konfigurasi deployment dan rahasia tidak disimpan di sheet ini, melainkan di Script Properties

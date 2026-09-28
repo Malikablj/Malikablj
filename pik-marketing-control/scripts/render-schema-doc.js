@@ -8,7 +8,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { PROJECT_ROOT, loadGasProject } = require('../tests/helpers/load-gas');
+const { PROJECT_ROOT, loadGasProject } = require('../tools/gas-emulator/load-gas');
 
 const OUTPUT = path.join(PROJECT_ROOT, 'docs', 'DATABASE_SCHEMA.md');
 
@@ -21,6 +21,11 @@ const WRITABLE_LABEL = {
 };
 
 const escape = (text) => String(text === null || text === undefined ? '' : text).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+
+/** Joins text fragments into sentences: "Label. Note. Extra." without doubled periods. */
+function sentences(parts) {
+  return parts.filter(Boolean).map((part) => part.replace(/\.\s*$/, '')).join('. ') + '.';
+}
 
 function requiredLabel(column) {
   if (column.required) return 'wajib';
@@ -72,7 +77,7 @@ function renderSchemaDoc() {
   out('  diganti nama, atau dihapus.');
   out('- **Tata letak kolom tabel data:** `id` → kolom bisnis → `is_active` → lineage (tabel hasil migrasi:');
   out('  `is_legacy`, `source_file`, `source_sheet`, `legacy_row`, `import_ref`, `migrated_at`, `migration_hash`) →');
-  out('  `created_at`, `created_by`, `updated_at`, `updated_by`.');
+  out('  `created_at`, `created_by`, `updated_at`, `updated_by` → kolom yang ditambahkan di versi skema berikutnya (urut versi).');
   out('- **ID stabil:** `PREFIX-XXXXXXXXXX` (10 digit heksadesimal huruf besar; `AUDIT_LOG` 16 digit). Format ini sama dengan');
   out('  ID workbook sehingga ID legacy dipakai apa adanya (D12). ID dibuat dari bit acak UUID, dicek terhadap ID yang sudah');
   out('  ada, tidak pernah berasal dari nomor baris, dan tidak dapat diubah.');
@@ -133,7 +138,7 @@ function renderSchemaDoc() {
   out('## 4. Kolom per sheet');
   out();
   out('Kolom "Ditulis oleh": *aplikasi* = input pengguna melalui layanan; *sistem* = diisi repository; *layanan server* =');
-  out('hanya layanan internal; *migrasi* = hanya proses migrasi; *arsip/pulihkan* = hanya fungsi arsip/pulihkan.');
+  out('hanya layanan internal; *migrasi* = hanya proses migrasi; *arsip/pulihkan* = hanya fungsi arsip/pulihkan (proses migrasi boleh menyalin nilai sumber).');
   schema.tables.forEach((table, index) => {
     out();
     out(`### 4.${index + 1} \`${table.name}\` — ${table.label}`);
@@ -155,7 +160,8 @@ function renderSchemaDoc() {
     out('|---:|---|---|---|---|---|---|---|');
     table.columns.forEach((column, columnIndex) => {
       out(`| ${columnIndex + 1} | \`${column.name}\` | ${column.type} | ${requiredLabel(column)} | ${escape(constraintLabel(column))} | ` +
-        `${defaultLabel(column)} | ${WRITABLE_LABEL[column.writable]} | ${escape([column.label, column.note].filter(Boolean).join('. '))} |`);
+        `${defaultLabel(column)} | ${WRITABLE_LABEL[column.writable]} | ` +
+        `${escape(sentences([column.label, column.note, column.since > 1 ? `Ditambahkan di skema v${column.since}` : '']))} |`);
     });
     if (table.unique.length || table.rules.length) {
       out();

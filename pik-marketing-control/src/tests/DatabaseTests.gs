@@ -17,6 +17,7 @@ function getDatabaseTestCases_() {
     { name: 'init: sheet kosong diberi header; data tanpa header ditolak', run: testInitEmptyAndHeaderlessSheets_ },
     { name: 'init: label enum, nilai tambahan, dan nilai setting tidak ditimpa', run: testInitPreservesCustomizations_ },
     { name: 'init: SCHEMA_VERSION dinaikkan; versi database lebih baru ditolak', run: testInitSchemaVersion_ },
+    { name: 'init: upgrade skema v1 menambahkan kolom v2 di akhir tanpa menyentuh data', run: testInitUpgradeFromV1_ },
     { name: 'verify: mendeteksi ID ganda, relasi yatim, enum, tipe, kunci turunan, sheet hilang', run: testVerifyDetectsProblems_ },
     { name: 'id: format PREFIX-10HEX dan unik', run: testIdFormatAndUniqueness_ },
     { name: 'id: ID yang bentrok dengan ID tersimpan tidak dipakai', run: testIdCollisionRetry_ },
@@ -25,6 +26,7 @@ function getDatabaseTestCases_() {
     { name: 'relasi: contact/lead/baris PO/PO harus konsisten', run: testReferenceConsistency_ },
     { name: 'relasi: data legacy hanya lewat konteks migrasi', run: testLegacyRules_ },
     { name: 'relasi: nomor PO unik per customer kecuali CANCELLED', run: testPoNumberUniqueness_ },
+    { name: 'relasi: nomor PO ganda antar-data legacy diterima, PO baru tetap ditolak', run: testLegacyDuplicatePoNumbers_ },
     { name: 'relasi: satu contact utama aktif per customer', run: testPrimaryContact_ },
     { name: 'validasi: wajib isi, tipe, format, panjang, formula', run: testValidationTypes_ },
     { name: 'validasi: enum, angka, dan aturan tabel', run: testValidationEnumsNumbersRules_ },
@@ -32,8 +34,11 @@ function getDatabaseTestCases_() {
     { name: 'validasi: batch atomik (semua atau tidak sama sekali)', run: testBatchAtomic_ },
     { name: 'data: teks tetap teks (nol di depan, mirip tanggal/angka)', run: testTextRoundTrip_ },
     { name: 'data: update, konflik versi, arsip, pulihkan, daftar, audit log', run: testUpdateArchiveAudit_ },
+    { name: 'data: update batch atomik dengan audit per record', run: testUpdateMany_ },
     { name: 'data: tabel read-only, isu migrasi, dan tabel sistem', run: testReadOnlyTables_ },
     { name: 'data: SETTINGS dibaca sesuai tipe dan dilindungi', run: testSettings_ },
+    { name: 'data: kolom *_legacy menyimpan teks asli apa adanya', run: testLegacyRawText_ },
+    { name: 'data: audit ringkas MIGRATION_RUN untuk batch migrasi', run: testMigrationAuditSummary_ },
     { name: 'akses: pemilik skrip boleh menjalankan pemeliharaan', run: testMaintenanceAccess_ },
     { name: 'verify: seluruh data hasil uji lolos verifyDatabase', run: testVerifyAfterData_ }
   ];
@@ -204,8 +209,14 @@ function testSchemaColumnLayout_() {
       if (column.derive) assertEqual_(column.writable, WRITABLE.AUTO, 'kolom turunan diisi sistem ' + where);
     });
     if (table.hasId) assertEqual_(names[0], 'id', 'kolom pertama ' + table.name);
+    let lastSince = 1;
+    table.columns.forEach(function (column) {
+      assertTrue_(column.since >= lastSince && column.since <= SCHEMA_VERSION, 'urutan versi kolom ' + table.name + '.' + column.name);
+      lastSince = column.since;
+    });
+    const initialNames = table.columns.filter(function (c) { return c.since === 1; }).map(function (c) { return c.name; });
     if (table.hasAudit) {
-      assertDeepEqual_(names.slice(-4), ['created_at', 'created_by', 'updated_at', 'updated_by'], 'kolom audit ' + table.name);
+      assertDeepEqual_(initialNames.slice(-4), ['created_at', 'created_by', 'updated_at', 'updated_by'], 'kolom audit ' + table.name);
     }
     if (table.softDelete) assertTrue_(names.indexOf('is_active') !== -1, 'is_active ' + table.name);
     if (table.lineage) {
@@ -449,6 +460,22 @@ function testInitSchemaVersion_(t) {
     initializeDatabase_({ spreadsheet: spreadsheet, actor: SELF_TEST_ACTOR, tables: ['SETTINGS'] });
   }, ERROR_CODE.SCHEMA_MISMATCH, 'versi database lebih baru');
   assertEqual_(error.details.conflicts[0].code, 'SCHEMA_VERSION_NEWER', 'jenis konflik');
+}
+
+function testInitUpgradeFromV1_(t) {
+  const spreadsheet = t.fresh('upgrade');
+  const table = getTableDef_('LEADTIME');
+  const v1Columns = table.columns.filter(function (c) { return c.since === 1; }).map(function (c) { return c.name; });
+  const added = table.columns.filter(function (c) { return c.since > 1; }).map(function (c) { return c.name; });
+  assertTrue_(added.length > 0, 'LEADTIME punya kolom v2');
+  const sheet = spreadsheet.getSheets()[0];
+  sheet.setName('LEADTIME');
+  sheet.getRange(1, 1, 1, v1Columns.length).setValues([v1Columns]);
+  sheet.getRange(2, 1, 1, 2).setValues([['LT-00000000A1', 'PO-00000000A1']]);
+  const report = initializeDatabase_({ spreadsheet: spreadsheet, actor: SELF_TEST_ACTOR, tables: ['LEADTIME'] });
+  assertDeepEqual_(report.appendedColumns, { LEADTIME: added }, 'kolom v2 ditambahkan di akhir');
+  assertDeepEqual_(sheet.getRange(1, 1, 1, table.columns.length).getValues()[0], table.columnNames, 'header v2');
+  assertDeepEqual_(sheet.getRange(2, 1, 1, 2).getValues()[0], ['LT-00000000A1', 'PO-00000000A1'], 'data lama utuh');
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -722,6 +749,21 @@ function testPoNumberUniqueness_(t) {
   });
 }
 
+function testLegacyDuplicatePoNumbers_(t) {
+  t.onShared(function () {
+    const customer = makeCustomer_();
+    const number = 'UJI/LEGACY/' + uniqueTag_();
+    const legacy = { customer_id: customer.id, po_number: number, status: 'CLOSED', is_legacy: true };
+    insertOne_('PURCHASE_ORDERS', legacy, migrationCtx_());
+    const twin = insertOne_('PURCHASE_ORDERS', Object.assign({}, legacy, { status: 'ON_PROCESS' }), migrationCtx_());
+    assertEqual_(twin.po_number, number, 'duplikat legacy tetap dimigrasikan (dicatat sebagai isu)');
+    expectValidation_(function () { makePurchaseOrder_(customer.id, { po_number: number }); },
+      { field: 'po_number', code: 'UNIQUE' }, 'PO baru tidak boleh memakai nomor legacy yang sama');
+    const report = verifyDatabase_({ spreadsheet: t.shared().spreadsheet });
+    assertEqual_(report.errors.filter(function (e) { return e.code === 'UNIQUE'; }).length, 0, 'verify menerima duplikat legacy');
+  });
+}
+
 function testPrimaryContact_(t) {
   t.onShared(function () {
     const customer = makeCustomer_();
@@ -973,6 +1015,46 @@ function testUpdateArchiveAudit_(t) {
   });
 }
 
+function testUpdateMany_(t) {
+  t.onShared(function () {
+    setClockForTesting_('2026-09-28T03:00:00.000Z');
+    const tag = uniqueTag_();
+    const customers = dbInsert_('CUSTOMERS', [{ name: tag + ' A' }, { name: tag + ' B' }, { name: tag + ' C' }], testCtx_());
+    setClockForTesting_('2026-09-28T04:00:00.000Z');
+    const result = dbUpdateMany_('CUSTOMERS', [
+      { id: customers[0].id, patch: { notes: 'Batch A' } },
+      { id: customers[1].id, patch: { name: customers[1].name } },
+      { id: customers[2].id, patch: { notes: 'Batch C', industry: 'Kosmetik' } }
+    ], testCtx_({ auditNote: 'uji batch' }));
+    assertDeepEqual_(result.map(function (r) { return r.id; }), customers.map(function (c) { return c.id; }), 'urutan hasil = input');
+    assertEqual_(result[0].notes, 'Batch A', 'record pertama diubah');
+    assertEqual_(result[1].updated_at, customers[1].updated_at, 'patch tanpa perubahan tidak menulis');
+    assertEqual_(result[2].updated_at, '2026-09-28T04:00:00.000Z', 'updated_at');
+    assertEqual_(dbFindById_('CUSTOMERS', customers[2].id).industry, 'Kosmetik', 'tersimpan');
+    const audit = auditEntries_(customers[0].id);
+    assertDeepEqual_(audit.map(function (e) { return e.action; }), ['CREATE', 'UPDATE'], 'audit per record');
+    assertEqual_(audit[1].note, 'uji batch', 'catatan audit');
+    assertEqual_(auditEntries_(customers[1].id).length, 1, 'tanpa perubahan tanpa audit');
+    expectValidation_(function () {
+      dbUpdateMany_('CUSTOMERS', [
+        { id: customers[0].id, patch: { notes: 'Tidak tersimpan' } },
+        { id: customers[1].id, patch: { email: 'bukan-email' } }
+      ], testCtx_());
+    }, { field: 'email', code: 'TYPE', index: 1 }, 'satu record tidak valid menggagalkan batch');
+    assertEqual_(dbFindById_('CUSTOMERS', customers[0].id).notes, 'Batch A', 'batch gagal tidak menulis apa pun');
+    expectValidation_(function () {
+      dbUpdateMany_('CUSTOMERS', [{ id: customers[0].id, patch: { notes: 'x' } }, { id: customers[0].id, patch: { notes: 'y' } }], testCtx_());
+    }, { field: 'id', code: 'UNIQUE', index: 1 }, 'ID ganda dalam satu batch');
+    expectError_(function () { dbUpdateMany_('CUSTOMERS', [{ id: 'CUS-FFFFFFFFF2', patch: { notes: 'x' } }], testCtx_()); },
+      ERROR_CODE.NOT_FOUND, 'record tidak ada');
+    expectValidation_(function () { dbUpdateMany_('CUSTOMERS', [{ id: customers[0].id, patch: { is_active: false } }], testCtx_()); },
+      { field: 'is_active', code: 'SYSTEM_FIELD' }, 'pengguna mengarsipkan lewat dbArchive_');
+    const legacy = insertOne_('CUSTOMERS', { name: tag + ' Legacy', is_legacy: true }, migrationCtx_());
+    const copied = dbUpdateMany_('CUSTOMERS', [{ id: legacy.id, patch: { is_active: false } }], migrationCtx_())[0];
+    assertEqual_(copied.is_active, false, 'migrasi menyalin nilai is_active sumber');
+  });
+}
+
 function testReadOnlyTables_(t) {
   t.onShared(function () {
     expectError_(function () { insertOne_('PO_FINANCIALS', { po_number_legacy: 'UJI-1' }); },
@@ -1022,6 +1104,39 @@ function testSettings_(t) {
     const entries = auditEntries_('DEFAULT_PAGE_SIZE');
     assertEqual_(entries[entries.length - 1].action, 'SETTING_UPDATE', 'perubahan setting diaudit');
     updateSetting_('DEFAULT_PAGE_SIZE', '25', testCtx_());
+  });
+}
+
+function testLegacyRawText_(t) {
+  t.onShared(function () {
+    const customer = makeCustomer_();
+    const po = insertOne_('PURCHASE_ORDERS', {
+      customer_id: customer.id, po_number: '  UJI/RAW/' + uniqueTag_() + '  ', po_number_legacy: '  uji/raw  001 ',
+      status: 'CLOSED', status_legacy: 'On Proses ', is_legacy: true
+    }, migrationCtx_());
+    assertEqual_(po.po_number_legacy, '  uji/raw  001 ', 'nilai legacy apa adanya');
+    assertEqual_(po.status_legacy, 'On Proses ', 'status legacy apa adanya');
+    assertEqual_(po.po_number.indexOf(' '), -1, 'kolom bisnis di-trim');
+    const report = verifyDatabase_({ spreadsheet: t.shared().spreadsheet });
+    assertEqual_(report.errors.filter(function (e) { return e.id === po.id; }).length, 0, 'verify menerima spasi di kolom legacy');
+  });
+}
+
+function testMigrationAuditSummary_(t) {
+  t.onShared(function () {
+    const before = auditEntries_(null).length;
+    const records = dbInsert_('CUSTOMERS', [
+      { name: 'Customer Uji Migrasi A', is_legacy: true }, { name: 'Customer Uji Migrasi B', is_legacy: true }
+    ], migrationCtx_({ audit: 'summary', auditNote: 'uji paket' }));
+    const entries = auditEntries_(null);
+    assertEqual_(entries.length, before + 1, 'satu entri audit untuk seluruh batch');
+    const entry = entries[entries.length - 1];
+    assertEqual_(entry.action, 'MIGRATION_RUN', 'aksi audit migrasi');
+    assertEqual_(entry.entity_type, 'CUSTOMERS', 'tabel');
+    assertEqual_(entry.note, 'uji paket', 'catatan audit');
+    assertDeepEqual_(JSON.parse(entry.changes_json).ids, records.map(function (r) { return r.id; }), 'daftar ID');
+    const userBatch = dbInsert_('CUSTOMERS', [{ name: 'Customer Uji Biasa' }], testCtx_({ audit: 'summary' }))[0];
+    assertEqual_(auditEntries_(userBatch.id)[0].action, 'CREATE', 'mode ringkas hanya untuk konteks migrasi');
   });
 }
 

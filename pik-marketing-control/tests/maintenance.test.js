@@ -8,7 +8,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-const { loadGasProject } = require('./helpers/load-gas');
+const { loadGasProject } = require('../tools/gas-emulator/load-gas');
 
 /** Values from the vm context have another realm's prototypes; compare plain copies. */
 function plain(value) {

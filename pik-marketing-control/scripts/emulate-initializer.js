@@ -6,7 +6,7 @@
  * is used. Usage: npm run emulate:init
  */
 
-const { loadGasProject } = require('../tests/helpers/load-gas');
+const { loadGasProject } = require('../tools/gas-emulator/load-gas');
 
 const { context, env } = loadGasProject({ env: { properties: {} } });
 

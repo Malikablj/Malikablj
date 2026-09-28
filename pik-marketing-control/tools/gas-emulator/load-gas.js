@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const { createGasEnvironment } = require('../gas-emulator');
+const { createGasEnvironment } = require('./index');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 // PIK_GAS_SRC_DIR lets mutation checks run the suite against a modified copy of src/.

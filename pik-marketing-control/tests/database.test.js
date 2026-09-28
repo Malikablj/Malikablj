@@ -8,7 +8,7 @@
 const assert = require('node:assert/strict');
 const { after, test } = require('node:test');
 
-const { loadGasProject } = require('./helpers/load-gas');
+const { loadGasProject } = require('../tools/gas-emulator/load-gas');
 
 const { context } = loadGasProject();
 const runner = context.createTestRunner_();

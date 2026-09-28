@@ -18,26 +18,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { runChecks } = require('./lib/checks');
+const { analyzeWorkbook } = require('./lib/analyze');
 const { toCsv } = require('./lib/csv');
 const { ISSUE_COLUMNS, ISSUE_TYPES, SEVERITY_ORDER } = require('./lib/issues');
 const { isValidIsoDate } = require('./lib/normalize');
-const { profileSheet } = require('./lib/profile');
-const { readWorkbook, sha256, sheetToTable } = require('./lib/xlsx-reader');
 
 const MIGRATION_DIR = path.resolve(__dirname, '..');
 const DEFAULT_INPUT = path.join(MIGRATION_DIR, 'source', 'PIK_Master_Database_AppSheet.xlsx');
 const DEFAULT_OUTPUT = path.join(MIGRATION_DIR, 'reports');
-
-// Candidate natural keys tested per sheet, in addition to SourceFile+SourceSheet+LegacyRow.
-const COMPOSITE_KEYS = {
-  PRODUCTS: [{ columns: ['ProductName', 'Variant', 'ProductCode'], allowEmpty: true }],
-  PURCHASE_ORDERS: [{ columns: ['CustomerID', 'PONumber'] }],
-  PO_LINES: [{ columns: ['POID', 'ProductID'] }],
-  DELIVERIES: [{ columns: ['SJNumber', 'POID', 'ProductID'] }],
-  STOCK: [{ columns: ['SourceFile', 'SourceSheet', 'LegacyRow', 'StockType'] }],
-  ENUMS: [{ columns: ['EnumName', 'Value'] }],
-};
 
 const USAGE = 'Usage: node migration/scripts/profile-workbook.js [workbook.xlsx] [--out <dir>] [--as-of YYYY-MM-DD]';
 
@@ -111,27 +99,13 @@ function main() {
     throw new Error('Refusing to write over the source workbook.');
   }
 
-  const hashBefore = sha256(fs.readFileSync(args.input));
-  const workbook = readWorkbook(args.input);
-  const createdDate = (workbook.documentProperties.created || '').slice(0, 10);
-  const asOf = args.asOf ?? (isValidIsoDate(createdDate) ? createdDate : new Date().toISOString().slice(0, 10));
-
-  const tables = {};
-  const profiles = {};
-  for (const sheet of workbook.sheets) {
-    tables[sheet.name] = sheetToTable(sheet, workbook);
-    profiles[sheet.name] = profileSheet(tables[sheet.name], sheet, { asOf, compositeKeys: COMPOSITE_KEYS[sheet.name] });
-  }
-  const result = runChecks({ workbook, tables, profiles, asOf });
-  if (sha256(fs.readFileSync(args.input)) !== hashBefore) {
-    throw new Error('The source workbook changed while it was being profiled; results discarded.');
-  }
+  const { workbook, profiles, result, asOf, asOfSource } = analyzeWorkbook(args.input, { asOf: args.asOf });
 
   const report = {
     generatedBy: 'migration/scripts/profile-workbook.js',
     generatedAt: new Date().toISOString(),
     asOf,
-    asOfSource: args.asOf ? '--as-of' : isValidIsoDate(createdDate) ? 'tanggal pembuatan workbook' : 'hari ini',
+    asOfSource,
     input: {
       ...workbook.file,
       sha256Unchanged: true,

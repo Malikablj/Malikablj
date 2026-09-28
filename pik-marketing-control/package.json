@@ -11,6 +11,7 @@
     "emulate:init": "node scripts/emulate-initializer.js",
     "docs:schema": "node scripts/render-schema-doc.js",
     "profile": "node migration/scripts/profile-workbook.js",
+    "migrate": "node migration/scripts/migrate.js",
     "push": "clasp push",
     "pull": "clasp pull",
     "open": "clasp open-script"

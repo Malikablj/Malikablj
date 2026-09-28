@@ -67,7 +67,7 @@ function createGasEnvironment(options = {}) {
       const id = `ss-${crypto.randomUUID()}`;
       const spreadsheet = new Spreadsheet(env, id, String(name));
       env.spreadsheets.set(id, spreadsheet);
-      env.files.set(id, { id, name: String(name), trashed: false, parent: null });
+      env.files.set(id, { id, name: String(name), trashed: false, parent: null, content: null, mimeType: 'application/vnd.google-apps.spreadsheet' });
       return spreadsheet;
     },
     openById(id) {
@@ -130,29 +130,64 @@ function createGasEnvironment(options = {}) {
     getScriptTimeZone: () => env.scriptTimeZone,
   };
 
+  const DigestAlgorithm = Object.freeze({ MD5: 'MD5', SHA_1: 'SHA_1', SHA_256: 'SHA_256' });
+  const Charset = Object.freeze({ UTF_8: 'UTF_8', US_ASCII: 'US_ASCII' });
   const Utilities = {
+    DigestAlgorithm,
+    Charset,
     getUuid: () => crypto.randomUUID(),
     formatDate: (date, timeZone, pattern) => formatDate(date, timeZone, pattern),
     sleep: () => {},
+    /** Like Apps Script: returns the digest as an array of signed bytes (-128..127). */
+    computeDigest(algorithm, value, charset) {
+      const names = { MD5: 'md5', SHA_1: 'sha1', SHA_256: 'sha256' };
+      if (!names[algorithm]) throw new Error(`Emulator: unsupported digest ${algorithm}`);
+      if (charset !== undefined && charset !== Charset.UTF_8) throw new Error('Emulator: only UTF-8 is supported');
+      const input = typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.from(value.map((b) => b & 0xff));
+      return [...crypto.createHash(names[algorithm]).update(input).digest()].map((b) => (b > 127 ? b - 256 : b));
+    },
   };
 
+  const fileHandle = (file) => ({
+    getId: () => file.id,
+    getName: () => file.name,
+    getMimeType: () => file.mimeType,
+    getUrl: () => `https://drive.google.com/file/d/${file.id}/view`,
+    isTrashed: () => file.trashed,
+    setTrashed(trashed) { file.trashed = Boolean(trashed); return this; },
+    moveTo(folder) { file.parent = folder.getId(); return this; },
+    getBlob() {
+      if (file.content === null) throw new Error('Emulator: this file has no blob content');
+      return {
+        getDataAsString: (charset) => {
+          if (charset !== undefined && charset !== 'UTF-8' && charset !== Charset.UTF_8) throw new Error('Emulator: only UTF-8');
+          return file.content;
+        },
+        getBytes: () => [...Buffer.from(file.content, 'utf8')].map((b) => (b > 127 ? b - 256 : b)),
+        getName: () => file.name,
+      };
+    },
+  });
+  const createFile = (parent, name, content, mimeType) => {
+    const id = `file-${crypto.randomUUID()}`;
+    const file = { id, name: String(name), trashed: false, parent, content: String(content), mimeType: mimeType || 'text/plain' };
+    env.files.set(id, file);
+    return fileHandle(file);
+  };
   const DriveApp = {
     getFileById(id) {
       const file = env.files.get(id);
       if (!file) throw new Error('No item with the given ID could be found, or you do not have permission to access it.');
-      return {
-        getId: () => file.id,
-        getName: () => file.name,
-        isTrashed: () => file.trashed,
-        setTrashed(trashed) { file.trashed = Boolean(trashed); return this; },
-        moveTo(folder) { file.parent = folder.getId(); return this; },
-      };
+      return fileHandle(file);
     },
     getFolderById(id) {
       if (!env.folders.has(id)) throw new Error('No item with the given ID could be found, or you do not have permission to access it.');
-      return { getId: () => id };
+      return { getId: () => id, createFile: (name, content, mimeType) => createFile(id, name, content, mimeType) };
     },
+    createFile: (name, content, mimeType) => createFile(null, name, content, mimeType),
   };
+  /** Test helper: puts a text file (e.g. a migration package) into the emulated Drive and returns its id. */
+  env.addDriveFile = (name, content, mimeType = 'application/json') => createFile(null, name, content, mimeType).getId();
 
   const Logger = {
     log(message) { env.logs.push(String(message)); return Logger; },
