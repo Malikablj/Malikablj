@@ -42,6 +42,9 @@ const config = Object.freeze({
   corsOrigin: env.CORS_ORIGIN || 'http://localhost:5173',
   appTimezone: env.APP_TIMEZONE || 'Asia/Jakarta',
   trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
+  // Secure cookies need HTTPS. Defaults to on in production; set COOKIE_SECURE=0 only for a
+  // trusted intranet deployment served over plain HTTP.
+  cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === '1' || env.COOKIE_SECURE === 'true' : isProduction,
   webDistDir: path.join(projectRoot, 'apps/web/dist'),
 });
 

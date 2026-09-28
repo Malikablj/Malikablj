@@ -29,6 +29,23 @@ export function conditions() {
   };
 }
 
+/**
+ * SQL list literal for CODE CONSTANTS only (enum codes like 'OPEN'), e.g. "('OPEN','PARTIAL')".
+ * Never pass user input here; values are validated to be upper-case codes.
+ */
+export function codeList(values) {
+  if (!values.length || !values.every((value) => /^[A-Z][A-Z_]*$/.test(value))) {
+    throw new Error(`codeList accepts upper-case enum codes only: ${values}`);
+  }
+  return `(${values.map((value) => `'${value}'`).join(', ')})`;
+}
+
+/** SQL date literal for a SERVER-COMPUTED "YYYY-MM-DD" (e.g. business today). */
+export function sqlDate(isoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) throw new Error(`sqlDate expects YYYY-MM-DD, got ${isoDate}`);
+  return `DATE '${isoDate}'`;
+}
+
 /** "%text%" for ILIKE with LIKE wildcards in the user's text escaped. */
 export function likePattern(text) {
   return `%${String(text).replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
@@ -51,11 +68,12 @@ export function orderBy(sort, allowed, fallback, tiebreaker) {
 }
 
 /**
- * Runs a paged list query plus a count with the same FROM/WHERE.
- * `from` must not multiply rows (aggregate one-to-many joins in subqueries instead).
+ * Runs a paged list query plus a count with the same WHERE.
+ * `from` must not multiply rows (aggregate one-to-many joins in subqueries instead);
+ * `countFrom` may omit joins that only add display columns.
  */
-export async function findPage({ select, from, where, params, order, page, pageSize, db }) {
-  const countResult = await query(`SELECT count(*)::int AS total ${from} ${where}`, params, db);
+export async function findPage({ select, from, countFrom = from, where, params, order, page, pageSize, db }) {
+  const countResult = await query(`SELECT count(*)::int AS total ${countFrom} ${where}`, params, db);
   const total = countResult.rows[0].total;
   const next = params.length + 1;
   const rowsResult = await query(
@@ -82,12 +100,28 @@ export function updateAssignments(values, writable, startIndex = 1) {
   };
 }
 
-/** Builds "(col1, col2) VALUES ($1, $2)" for the keys of `values` that appear in `writable`. */
-export function insertColumns(values, writable) {
+/** Inserts the writable keys of `values`, stamping created_by/updated_by. Returns the new id. */
+export async function insertRow(table, values, writable, actorId, db) {
   const columns = writable.filter((column) => values[column] !== undefined);
-  return {
-    columns: columns.join(', '),
-    placeholders: columns.map((_, i) => `$${i + 1}`).join(', '),
-    params: columns.map((column) => values[column]),
-  };
+  const params = columns.map((column) => values[column]);
+  const actor = `$${params.length + 1}`;
+  const { rows } = await query(
+    `INSERT INTO ${table} (${[...columns, 'created_by', 'updated_by'].join(', ')})
+     VALUES (${[...params.map((_, i) => `$${i + 1}`), actor, actor].join(', ')}) RETURNING id`,
+    [...params, actorId],
+    db,
+  );
+  return rows[0].id;
+}
+
+/** Updates the writable keys of `values` (undefined = unchanged), stamping updated_by. */
+export async function updateRow(table, id, values, writable, actorId, db) {
+  const assignments = updateAssignments(values, writable);
+  if (!assignments) return;
+  const n = assignments.params.length;
+  await query(
+    `UPDATE ${table} SET ${assignments.sql}, updated_by = $${n + 1} WHERE id = $${n + 2}`,
+    [...assignments.params, actorId, id],
+    db,
+  );
 }

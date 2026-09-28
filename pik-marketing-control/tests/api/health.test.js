@@ -16,10 +16,10 @@ describe('GET /api/health', () => {
     expect(res.body.data.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('answers unknown API routes with the standard error envelope', async () => {
+  it('does not reveal API routes to anonymous callers', async () => {
     const res = await request(app).get('/api/does-not-exist');
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ success: false, error: { code: 'NOT_FOUND', message: 'Endpoint tidak ditemukan.' } });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ success: false, error: { code: 'UNAUTHORIZED', message: 'Silakan login terlebih dahulu.' } });
   });
 
   it('rejects state-changing requests without the CSRF header', async () => {

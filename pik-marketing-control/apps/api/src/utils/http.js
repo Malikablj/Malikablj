@@ -6,8 +6,10 @@ export function sendOk(res, data, meta) {
   return res.status(200).json(body);
 }
 
-export function sendCreated(res, data) {
-  return res.status(201).json({ success: true, data });
+export function sendCreated(res, data, meta) {
+  const body = { success: true, data };
+  if (meta) body.meta = meta;
+  return res.status(201).json(body);
 }
 
 /** Sends CSV as a download. Content is already escaped by utils/csv.js. */
