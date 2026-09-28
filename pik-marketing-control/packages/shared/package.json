@@ -1,0 +1,14 @@
+{
+  "name": "@pik/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Contracts shared by the API and the web app: enums, permission matrix, workflow rules and validation schemas",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  }
+}

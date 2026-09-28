@@ -1,0 +1,29 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Environment and secrets - never commit
+.env
+.env.*
+!.env.example
+
+# Business data: the source workbook, generated migration reports and
+# database backups contain customer/PO data and must not enter git.
+migration/source/*
+!migration/source/.gitkeep
+migration/reports/*
+!migration/reports/.gitkeep
+migration/backups/*
+!migration/backups/.gitkeep
+
+# Test artifacts
+test-results/
+playwright-report/
+tests/e2e/.auth/
+
+# Editor / OS
+.DS_Store
+*.log
+.vscode/
+.idea/

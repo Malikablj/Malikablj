@@ -1,0 +1,51 @@
+{
+  "name": "pik-marketing-control",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PIK Marketing Control - internal CRM, purchase order and delivery control for PT Permata Indo Kemas",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22"
+  },
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,magenta \"npm run dev -w @pik/api\" \"npm run dev -w @pik/web\"",
+    "build": "npm run build -w @pik/web && npm run build -w @pik/api",
+    "start": "npm run start -w @pik/api",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:setup": "node database/scripts/setup-database.js",
+    "db:seed": "node database/scripts/seed-admin.js",
+    "migrate:profile": "node migration/scripts/profile-workbook.js",
+    "migrate:dry": "node migration/scripts/import-workbook.js --dry-run",
+    "migrate": "node migration/scripts/import-workbook.js --apply",
+    "migrate:verify": "node migration/scripts/verify-migration.js"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.4",
+    "exceljs": "^4.4.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.56.1",
+    "concurrently": "^10.0.5",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.12.0",
+    "supertest": "^7.3.0",
+    "vitest": "^5.0.2"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
+  }
+}
