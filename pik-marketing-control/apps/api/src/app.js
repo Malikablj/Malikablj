@@ -18,13 +18,18 @@ export function createApp() {
   app.disable('x-powered-by');
   if (config.trustProxy) app.set('trust proxy', 1);
 
+  // HTTPS-only headers are sent only when the app is served over HTTPS (COOKIE_SECURE). On a
+  // plain-HTTP intranet host, upgrade-insecure-requests would make browsers request the app's
+  // own scripts over HTTPS and the page would not load.
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
           'img-src': ["'self'", 'data:'],
+          'upgrade-insecure-requests': config.cookieSecure ? [] : null,
         },
       },
+      strictTransportSecurity: config.cookieSecure,
     }),
   );
   app.use(

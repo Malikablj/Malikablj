@@ -3,6 +3,7 @@
  * detection, relationships (FKs, ambiguity, unresolved), lineage, business calculations,
  * dry-run isolation, re-run idempotency and protection of records edited in the app.
  */
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -289,6 +290,19 @@ describe('apply', () => {
     expect(reconcile.detail).toContain('1/4 berbeda');
     const financials = result.checks.find((check) => check.name.startsWith('Reconcile po_financials'));
     expect(financials).toMatchObject({ status: 'PASS' });
+  });
+
+  it('passes the same verification through the CLI in a fresh process', () => {
+    // A separate process has no API modules loaded, so this catches type-parsing differences
+    // (e.g. count(*) arriving as a string) that an in-process test cannot see.
+    const result = spawnSync(
+      process.execPath,
+      ['migration/scripts/verify-migration.js', '--file', workbookPath, '--mapping', 'tests/migration/fixtures/fixture.mapping.js'],
+      { cwd: path.resolve(import.meta.dirname, '../..'), env: { ...process.env, DATABASE_URL: databaseUrl }, encoding: 'utf8' },
+    );
+    expect(result.stdout).not.toContain('[FAIL]');
+    expect(result.stdout).toContain('Verification: WARN');
+    expect(result.status).toBe(0);
   });
 });
 

@@ -10,8 +10,8 @@
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import pg from 'pg';
 import { ENTITIES } from './entities.js';
+import pg from './pg.js';
 import { parseNumber } from './values.js';
 
 const IMPORTED = ['inserted', 'updated', 'unchanged', 'skipped_modified_in_app'];

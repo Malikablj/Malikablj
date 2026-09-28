@@ -18,8 +18,8 @@ migration/
 | `npm run migrate` | backup, then import as one transaction → reports | yes |
 | `npm run migrate:verify` | row counts, lineage, stale records, reconciliation | no |
 
-Options (after `--`): `--file <xlsx>`, `--mapping <js>`, `--no-samples` (profile),
-`--no-backup` and `--allow-provisional` (apply; never for production data).
+Options (after `--`): `--file <xlsx>`, `--mapping <js>`, `--out <md>` and `--no-samples`
+(profile), `--no-backup` and `--allow-provisional` (apply; never for production data).
 
 Rules of the road:
 

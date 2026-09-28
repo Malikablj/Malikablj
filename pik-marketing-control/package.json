@@ -21,7 +21,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:setup": "node database/scripts/setup-database.js",
-    "db:seed": "node database/scripts/seed-admin.js",
+    "db:seed": "node database/seeds/seed-admin.js",
     "migrate:profile": "node migration/scripts/profile-workbook.js",
     "migrate:dry": "node migration/scripts/import-workbook.js --dry-run",
     "migrate": "node migration/scripts/import-workbook.js --apply",

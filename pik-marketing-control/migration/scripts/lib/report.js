@@ -28,8 +28,8 @@ export function issuesToCsv(issues) {
 
 export function writeReports(reportsDir, summary, issues) {
   fs.mkdirSync(reportsDir, { recursive: true });
-  const summaryPath = path.join(reportsDir, 'migration-summary.json');
-  const issuesPath = path.join(reportsDir, 'migration-issues.csv');
+  const summaryPath = path.join(reportsDir, 'migration_summary.json');
+  const issuesPath = path.join(reportsDir, 'migration_issues.csv');
   fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
   fs.writeFileSync(issuesPath, issuesToCsv(issues));
   return { summaryPath, issuesPath };

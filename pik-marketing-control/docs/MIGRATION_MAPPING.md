@@ -18,7 +18,7 @@ workbook (read-only)
   → npm run migrate:profile   profile sheets/columns → docs/DATA_PROFILE.md
   → edit mapping              real sheet/column names, value maps, formats → status VERIFIED
   → npm run migrate:dry       full import inside a transaction that is ROLLED BACK
-  → review migration/reports/ migration-summary.json + migration-issues.csv
+  → review migration/reports/ migration_summary.json + migration_issues.csv
   → npm run migrate           pg_dump backup, then the same import COMMITTED as one transaction
   → npm run migrate:verify    independent checks against the database
   → resolve issues            Pengaturan → Migration Issues (in the app)

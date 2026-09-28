@@ -81,7 +81,7 @@ export async function board(filters, perStatus = 50) {
        ${SELECT},
          row_number() OVER (PARTITION BY l.status ORDER BY l.updated_at DESC, l.id) AS position,
          count(*) OVER (PARTITION BY l.status) AS status_count,
-         sum(l.estimated_value) OVER (PARTITION BY l.status) AS status_value
+         coalesce(sum(l.estimated_value) OVER (PARTITION BY l.status), 0) AS status_value
        ${FROM} ${w.sql()}
      ) ranked WHERE position <= ${limit}`,
     w.params,

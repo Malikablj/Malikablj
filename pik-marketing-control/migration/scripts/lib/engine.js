@@ -11,7 +11,6 @@
  * unexpected constraint violation becomes an ERROR issue instead of aborting the migration.
  * Rows are never dropped silently: every row is imported or reported.
  */
-import pg from 'pg';
 import { ENTITIES } from './entities.js';
 import { fieldSpec, validateMapping } from './gate.js';
 import { IssueCollector } from './issues.js';
@@ -28,10 +27,7 @@ import {
   parseTime,
 } from './values.js';
 import { readWorkbook, toSourceData } from './workbook.js';
-
-pg.types.setTypeParser(1082, (value) => value);
-pg.types.setTypeParser(1700, (value) => (value === null ? null : Number(value)));
-pg.types.setTypeParser(20, (value) => (value === null ? null : Number(value)));
+import pg from './pg.js';
 
 function parseField(raw, definition, spec, formats, timeZone) {
   switch (definition.type) {

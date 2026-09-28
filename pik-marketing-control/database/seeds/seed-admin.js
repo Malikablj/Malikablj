@@ -6,7 +6,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { hashPassword } from '../../apps/api/src/utils/password.js';
-import { connect, loadEnv } from './lib/database.js';
+import { connect, loadEnv } from '../scripts/lib/database.js';
 
 loadEnv();
 const url = process.env.DATABASE_URL;

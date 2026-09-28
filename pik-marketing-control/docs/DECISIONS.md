@@ -141,3 +141,41 @@ Indonesian locale, open via *Data → From Text/CSV* if columns do not split.
 
 ### 2026-09-28: Business data never enters git
 `migration/source/*`, `migration/reports/*`, `migration/backups/*` and `.env` are git-ignored.
+
+### 2026-09-28: Login rate limiting in memory
+10 failed logins per account+IP and 100 per IP within 15 minutes. · The app runs as one process
+(see "One deployable unit"), so an in-memory counter is exact and needs no extra service; it
+resets on restart. · If the app is ever scaled to several processes, move the counters to
+PostgreSQL or the reverse proxy. · Alternative: a Redis-backed limiter (extra infrastructure).
+
+### 2026-09-28: HTTPS-only headers follow `COOKIE_SECURE`
+HSTS and the CSP directive `upgrade-insecure-requests` are sent only when the app is served
+over HTTPS (`COOKIE_SECURE`, on by default in production). · On a plain-HTTP intranet host the
+browser would otherwise request the app's own scripts over HTTPS and show a blank page.
+· Alternative: always send them (breaks the documented intranet option).
+
+### 2026-09-28: `GET /api/auth/session` for the web app's session check
+Returns `{ user }` or `{ user: null }` with status 200; `GET /api/auth/me` keeps answering 401
+without a session. · A 401 on every visit to the login page is logged by browsers as a console
+error; the dedicated check keeps the console clean without weakening `/auth/me`.
+
+### 2026-09-28: Reports describe themselves
+Each report definition declares its SQL, filters, column types, enum labels and totals;
+`GET /api/reports` lists the reports a role may open. · The reports screen renders any report
+generically and the CSV uses the same labels, so adding a report is a server-only change.
+
+### 2026-09-28: Frontend without a UI framework
+React Router, a small in-house component kit on CSS design tokens, native `<dialog>` for modals
+and `lucide-react` icons. · The specification asks for a minimal, quiet interface and no large
+UI framework; native dialogs give focus trapping and Esc handling for free. Filters live in the
+URL (shareable, survive reloads); data hooks derive loading state instead of setting state in
+effects (React Compiler lint rules).
+
+### 2026-09-28: Lead Kanban shows up to 50 cards per stage
+Each column shows the count and value of all its leads but renders the 50 most recently updated;
+a link opens the full list filtered to that stage. · Keeps the board fast with years of leads.
+
+### 2026-09-28: E2E tests run the production build in production mode
+Playwright starts the API with `NODE_ENV=production` serving the built web app, against an
+`_e2e` database recreated on every run and seeded through the public API. · This tests what is
+deployed (production React build, production config) and caught issues a dev server hides.

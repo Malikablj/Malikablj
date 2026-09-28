@@ -1,5 +1,9 @@
 # NPD Project Control (Python)
 
+> **Also in this repository:** [`pik-marketing-control/`](pik-marketing-control/README.md), the
+> PIK Marketing Control app (React + Node.js + PostgreSQL), which is self-contained in its own
+> folder. The NPD app described below is unchanged.
+
 Aplikasi web internal untuk memantau project **New Product Development** — tipe **New Mold** dan **Subcont** —
 dari request sampai project selesai (PRD v2.1). Semua kode ditulis dengan **Python** (Flask) dan
 halaman HTML dirender di server, jadi tidak ada JavaScript yang perlu dipelajari.

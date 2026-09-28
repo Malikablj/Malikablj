@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
@@ -26,5 +28,35 @@ describe('GET /api/health', () => {
     const res = await request(app).post('/api/anything').send({});
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('CSRF_REJECTED');
+  });
+});
+
+describe('security headers', () => {
+  it('does not force HTTPS when the app is served over plain HTTP (COOKIE_SECURE off)', async () => {
+    const res = await request(app).get('/api/health');
+    expect(res.headers['content-security-policy']).toContain("script-src 'self'");
+    expect(res.headers['content-security-policy']).not.toContain('upgrade-insecure-requests');
+    expect(res.headers['strict-transport-security']).toBeUndefined();
+  });
+
+  it('adds HSTS and upgrade-insecure-requests when served over HTTPS (COOKIE_SECURE=1)', () => {
+    // Configuration is read once at start-up, so this runs the app in a separate process.
+    const script = `
+      const { createApp } = await import('./apps/api/src/app.js');
+      const server = createApp().listen(0, '127.0.0.1');
+      await new Promise((resolve) => server.once('listening', resolve));
+      const res = await fetch('http://127.0.0.1:' + server.address().port + '/api/does-not-exist');
+      console.log(JSON.stringify({ csp: res.headers.get('content-security-policy'), hsts: res.headers.get('strict-transport-security') }));
+      process.exit(0);
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: path.resolve(import.meta.dirname, '../..'),
+      env: { ...process.env, COOKIE_SECURE: '1' },
+      encoding: 'utf8',
+    });
+    expect(result.stderr).toBe('');
+    const headers = JSON.parse(result.stdout.trim().split('\n').pop());
+    expect(headers.csp).toContain('upgrade-insecure-requests');
+    expect(headers.hsts).toContain('max-age=');
   });
 });
