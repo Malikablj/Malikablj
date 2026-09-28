@@ -52,7 +52,9 @@ async function visit(page, url, name) {
   expect(overflow, `horizontal overflow on ${url}`).toBeLessThanOrEqual(0);
   if (SCREENSHOT_DIR) {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`), fullPage: true });
+    // Phones: the visible screen (a full-page capture would draw the fixed bottom menu mid-page).
+    const phone = (page.viewportSize()?.width ?? PHONE.width) <= PHONE.width;
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`), fullPage: !phone });
   }
 }
 
