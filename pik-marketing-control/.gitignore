@@ -1,0 +1,20 @@
+# Data bisnis PIK bersifat rahasia: workbook sumber dan laporan hasil profiling/migrasi tidak boleh di-commit.
+migration/source/*
+!migration/source/README.md
+migration/reports/*
+!migration/reports/README.md
+
+# Dokumen Phase 01 memuat data bisnis PIK (nama customer, nomor PO/SJ/invoice, nilai rupiah).
+# Ditahan selama repositori ini publik — hapus baris-baris ini setelah keputusan D2 (repositori privat).
+docs/DATA_PROFILE.md
+docs/MIGRATION_MAPPING.md
+docs/MIGRATION_ISSUES.md
+docs/IMPLEMENTATION_PLAN.md
+
+# Tooling
+node_modules/
+.clasp.json
+.clasprc.json
+.env
+.DS_Store
+*.log
