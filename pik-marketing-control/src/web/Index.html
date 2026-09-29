@@ -3,10 +3,19 @@
   <head>
     <base target="_top">
     <meta charset="UTF-8">
+    <meta name="color-scheme" content="light">
     <?!= include_('web/Styles'); ?>
   </head>
   <body>
-    <div id="app"><div class="loading">PIK Marketing Control</div></div>
-    <?!= include_('web/JavaScript'); ?>
+    <div id="loading-bar" class="loading-bar" aria-hidden="true"></div>
+    <div id="app" aria-live="polite"><div class="boot">PIK Marketing Control</div></div>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <?!= include_('web/JsCore'); ?>
+    <?!= include_('web/JsComponents'); ?>
+    <?!= include_('web/JsForms'); ?>
+    <?!= include_('web/JsViewsCrm'); ?>
+    <?!= include_('web/JsViewsOps'); ?>
+    <?!= include_('web/JsViewsAdmin'); ?>
+    <?!= include_('web/JsApp'); ?>
   </body>
 </html>

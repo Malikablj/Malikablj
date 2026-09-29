@@ -1,0 +1,466 @@
+<script>
+  /*
+   * Create/edit forms per entity, shared by every screen that offers the action (list pages, the customer workspace,
+   * the PO detail, quick actions). Each opener takes the record (or preset values) and a callback run after saving.
+   * Labels, required flags and limits come from the schema metadata sent with the session.
+   */
+  (function (PIK) {
+    'use strict';
+    var h = PIK.h;
+    var ui = PIK.ui;
+    var fmt = PIK.fmt;
+
+    function me() { return PIK.session.user; }
+    function nowIso() { return new Date().toISOString(); }
+    function stripUndefined(values) {
+      var out = {};
+      Object.keys(values).forEach(function (k) { if (values[k] !== undefined) out[k] = values[k]; });
+      return out;
+    }
+    /** Saves that change follow-ups refresh the notification badge right away (it is otherwise polled). */
+    function followUpsChanged(onSaved) {
+      return function (result) {
+        if (PIK.notifyChanged) PIK.notifyChanged();
+        if (onSaved) onSaved(result);
+      };
+    }
+    function updatePayload(record, values) {
+      return { id: record.id, expectedUpdatedAt: record.updated_at, data: stripUndefined(values) };
+    }
+
+    var forms = {};
+
+    // ------------------------------------------------------------------------------------------ Customer
+    forms.customer = function (record, onSaved) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : { status: 'ACTIVE', owner_user_id: me().id, owner_name: me().name };
+      return ui.openForm({
+        title: editing ? 'Ubah customer' : 'Customer baru', table: 'CUSTOMERS', values: values,
+        fields: [
+          { name: 'name', span: true }, 'customer_code', 'status', 'industry',
+          { name: 'owner_user_id', picker: 'users', pickerLabel: values.owner_name || '' },
+          { section: 'Kontak perusahaan' }, 'phone', 'email', { name: 'website', placeholder: 'https://' }, { name: 'address', multiline: true },
+          { name: 'notes', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'customers.update' : 'customers.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Customer diperbarui.' : 'Customer ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Contact
+    forms.contact = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ is_primary: false }, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah contact' : 'Contact baru', table: 'CONTACTS', values: values,
+        fields: [
+          { name: 'customer_id', picker: 'customers', pickerLabel: values.customer_name || '', span: true, disabled: Boolean(preset && preset.customer_id) || editing },
+          'name', 'position', 'phone', 'whatsapp', 'email',
+          { name: 'is_primary', type: 'boolean', checkLabel: 'Jadikan contact utama customer ini', span: true,
+            hint: 'Contact utama sebelumnya otomatis menjadi contact biasa.' },
+          { name: 'notes', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'contacts.update' : 'contacts.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Contact diperbarui.' : 'Contact ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Lead
+    forms.lead = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ status: 'NEW', owner_user_id: me().id, owner_name: me().name }, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah lead' : 'Lead baru', table: 'LEADS', values: values,
+        fields: [
+          { name: 'name', span: true, placeholder: 'mis. Botol serum 30 ml untuk lini baru' },
+          { name: 'customer_id', picker: 'customers', pickerLabel: values.customer_name || '',
+            onChange: function (id, form) { form.setParams('contact_id', { customer_id: id }); form.setValue('contact_id', null, ''); } },
+          { name: 'contact_id', picker: 'contacts', pickerLabel: values.contact_name || '', pickerParams: { customer_id: values.customer_id || null } },
+          'status', 'priority',
+          'estimated_quantity', 'estimated_value', 'expected_closing_date',
+          { name: 'owner_user_id', picker: 'users', pickerLabel: values.owner_name || '' },
+          { name: 'product_id', picker: 'products', pickerLabel: values.product_label || '' }, 'product_interest', 'source',
+          { name: 'notes', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'leads.update' : 'leads.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Lead diperbarui.' : 'Lead ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Activity (+ next follow-up)
+    forms.activity = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ owner_user_id: me().id, owner_name: me().name, activity_at: nowIso(), type: 'WHATSAPP' }, preset || {});
+      var fields = [
+        { name: 'customer_id', picker: 'customers', pickerLabel: values.customer_name || '', required: true,
+          onChange: function (id, form) {
+            form.setParams('lead_id', { customer_id: id }); form.setValue('lead_id', null, '');
+            form.setParams('contact_id', { customer_id: id }); form.setValue('contact_id', null, '');
+          } },
+        'type', 'activity_at',
+        { name: 'subject', span: true, placeholder: 'mis. Kirim penawaran harga botol 30 ml' },
+        { name: 'description', multiline: true },
+        { name: 'lead_id', picker: 'leads', pickerLabel: values.lead_name || '', pickerParams: { customer_id: values.customer_id || null } },
+        { name: 'contact_id', picker: 'contacts', pickerLabel: values.contact_name || '', pickerParams: { customer_id: values.customer_id || null } },
+        { name: 'owner_user_id', picker: 'users', pickerLabel: values.owner_name || '' },
+        { name: 'attachment_url', placeholder: 'https://drive.google.com/…' }
+      ];
+      if (!editing) {
+        fields = fields.concat([
+          { section: 'Tindak lanjut' },
+          { name: 'next_enabled', type: 'boolean', checkLabel: 'Jadwalkan follow-up berikutnya', span: true,
+            onChange: function (on, form) { ['next_date', 'next_time', 'next_purpose', 'next_priority'].forEach(function (n) { form.setVisible(n, on); }); } },
+          { name: 'next_date', label: 'Tanggal follow-up', type: 'date', required: true, visible: function () { return false; } },
+          { name: 'next_time', label: 'Jam', type: 'time', visible: function () { return false; } },
+          { name: 'next_purpose', label: 'Tujuan follow-up', type: 'string', span: true, visible: function () { return false; } },
+          { name: 'next_priority', label: 'Prioritas', type: 'enum', enumName: 'PRIORITY', visible: function () { return false; } }
+        ]);
+      }
+      return ui.openForm({
+        title: editing ? 'Ubah aktivitas' : 'Catat aktivitas', table: 'ACTIVITIES', values: values, fields: fields,
+        submit: function (v) {
+          if (editing) return PIK.api('activities.update', updatePayload(record, v));
+          var payload = { data: stripUndefined({
+            customer_id: v.customer_id, type: v.type, activity_at: v.activity_at, subject: v.subject, description: v.description,
+            lead_id: v.lead_id, contact_id: v.contact_id, owner_user_id: v.owner_user_id, attachment_url: v.attachment_url
+          }) };
+          if (v.next_enabled) payload.followUp = stripUndefined({ follow_up_date: v.next_date, follow_up_time: v.next_time, purpose: v.next_purpose, priority: v.next_priority });
+          return PIK.api('activities.create', payload);
+        },
+        successMessage: editing ? 'Aktivitas diperbarui.' : 'Aktivitas dicatat.',
+        onSaved: followUpsChanged(onSaved)
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Follow-up
+    forms.followUp = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ owner_user_id: me().id, owner_name: me().name, follow_up_date: PIK.today(), priority: 'MEDIUM' }, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah follow-up' : 'Follow-up baru', table: 'FOLLOW_UP', values: values,
+        fields: [
+          { name: 'customer_id', picker: 'customers', pickerLabel: values.customer_name || '', required: true,
+            onChange: function (id, form) { form.setParams('lead_id', { customer_id: id }); form.setValue('lead_id', null, ''); } },
+          { name: 'lead_id', picker: 'leads', pickerLabel: values.lead_name || '', pickerParams: { customer_id: values.customer_id || null } },
+          'follow_up_date', 'follow_up_time', 'type', 'priority',
+          { name: 'purpose', span: true, placeholder: 'mis. Konfirmasi sampel dan jadwal produksi' },
+          { name: 'owner_user_id', picker: 'users', pickerLabel: values.owner_name || '' },
+          { name: 'notes', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'followUps.update' : 'followUps.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Follow-up diperbarui.' : 'Follow-up dijadwalkan.',
+        onSaved: followUpsChanged(onSaved)
+      });
+    };
+
+    forms.completeFollowUp = function (record, onSaved) {
+      return ui.openForm({
+        title: 'Selesaikan follow-up', subtitle: record.purpose || record.customer_name, table: 'FOLLOW_UP', values: { result: record.result },
+        submitLabel: 'Tandai selesai',
+        fields: [
+          { name: 'result', label: 'Hasil follow-up', multiline: true, required: true, placeholder: 'Apa hasil pembicaraan dengan customer?' },
+          { section: 'Berikutnya' },
+          { name: 'next_enabled', type: 'boolean', checkLabel: 'Jadwalkan follow-up berikutnya', span: true,
+            onChange: function (on, form) { ['next_date', 'next_time', 'next_purpose'].forEach(function (n) { form.setVisible(n, on); }); } },
+          { name: 'next_date', label: 'Tanggal', type: 'date', required: true, visible: function () { return false; } },
+          { name: 'next_time', label: 'Jam', type: 'time', visible: function () { return false; } },
+          { name: 'next_purpose', label: 'Tujuan', type: 'string', span: true, visible: function () { return false; } }
+        ],
+        submit: function (v) {
+          var payload = { id: record.id, expectedUpdatedAt: record.updated_at, result: v.result };
+          if (v.next_enabled) payload.next = stripUndefined({ follow_up_date: v.next_date, follow_up_time: v.next_time, purpose: v.next_purpose });
+          return PIK.api('followUps.complete', payload);
+        },
+        successMessage: 'Follow-up selesai.',
+        onSaved: followUpsChanged(onSaved)
+      });
+    };
+
+    forms.rescheduleFollowUp = function (record, onSaved) {
+      return ui.openForm({
+        title: 'Jadwalkan ulang', subtitle: record.purpose || record.customer_name, table: 'FOLLOW_UP',
+        values: { follow_up_date: PIK.addDays(PIK.today(), 1), follow_up_time: record.follow_up_time, notes: record.notes },
+        submitLabel: 'Jadwalkan ulang',
+        fields: [
+          { name: 'follow_up_date', label: 'Tanggal baru', required: true,
+            validate: function (value) { return value < PIK.today() ? 'Tanggal baru tidak boleh sebelum hari ini.' : null; } },
+          'follow_up_time', { name: 'notes', label: 'Alasan / catatan', multiline: true }
+        ],
+        submit: function (v) { return PIK.api('followUps.reschedule', Object.assign({ id: record.id, expectedUpdatedAt: record.updated_at }, v)); },
+        successMessage: 'Follow-up dijadwalkan ulang.',
+        onSaved: followUpsChanged(onSaved)
+      });
+    };
+
+    forms.cancelFollowUp = function (record, onDone) {
+      return PIK.confirm({ title: 'Batalkan follow-up?', message: 'Follow-up ditandai Cancelled dan tidak lagi muncul di daftar kerja.', confirmLabel: 'Batalkan follow-up', danger: true })
+        .then(function (ok) {
+          if (!ok) return;
+          return PIK.api('followUps.cancel', { id: record.id, expectedUpdatedAt: record.updated_at }).then(function () {
+            PIK.toast.success('Follow-up dibatalkan.');
+            if (PIK.notifyChanged) PIK.notifyChanged();
+            if (onDone) onDone();
+          }).catch(function (error) { PIK.toast.error(error.message); });
+        });
+    };
+
+    // ------------------------------------------------------------------------------------------ Purchase order
+    /** New PO: header + lines in one save (the server writes both or neither). */
+    forms.purchaseOrder = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ po_date: PIK.today(), owner_user_id: me().id, owner_name: me().name }, preset || {});
+      var lines = [];
+      var linesHost = h('div.stack-sm');
+      var lineErrors = h('div');
+      function addLine(line) {
+        var row = {};
+        var product = ui.picker({ action: 'products.options', placeholder: 'Pilih produk…', onChange: function (id, option) { row.product = id; row.productUnit = option ? option.sublabel : null; } });
+        var qty = h('input.input.num', { type: 'text', inputmode: 'decimal', placeholder: 'Qty', 'aria-label': 'Qty order' });
+        var unit = h('input.input', { type: 'text', placeholder: 'Satuan', 'aria-label': 'Satuan', maxlength: 50 });
+        var price = h('input.input.num', { type: 'text', inputmode: 'decimal', placeholder: 'Harga satuan', 'aria-label': 'Harga satuan' });
+        var remove = h('button.btn.btn-quiet.btn-sm', { type: 'button', 'aria-label': 'Hapus baris' }, PIK.icon('close', 'icon-sm'));
+        var el = h('div.card', { style: { padding: '12px', boxShadow: 'none', border: '1px solid var(--color-hairline)', borderRadius: '12px' } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: '8px', alignItems: 'start' } }, product.element, remove),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: '8px', marginTop: '8px' } }, qty, unit, price),
+          h('div.field-error', { hidden: true }));
+        row.el = el;
+        row.values = function () {
+          return { product_id: product.getValue(), order_quantity: ui.parseNumber(qty.value), unit: unit.value.trim() || null, unit_price: ui.parseNumber(price.value) };
+        };
+        remove.addEventListener('click', function () { lines = lines.filter(function (l) { return l !== row; }); el.remove(); });
+        lines.push(row);
+        linesHost.appendChild(el);
+        if (line) product.setValue(line.product_id, line.product_label);
+      }
+      var extra = null;
+      if (!editing) {
+        extra = h('div.stack-sm', h('div.form-section', 'Item PO'), linesHost, lineErrors,
+          h('div', h('button.btn.btn-sm', { type: 'button', onClick: function () { addLine(); } }, PIK.icon('plus', 'icon-sm'), 'Tambah item')));
+        addLine();
+      }
+      var fields = [
+        { name: 'customer_id', picker: 'customers', pickerLabel: values.customer_name || '', required: true, disabled: Boolean(preset && preset.customer_id) },
+        { name: 'po_number', required: true }, 'po_date', 'expected_delivery_date'
+      ];
+      if (editing) fields.push('status');
+      fields = fields.concat(['payment_term', { name: 'owner_user_id', picker: 'users', pickerLabel: values.owner_name || '' }, { name: 'notes', multiline: true }]);
+      return ui.openForm({
+        title: editing ? 'Ubah PO' : 'Purchase order baru', table: 'PURCHASE_ORDERS', values: values, wide: !editing, fields: fields, extra: extra,
+        submit: function (v) {
+          if (editing) return PIK.api('purchaseOrders.update', updatePayload(record, v));
+          var payloadLines = [];
+          var submittedRows = [];
+          var problem = null;
+          lines.forEach(function (row, index) {
+            var lv = row.values();
+            var errorEl = row.el.querySelector('.field-error');
+            errorEl.hidden = true;
+            var empty = !lv.product_id && lv.order_quantity === null && !lv.unit && lv.unit_price === null;
+            if (empty) return;
+            submittedRows.push(row);
+            var message = !lv.product_id ? 'Pilih produk.' : lv.order_quantity === null || isNaN(lv.order_quantity) || lv.order_quantity <= 0 ? 'Qty order harus lebih dari 0.' :
+              lv.unit_price !== null && (isNaN(lv.unit_price) || lv.unit_price < 0) ? 'Harga satuan tidak valid.' : null;
+            if (message) { errorEl.hidden = false; errorEl.textContent = 'Item ' + (index + 1) + ': ' + message; problem = problem || message; }
+            payloadLines.push(stripUndefined({ product_id: lv.product_id, order_quantity: lv.order_quantity, unit: lv.unit, unit_price: lv.unit_price }));
+          });
+          if (problem) return Promise.reject(new PIK.ApiError('VALIDATION_ERROR', 'Periksa item PO yang ditandai.'));
+          return PIK.api('purchaseOrders.create', { data: v, lines: payloadLines }).catch(function (error) {
+            var lineError = error.details && error.details.errors ? error.details.errors.filter(function (e) { return e.table === 'PO_LINES'; })[0] : null;
+            if (lineError) {
+              var target = submittedRows[lineError.index];
+              if (target) { var el = target.el.querySelector('.field-error'); el.hidden = false; el.textContent = 'Item ' + (lineError.index + 1) + ': ' + lineError.message; }
+            }
+            throw error;
+          });
+        },
+        successMessage: editing ? 'PO diperbarui.' : 'PO dibuat.',
+        onSaved: onSaved
+      });
+    };
+
+    forms.poLine = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({}, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah item PO' : 'Tambah item PO', subtitle: values.po_label, table: 'PO_LINES', values: values,
+        fields: [
+          { name: 'product_id', picker: 'products', pickerLabel: values.product_label || '', span: true,
+            hint: editing && (record.delivered_quantity > 0 || record.returned_quantity > 0) ? 'Produk terkunci karena sudah ada delivery/retur.' : null,
+            disabled: editing && (record.delivered_quantity > 0 || record.returned_quantity > 0) },
+          'order_quantity', 'unit', 'unit_price', { name: 'notes', multiline: true }
+        ],
+        submit: function (v, extra) {
+          var payload = editing ? updatePayload(record, v) : { data: Object.assign({ purchase_order_id: values.purchase_order_id }, v) };
+          if (extra.confirmOverQuantity) payload.confirmOverQuantity = true;
+          return PIK.api(editing ? 'poLines.update' : 'poLines.create', payload);
+        },
+        successMessage: editing ? 'Item PO diperbarui.' : 'Item PO ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Delivery & return
+    function lineHint(option) {
+      if (!option) return '';
+      return 'Order ' + fmt.number(option.order_quantity) + ' · terkirim ' + fmt.number(option.delivered_quantity) +
+        ' · terjadwal ' + fmt.number(option.scheduled_quantity) + ' · sisa ' + fmt.number(option.outstanding_quantity);
+    }
+
+    forms.delivery = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ status: 'DELIVERED', delivery_date: PIK.today() }, preset || {});
+      var info = h('div.form-alert.info', { hidden: true });
+      return ui.openForm({
+        title: editing ? 'Ubah delivery' : 'Catat delivery', table: 'DELIVERIES', values: values, intro: info,
+        fields: [
+          { name: 'po_line_id', label: 'Item PO', picker: 'poLines', span: true, required: !(editing && record.is_legacy),
+            pickerLabel: values.po_line_id ? (values.po_label || '') + ' · ' + (values.product_label || '') : '',
+            pickerParams: { purchase_order_id: preset && preset.purchase_order_id || null, include: values.po_line_id || null },
+            hint: 'Hanya item dari PO yang masih terbuka. PO dan produk mengikuti item yang dipilih.',
+            onChange: function (id, form, option) {
+              info.hidden = !option;
+              if (option) PIK.mount(info, [PIK.icon('info', 'icon-sm'), h('span', lineHint(option))]);
+            } },
+          'quantity', 'delivery_date', 'status', 'sj_number', 'destination', { name: 'attachment_url', placeholder: 'https://drive.google.com/…' },
+          { name: 'notes', multiline: true }
+        ],
+        submit: function (v, extra) {
+          var payload = editing ? updatePayload(record, v) : { data: v };
+          if (extra.confirmOverQuantity) payload.confirmOverQuantity = true;
+          return PIK.api(editing ? 'deliveries.update' : 'deliveries.create', payload);
+        },
+        successMessage: editing ? 'Delivery diperbarui.' : 'Delivery dicatat.',
+        onSaved: onSaved
+      });
+    };
+
+    forms.returnItem = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ status: 'OPEN', return_date: PIK.today() }, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah retur' : 'Catat retur', table: 'RETURNS', values: values,
+        fields: [
+          { name: 'po_line_id', label: 'Item PO', picker: 'poLines', span: true,
+            pickerLabel: values.po_line_id ? (values.po_label || '') + ' · ' + (values.product_label || '') : '',
+            pickerParams: { purchase_order_id: preset && preset.purchase_order_id || null, includeClosed: true, include: values.po_line_id || null },
+            hint: 'Pilih item PO bila retur berasal dari pengiriman PO tertentu; produk dan PO mengikuti item.',
+            onChange: function (id, form) { form.setVisible('product_id', !id); form.setVisible('purchase_order_id', !id); } },
+          { name: 'product_id', picker: 'products', pickerLabel: values.product_label || '', visible: function (v) { return !v.po_line_id; } },
+          { name: 'purchase_order_id', picker: 'purchaseOrders', pickerLabel: values.po_label || '', visible: function (v) { return !v.po_line_id; } },
+          'quantity', 'return_date', 'status', 'sj_number', { name: 'reason', multiline: true }, 'destination',
+          { name: 'attachment_url', placeholder: 'https://drive.google.com/…' }, { name: 'notes', multiline: true }
+        ],
+        submit: function (v, extra) {
+          var payload = editing ? updatePayload(record, v) : { data: v };
+          if (extra.confirmOverQuantity) payload.confirmOverQuantity = true;
+          return PIK.api(editing ? 'returns.update' : 'returns.create', payload);
+        },
+        successMessage: editing ? 'Retur diperbarui.' : 'Retur dicatat.',
+        onSaved: onSaved
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Products, stock, lead time
+    forms.product = function (record, onSaved) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : { unit: 'pcs' };
+      return ui.openForm({
+        title: editing ? 'Ubah produk' : 'Produk baru', table: 'PRODUCTS', values: values,
+        fields: [
+          { name: 'name', span: true }, 'product_code', 'variant', 'category', 'unit', 'lead_time_days',
+          { name: 'customer_id', picker: 'customers', pickerLabel: values.customer_name || '', hint: 'Isi bila produk khusus untuk satu customer.' },
+          { name: 'description', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'products.update' : 'products.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Produk diperbarui.' : 'Produk ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    forms.stock = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ stock_type: 'FG', status: 'READY', stock_date: PIK.today() }, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah catatan stok' : 'Catat stok', table: 'STOCK', values: values,
+        fields: [
+          { name: 'product_id', picker: 'products', pickerLabel: values.product_label || '', span: true, required: !(editing && record.is_legacy) },
+          'stock_type', 'status', 'quantity', 'stock_date', 'box_count', 'qty_per_box', 'warehouse', { name: 'notes', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'stock.update' : 'stock.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Catatan stok diperbarui.' : 'Stok dicatat.',
+        onSaved: onSaved
+      });
+    };
+
+    forms.leadTime = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ status: 'SCHEDULED' }, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah jadwal lead time' : 'Jadwal lead time baru', table: 'LEADTIME', values: values,
+        fields: [
+          { name: 'po_line_id', label: 'Item PO', picker: 'poLines', span: true, required: !(editing && record.is_legacy),
+            pickerLabel: values.po_line_id ? (values.po_label || '') + ' · ' + (values.product_label || '') : '',
+            pickerParams: { purchase_order_id: preset && preset.purchase_order_id || null, include: values.po_line_id || null },
+            hint: 'Jadwal rencana kirim; tidak dihitung sebagai qty terkirim.' },
+          'planned_date', 'quantity', 'status', 'lead_time_days', { name: 'notes', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'leadTime.update' : 'leadTime.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Jadwal diperbarui.' : 'Jadwal ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Finance
+    forms.invoice = function (record, onSaved, preset) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : Object.assign({ invoice_date: PIK.today() }, preset || {});
+      return ui.openForm({
+        title: editing ? 'Ubah invoice' : 'Invoice baru', table: 'INVOICES_PAYMENTS', values: values,
+        fields: [
+          { name: 'purchase_order_id', picker: 'purchaseOrders', pickerLabel: values.po_label || '', span: true, required: !(editing && record.is_legacy) },
+          { name: 'invoice_number', hint: 'Jenis INV/TUM terisi otomatis dari segmen ke-4 nomor bila dikosongkan.' }, 'invoice_type',
+          'invoice_date', 'due_date', 'amount',
+          { name: 'invoice_attachment_url', placeholder: 'https://drive.google.com/…' }, { name: 'notes', multiline: true }
+        ],
+        submit: function (v) { return PIK.api(editing ? 'invoices.update' : 'invoices.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'Invoice diperbarui.' : 'Invoice ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    forms.payment = function (record, onSaved) {
+      return ui.openForm({
+        title: 'Catat pembayaran', subtitle: record.invoice_number + ' · ' + fmt.money(record.amount), table: 'INVOICES_PAYMENTS',
+        values: { paid_amount: record.paid_amount, payment_date: record.payment_date || PIK.today(), payment_receipt_number: record.payment_receipt_number, payment_attachment_url: record.payment_attachment_url },
+        intro: h('div.form-alert.info', PIK.icon('info', 'icon-sm'), h('span', 'Isi total yang sudah dibayar sampai saat ini (bukan tambahan). Status bayar dihitung otomatis.')),
+        submitLabel: 'Simpan pembayaran',
+        fields: [
+          { name: 'paid_amount', label: 'Total dibayar', required: true, validate: function (value) { return value > record.amount ? 'Tidak boleh melebihi nilai invoice (' + fmt.money(record.amount) + ').' : null; } },
+          { name: 'payment_date', required: true }, 'payment_receipt_number', { name: 'payment_attachment_url', placeholder: 'https://drive.google.com/…' }
+        ],
+        submit: function (v) { return PIK.api('invoices.recordPayment', Object.assign({ id: record.id, expectedUpdatedAt: record.updated_at }, v)); },
+        successMessage: 'Pembayaran dicatat.',
+        onSaved: onSaved
+      });
+    };
+
+    // ------------------------------------------------------------------------------------------ Users
+    forms.user = function (record, onSaved) {
+      var editing = Boolean(record && record.id);
+      var values = editing ? record : { role: 'SALES' };
+      return ui.openForm({
+        title: editing ? 'Ubah user' : 'User baru', table: 'USERS', values: values,
+        intro: h('div.form-alert.info', PIK.icon('info', 'icon-sm'), h('span', 'User masuk dengan akun Google Workspace-nya. Tidak ada password yang disimpan aplikasi.')),
+        fields: [{ name: 'name', span: true }, { name: 'email', hint: 'Email akun Google yang dipakai untuk masuk.' }, 'role', 'phone'],
+        submit: function (v) { return PIK.api(editing ? 'users.update' : 'users.create', editing ? updatePayload(record, v) : { data: v }); },
+        successMessage: editing ? 'User diperbarui.' : 'User ditambahkan.',
+        onSaved: onSaved
+      });
+    };
+
+    PIK.forms = forms;
+  })(PIK);
+</script>

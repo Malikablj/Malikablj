@@ -37,6 +37,7 @@ test('PO: header + baris dalam satu unit; baris tidak valid = tidak ada yang ter
     lines: [{ product_id: seed.productA.id, order_quantity: '25' }],
   });
   assert.equal(po.status, 'OPEN');
+  assert.equal(po.po_label, 'po/test/002', 'label PO = nomor PO');
   assert.equal(po.po_date, TODAY);
   assert.equal(po.owner_user_id, app.users.marketing.id);
   assert.equal(po.line_count, 1);

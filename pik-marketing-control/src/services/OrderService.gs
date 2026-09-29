@@ -18,7 +18,7 @@ const PO_DETAIL_LIST_LIMIT = 200;
 const QUANTITY_EPSILON = 0.0005;
 
 function purchaseOrderWithSummary_(po) {
-  return Object.assign(withNames_(po), purchaseOrderSummary_(po.id), { is_open: isOpenPurchaseOrder_(po) });
+  return Object.assign(withNames_(po), purchaseOrderSummary_(po.id), { po_label: purchaseOrderLabel_(po), is_open: isOpenPurchaseOrder_(po) });
 }
 
 function poOf_(record) {

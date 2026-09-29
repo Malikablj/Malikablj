@@ -1,0 +1,706 @@
+<script>
+  /*
+   * Screens: Dashboard, Customers, Customer workspace, Contacts, Leads (pipeline board and list), Lead detail,
+   * Activities and Follow-ups. Every figure is read from the server; nothing is computed from sample data.
+   */
+  (function (PIK) {
+    'use strict';
+    var h = PIK.h;
+    var icon = PIK.icon;
+    var ui = PIK.ui;
+    var fmt = PIK.fmt;
+    var forms = PIK.forms;
+    var views = PIK.views = PIK.views || {};
+
+    function go(path, query) { return function () { PIK.router.go(path, query || {}); }; }
+    function canWrite(module) { return PIK.can(module, 'RW'); }
+    function addButton(label, onClick) { return ui.button(label, { kind: 'primary', icon: 'plus', onClick: onClick }); }
+    function greeting() {
+      var hour = Number(fmt.dateTime(new Date().toISOString()).split(', ')[1].split('.')[0]);
+      return hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 19 ? 'Selamat sore' : 'Selamat malam';
+    }
+    function customerLink(id, name) {
+      if (!id) return h('span.subtle', name || '—');
+      return h('a', { href: '#customers/' + id, onClick: function (e) { e.preventDefault(); e.stopPropagation(); PIK.router.go('customers/' + id, {}); } }, name || id);
+    }
+    function dueText(item) {
+      var when = fmt.date(item.follow_up_date) + (item.follow_up_time ? ' · ' + fmt.time(item.follow_up_time) : '');
+      return item.due_state === 'OVERDUE' ? when + ' (' + fmt.relativeDay(item.follow_up_date) + ')' : when;
+    }
+
+    // ============================================================================================ Dashboard
+    views.dashboard = function (container, params, query) {
+      var scope = query.scope === 'mine' ? 'mine' : 'all';
+      var body = h('div', ui.skeletonBlocks());
+      var actions = [];
+      if (canWrite('activities')) actions.push(ui.button('Aktivitas', { icon: 'plus', onClick: function () { forms.activity(null, load); } }));
+      if (canWrite('followUps')) actions.push(ui.button('Follow-up', { icon: 'plus', onClick: function () { forms.followUp(null, function () { PIK.notifyChanged(); load(); }); } }));
+      var scopeTabs = ui.tabs([{ key: 'all', label: 'Semua' }, { key: 'mine', label: 'Milik saya' }], scope, function (key) {
+        scope = key;
+        PIK.router.setQuery(scope === 'mine' ? { scope: 'mine' } : {});
+        load();
+      }, { segmented: true });
+      container.appendChild(PIK.pageHead({
+        title: 'Dashboard',
+        subtitle: greeting() + ', ' + PIK.session.user.name.split(' ')[0] + '. ' + fmt.date(PIK.today()) + '.',
+        actions: [scopeTabs].concat(actions)
+      }));
+      container.appendChild(body);
+
+      function load() {
+        if (body.dataset.state === 'ready') body.style.opacity = '.55';
+        PIK.api('dashboard.summary', { scope: scope }).then(function (data) {
+          body.style.opacity = '';
+          body.dataset.state = 'ready';
+          PIK.mount(body, render(data));
+        }).catch(function (error) {
+          body.style.opacity = '';
+          PIK.mount(body, h('div.card', ui.errorState(error, load)));
+        });
+      }
+
+      function kpi(label, value, foot, onClick, tone) {
+        return h('button.kpi' + (tone ? '.' + tone : ''), { type: 'button', onClick: onClick },
+          h('span.kpi-label', label), h('span.kpi-value', value), foot ? h('span.kpi-foot', foot) : null);
+      }
+
+      function render(data) {
+        var k = data.kpis;
+        var mineNote = scope === 'mine' ? 'milik saya' : 'semua PIC';
+        var tiles = [
+          kpi('Total customer', fmt.number(k.totalCustomers, 0), fmt.number(k.activeCustomers, 0) + ' aktif', go('customers')),
+          kpi('Lead aktif', fmt.number(k.activeLeads, 0), fmt.compactMoney(k.openLeadValue) + ' · ' + mineNote, go('leads', { view: 'board' })),
+          kpi('Follow-up hari ini', fmt.number(k.followUpToday, 0), mineNote, go('follow-ups', { tab: 'TODAY' }), k.followUpToday > 0 ? 'warn' : null),
+          kpi('Follow-up terlambat', fmt.number(k.followUpOverdue, 0), k.followUpOverdue > 0 ? 'perlu tindakan' : 'tidak ada', go('follow-ups', { tab: 'OVERDUE' }), k.followUpOverdue > 0 ? 'danger' : null),
+          kpi('PO terbuka', fmt.number(k.openPurchaseOrders, 0), 'belum Closed/Cancelled', go('purchase-orders', { open: 'true' })),
+          kpi('Outstanding', fmt.number(k.outstandingQuantity), 'qty belum terkirim (PO terbuka)', go('purchase-orders', { open: 'true', sort: 'outstanding_quantity', dir: 'desc' }))
+        ];
+        if (data.finance) {
+          tiles.push(kpi('Piutang', fmt.compactMoney(data.finance.receivable), fmt.number(data.finance.unpaidInvoices, 0) + ' invoice belum lunas', go('invoices', { payment_status: 'UNPAID' })));
+          tiles.push(kpi('Invoice lewat jatuh tempo', fmt.number(data.finance.overdueInvoices, 0), 'belum dibayar penuh', go('invoices', { overdue: 'true' }), data.finance.overdueInvoices > 0 ? 'danger' : null));
+        }
+
+        var open = data.leadPipeline.filter(function (s) { return ['WON', 'LOST', 'DORMANT'].indexOf(s.status) === -1; });
+        var pipelineChart = data.leadPipeline.some(function (s) { return s.count > 0; }) ? h('div',
+          ui.legend([{ label: 'Tahap terbuka' }, { label: 'Selesai (Won/Lost/Dormant)', muted: true }]),
+          ui.hbars(data.leadPipeline.map(function (s) {
+            return {
+              label: s.label, value: s.count, display: fmt.number(s.count, 0), sub: s.value ? fmt.compactMoney(s.value) : null,
+              muted: open.indexOf(s) === -1, tip: 'Lead ' + s.label + (s.value ? ' · estimasi ' + fmt.money(s.value) : ''),
+              onClick: go('leads', { view: 'list', status: s.status })
+            };
+          }), { label: 'Jumlah lead per tahap pipeline' }))
+          : ui.emptyState({ icon: 'leads', title: 'Belum ada lead', text: 'Lead yang dibuat akan tampil per tahap pipeline.',
+            action: canWrite('leads') ? { label: 'Lead baru', onClick: function () { forms.lead(null, load); } } : null });
+
+        var followUpList = function (items, emptyText) {
+          if (!items.length) return h('p.muted', { style: { padding: '8px 0' } }, emptyText);
+          return h('div.mini-list', items.map(function (item) {
+            return h('div.mini-item',
+              h('div.mini-main', h('div.mini-title', item.purpose || PIK.enumLabel('ACTIVITY_TYPE', item.type) || 'Follow-up'),
+                h('div.mini-sub', (item.customer_name || '—') + ' · ' + dueText(item) + (scope === 'all' && item.owner_name ? ' · ' + item.owner_name : ''))),
+              canWrite('followUps') ? h('button.btn.btn-sm', { type: 'button', onClick: function () { forms.completeFollowUp(item, function () { PIK.notifyChanged(); load(); }); } }, icon('check', 'icon-sm'), 'Selesai') : ui.statusBadge('DUE_STATE', item.due_state));
+          }));
+        };
+
+        var followUpCard = ui.card('Follow-up', h('div.stack',
+          h('div', h('div.section-title', 'Terlambat · ' + fmt.number(k.followUpOverdue, 0)), followUpList(data.followUpsOverdue, 'Tidak ada follow-up terlambat.')),
+          h('div', h('div.section-title', 'Hari ini · ' + fmt.number(k.followUpToday, 0)), followUpList(data.followUpsToday, 'Tidak ada follow-up untuk hari ini.'))),
+          { action: h('button.btn.btn-ghost.btn-sm.link', { type: 'button', onClick: go('follow-ups') }, 'Semua') });
+
+        var activities = data.recentActivities.length ? h('div.timeline', data.recentActivities.map(function (a) {
+          return h('div.tl-item', h('div.tl-when', fmt.dateTime(a.activity_at), ' · ', PIK.enumLabel('ACTIVITY_TYPE', a.type), a.owner_name ? ' · ' + a.owner_name : ''),
+            h('div.tl-title', a.subject), h('div.tl-body.muted', customerLink(a.customer_id, a.customer_name)));
+        })) : ui.emptyState({ icon: 'activities', title: 'Belum ada aktivitas', text: 'Catat interaksi dengan customer agar tim tahu konteks terbaru.' });
+
+        var pos = data.openPurchaseOrders.length ? h('div.mini-list', data.openPurchaseOrders.map(function (po) {
+          return h('button.mini-item', { type: 'button', onClick: go('purchase-orders/' + po.id) },
+            h('div.mini-main', h('div.mini-title', po.po_label || po.id), h('div.mini-sub', (po.customer_name || 'Tanpa customer') + ' · ' + fmt.date(po.po_date)),
+              h('div', { style: { marginTop: '6px' } }, ui.progress(po.delivered_quantity - po.returned_quantity, po.order_quantity))),
+            h('div.mini-side', h('div.num', { style: { color: 'var(--color-text)', fontWeight: '600' } }, fmt.number(po.outstanding_quantity)), 'outstanding'));
+        })) : ui.emptyState({ icon: 'purchaseOrders', title: 'Tidak ada PO terbuka' });
+
+        return [
+          h('div.kpi-grid', tiles),
+          h('div.grid-2', { style: { marginBottom: '16px' } },
+            ui.card('Pipeline lead', pipelineChart, { action: h('button.btn.btn-ghost.btn-sm.link', { type: 'button', onClick: go('leads', { view: 'board' }) }, 'Buka pipeline') }),
+            followUpCard),
+          h('div.grid-2',
+            ui.card('Aktivitas terbaru', activities, { action: h('button.btn.btn-ghost.btn-sm.link', { type: 'button', onClick: go('activities') }, 'Semua') }),
+            ui.card('PO terbuka · outstanding terbesar', pos, { action: h('button.btn.btn-ghost.btn-sm.link', { type: 'button', onClick: go('purchase-orders', { open: 'true' }) }, 'Semua PO') })),
+          h('p.subtle', { style: { fontSize: '12px', marginTop: '16px' } }, 'Diperbarui ' + fmt.dateTime(data.generatedAt) + '.')
+        ];
+      }
+
+      load();
+    };
+
+    // ============================================================================================ Customers
+    views.customers = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Customer', subtitle: 'Master customer beserta pipeline, PO, dan tindak lanjutnya.',
+        actions: canWrite('customers') ? [addButton('Customer baru', function () { forms.customer(null, function (c) { PIK.router.go('customers/' + c.id, {}); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'customers.list', query: query, searchPlaceholder: 'Cari nama, kode, industri, email…',
+        filters: [
+          { key: 'status', label: 'Status', enumName: 'CUSTOMER_STATUS' },
+          { key: 'owner_user_id', label: 'PIC', type: 'user' },
+          { key: 'has_open_po', label: 'Ada PO terbuka', type: 'toggle' },
+          { key: 'has_overdue_follow_up', label: 'Follow-up terlambat', type: 'toggle' }
+        ],
+        defaultSort: { field: 'name', direction: 'asc' },
+        columns: [
+          { key: 'name', label: 'Customer', sortable: true, render: function (r) { return [h('span.primary', r.name), ' ', ui.legacyTag(r), h('span.secondary', [r.customer_code, r.industry].filter(Boolean).join(' · ') || '—')]; } },
+          { key: 'status', label: 'Status', sortable: true, render: function (r) { return ui.statusBadge('CUSTOMER_STATUS', r.status); } },
+          { key: 'owner_name', label: 'PIC', sortable: true },
+          { key: 'open_leads', label: 'Lead', sortable: true, align: 'right', render: function (r) { return fmt.number(r.open_leads, 0); } },
+          { key: 'open_purchase_orders', label: 'PO terbuka', sortable: true, align: 'right', render: function (r) { return fmt.number(r.open_purchase_orders, 0); } },
+          { key: 'outstanding_quantity', label: 'Outstanding', sortable: true, align: 'right', render: function (r) { return fmt.number(r.outstanding_quantity); } },
+          { key: 'next_follow_up_date', label: 'Follow-up', sortable: true, render: function (r) {
+            if (r.overdue_follow_ups > 0) return ui.badge(r.overdue_follow_ups + ' terlambat', 'danger');
+            return r.next_follow_up_date ? fmt.relativeDay(r.next_follow_up_date) : null;
+          } }
+        ],
+        card: function (r) {
+          return ui.listCard({ title: r.name, badge: ui.statusBadge('CUSTOMER_STATUS', r.status), lines: [
+            r.owner_name ? 'PIC ' + r.owner_name : null, r.open_purchase_orders ? r.open_purchase_orders + ' PO terbuka' : null,
+            r.outstanding_quantity ? 'Outstanding ' + fmt.number(r.outstanding_quantity) : null,
+            r.overdue_follow_ups ? r.overdue_follow_ups + ' follow-up terlambat' : r.next_follow_up_date ? 'Follow-up ' + fmt.relativeDay(r.next_follow_up_date) : null
+          ] });
+        },
+        onRowClick: function (r) { PIK.router.go('customers/' + r.id, {}); },
+        empty: { icon: 'customers', title: 'Belum ada customer', text: 'Tambahkan customer pertama atau jalankan migrasi data legacy.',
+          action: canWrite('customers') ? { label: 'Customer baru', onClick: function () { forms.customer(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    // ============================================================================================ Customer workspace
+    views.customerDetail = function (container, params, query) {
+      var id = params.id;
+      var tab = query.tab || 'overview';
+      var host = h('div', ui.skeletonBlocks());
+      container.appendChild(host);
+
+      function reload() { load(); }
+      function load() {
+        PIK.api('customers.get', { id: id }).then(render).catch(function (error) {
+          PIK.mount(host, [PIK.pageHead({ title: 'Customer', breadcrumb: { label: 'Customer', path: 'customers' } }), h('div.card', ui.errorState(error, load))]);
+        });
+      }
+
+      function render(w) {
+        var c = w.customer;
+        var moreActions = [];
+        if (canWrite('customers')) moreActions.push({ label: 'Ubah customer', icon: 'edit', onClick: function () { forms.customer(c, reload); } });
+        if (canWrite('leads')) moreActions.push({ label: 'Lead baru', icon: 'leads', onClick: function () { forms.lead(null, reload, { customer_id: c.id, customer_name: c.name }); } });
+        if (canWrite('contacts')) moreActions.push({ label: 'Contact baru', icon: 'contacts', onClick: function () { forms.contact(null, reload, { customer_id: c.id, customer_name: c.name }); } });
+        if (canWrite('purchaseOrders')) moreActions.push({ label: 'PO baru', icon: 'purchaseOrders', onClick: function () { forms.purchaseOrder(null, function (po) { PIK.router.go('purchase-orders/' + po.id, {}); }, { customer_id: c.id, customer_name: c.name }); } });
+        if (canWrite('customers')) moreActions.push(c.is_active === false
+          ? { label: 'Pulihkan customer', icon: 'restore', onClick: function () { ui.restoreFlow({ restoreAction: 'customers.restore', id: c.id, onDone: reload }); } }
+          : { label: 'Arsipkan customer', icon: 'archive', danger: true, onClick: function () { ui.archiveFlow({ archiveAction: 'customers.archive', restoreAction: 'customers.restore', id: c.id, doneMessage: 'Customer diarsipkan.', onDone: reload }); } });
+        var moreButton = h('button.btn.btn-icon', { type: 'button', 'aria-label': 'Aksi lainnya', 'aria-haspopup': 'menu' }, icon('more', 'icon-sm'));
+        moreButton.addEventListener('click', function () { PIK.popover(moreButton, moreActions); });
+        var actions = [];
+        if (canWrite('activities')) actions.push(ui.button('Aktivitas', { kind: 'primary', icon: 'plus', onClick: function () { forms.activity(null, reload, { customer_id: c.id, customer_name: c.name }); } }));
+        if (canWrite('followUps')) actions.push(ui.button('Follow-up', { icon: 'plus', onClick: function () { forms.followUp(null, function () { PIK.notifyChanged(); reload(); }, { customer_id: c.id, customer_name: c.name }); } }));
+        if (moreActions.length) actions.push(moreButton);
+
+        var head = PIK.pageHead({ title: c.name, breadcrumb: { label: 'Customer', path: 'customers' } });
+        head.querySelector('h1').remove();
+        var detailHead = h('div.detail-head',
+          h('div.avatar', fmt.initials(c.name)),
+          h('div.detail-title',
+            h('h1', c.name),
+            h('div.row-wrap', ui.statusBadge('CUSTOMER_STATUS', c.status), c.is_active === false ? ui.badge('Diarsipkan', 'muted') : null, ui.legacyTag(c)),
+            h('div.detail-meta',
+              c.customer_code ? h('span', c.customer_code) : null, c.industry ? h('span', c.industry) : null,
+              h('span', icon('user', 'icon-sm'), c.owner_name || 'Tanpa PIC'),
+              c.phone ? h('span', icon('phone', 'icon-sm'), c.phone) : null,
+              c.email ? h('span', icon('mail', 'icon-sm'), c.email) : null)),
+          actions.length ? h('div.row-wrap.detail-actions', actions) : null);
+
+        var strip = h('div.card.stat-strip',
+          stat('Lead terbuka', fmt.number(c.open_leads, 0)),
+          stat('PO terbuka', fmt.number(c.open_purchase_orders, 0)),
+          stat('Outstanding', fmt.number(c.outstanding_quantity)),
+          stat('Aktivitas terakhir', c.last_activity_at ? fmt.relativeDay(fmt.localDate(c.last_activity_at)) : '—'),
+          stat('Follow-up', c.overdue_follow_ups ? c.overdue_follow_ups + ' terlambat' : c.next_follow_up_date ? fmt.relativeDay(c.next_follow_up_date) : '—', c.overdue_follow_ups ? 'var(--ink-danger)' : null));
+
+        var tabItems = [
+          { key: 'overview', label: 'Ringkasan' },
+          { key: 'contacts', label: 'Contact', count: w.contacts.length },
+          { key: 'leads', label: 'Lead', count: w.leads.total },
+          { key: 'activities', label: 'Aktivitas', count: w.activities.total },
+          { key: 'followUps', label: 'Follow-up', count: w.followUps.total },
+          { key: 'purchaseOrders', label: 'PO', count: w.purchaseOrders.total },
+          { key: 'deliveries', label: 'Delivery', count: w.deliveries.total },
+          { key: 'returns', label: 'Retur', count: w.returns.total }
+        ];
+        if (w.invoices) tabItems.push({ key: 'invoices', label: 'Invoice', count: w.invoices.total });
+        tabItems.push({ key: 'history', label: 'Riwayat' });
+        var panel = h('div');
+        var tabBar = ui.tabs(tabItems, tab, function (key) { tab = key; PIK.router.setQuery(key === 'overview' ? {} : { tab: key }); paint(); });
+        function paint() { PIK.mount(panel, renderTab(tab, w, reload)); }
+        PIK.mount(host, [head, detailHead, strip, c.is_legacy ? ui.migrationIssuesNotice(c.id) : null, tabBar, panel]);
+        paint();
+      }
+
+      function stat(label, value, color) {
+        return h('div.stat', h('div.label', label), h('div.value', { style: color ? { color: color } : null }, value));
+      }
+
+      function moreNote(block, label) {
+        return block.total > block.items.length ? h('p.muted', { style: { fontSize: '12px', marginTop: '8px' } }, 'Menampilkan ' + block.items.length + ' dari ' + fmt.number(block.total, 0) + ' ' + label + ' terbaru.') : null;
+      }
+
+      function renderTab(key, w, reload) {
+        var c = w.customer;
+        var preset = { customer_id: c.id, customer_name: c.name };
+        if (key === 'overview') {
+          var primary = w.contacts.filter(function (x) { return x.is_primary && x.is_active !== false; })[0];
+          var feed = w.activities.items.slice(0, 6).map(function (a) { return { at: a.activity_at, title: a.subject, sub: PIK.enumLabel('ACTIVITY_TYPE', a.type) + (a.owner_name ? ' · ' + a.owner_name : ''), body: a.description }; });
+          var openFollowUps = w.followUps.items.filter(function (f) { return f.due_state !== 'DONE' && f.due_state !== 'CANCELLED' && f.is_active !== false; })
+            .sort(function (a, b) { return a.follow_up_date < b.follow_up_date ? -1 : 1; });
+          return h('div.detail-grid',
+            h('div.stack',
+              ui.card('Follow-up terbuka', openFollowUps.length ? followUpRows(openFollowUps.slice(0, 5), reload) : h('p.muted', 'Tidak ada follow-up terbuka.'),
+                { action: canWrite('followUps') ? h('button.btn.btn-ghost.btn-sm.link', { type: 'button', onClick: function () { forms.followUp(null, function () { PIK.notifyChanged(); reload(); }, preset); } }, 'Jadwalkan') : null }),
+              ui.card('Aktivitas terbaru', feed.length ? h('div.timeline', feed.map(function (item) {
+                return h('div.tl-item', h('div.tl-when', fmt.dateTime(item.at), ' · ', item.sub), h('div.tl-title', item.title), item.body ? h('div.tl-body', item.body) : null);
+              })) : ui.emptyState({ icon: 'activities', title: 'Belum ada aktivitas', action: canWrite('activities') ? { label: 'Catat aktivitas', onClick: function () { forms.activity(null, reload, preset); } } : null })),
+              ui.card('PO terbuka', poRows(w.purchaseOrders.items.filter(function (po) { return po.is_open; }).slice(0, 5)))),
+            h('div.stack',
+              ui.card('Profil', ui.kv([
+                ['Alamat', c.address], ['Telepon', c.phone], ['Email', c.email ? h('a', { href: 'mailto:' + c.email }, c.email) : null],
+                ['Website', c.website ? ui.externalLink(c.website, c.website.replace(/^https?:\/\//, '')) : null], ['PIC', c.owner_name],
+                ['Catatan', c.notes], c.is_legacy ? ['Sumber legacy', c.import_ref || c.source_sheet] : null
+              ])),
+              ui.card('Contact utama', primary ? ui.kv([['Nama', primary.name], ['Jabatan', primary.position], ['Telepon', primary.phone], ['WhatsApp', primary.whatsapp], ['Email', primary.email]])
+                : h('p.muted', 'Belum ada contact utama.'))));
+        }
+        if (key === 'contacts') {
+          return tabTable(w.contacts, [
+            { key: 'name', label: 'Nama', render: function (r) { return [h('span.primary', r.name), r.is_primary ? [' ', ui.badge('Utama', 'accent', true)] : null, h('span.secondary', r.position || '')]; } },
+            { key: 'phone', label: 'Telepon / WA', render: function (r) { return [r.phone, r.whatsapp && r.whatsapp !== r.phone ? ' · WA ' + r.whatsapp : null].filter(Boolean).join('') || null; } },
+            { key: 'email', label: 'Email' },
+            { key: 'actions', label: '', render: function (r) { return rowActions('contacts', r, { edit: function () { forms.contact(r, reload); }, archive: 'contacts', reload: reload,
+              extra: canWrite('contacts') && !r.is_primary && r.is_active !== false ? { label: 'Jadikan utama', icon: 'star', onClick: function () { PIK.api('contacts.setPrimary', { id: r.id, expectedUpdatedAt: r.updated_at }).then(function () { PIK.toast.success('Contact utama diperbarui.'); reload(); }).catch(function (e) { PIK.toast.error(e.message); }); } } : null }); } }
+          ], { title: 'Belum ada contact', action: canWrite('contacts') ? { label: 'Contact baru', onClick: function () { forms.contact(null, reload, preset); } } : null },
+          function (r) { return ui.listCard({ title: r.name, badge: r.is_primary ? ui.badge('Utama', 'accent', true) : null, lines: [r.position, r.phone, r.email] }); },
+          canWrite('contacts') ? function (r) { forms.contact(r, reload); } : null);
+        }
+        if (key === 'leads') {
+          return [tabTable(w.leads.items, leadColumns(), { title: 'Belum ada lead', action: canWrite('leads') ? { label: 'Lead baru', onClick: function () { forms.lead(null, reload, preset); } } : null },
+            leadCard, function (r) { PIK.router.go('leads/' + r.id, {}); }), moreNote(w.leads, 'lead')];
+        }
+        if (key === 'activities') {
+          return [tabTable(w.activities.items, activityColumns(), { title: 'Belum ada aktivitas', action: canWrite('activities') ? { label: 'Catat aktivitas', onClick: function () { forms.activity(null, reload, preset); } } : null },
+            activityCard, canWrite('activities') ? function (r) { forms.activity(r, reload); } : null), moreNote(w.activities, 'aktivitas')];
+        }
+        if (key === 'followUps') {
+          return [w.followUps.items.length ? h('div.card.card-pad', followUpRows(w.followUps.items, reload)) :
+            h('div.card', ui.emptyState({ icon: 'followUps', title: 'Belum ada follow-up', action: canWrite('followUps') ? { label: 'Jadwalkan follow-up', onClick: function () { forms.followUp(null, reload, preset); } } : null })),
+          moreNote(w.followUps, 'follow-up')];
+        }
+        if (key === 'purchaseOrders') {
+          return [tabTable(w.purchaseOrders.items, PIK.viewParts.poColumns(), { title: 'Belum ada PO', action: canWrite('purchaseOrders') ? { label: 'PO baru', onClick: function () { forms.purchaseOrder(null, function (po) { PIK.router.go('purchase-orders/' + po.id, {}); }, preset); } } : null },
+            PIK.viewParts.poCard, function (r) { PIK.router.go('purchase-orders/' + r.id, {}); }), moreNote(w.purchaseOrders, 'PO')];
+        }
+        if (key === 'deliveries') return [tabTable(w.deliveries.items, PIK.viewParts.deliveryColumns(false), { title: 'Belum ada delivery' }, PIK.viewParts.deliveryCard, null), moreNote(w.deliveries, 'delivery')];
+        if (key === 'returns') return [tabTable(w.returns.items, PIK.viewParts.returnColumns(false), { title: 'Belum ada retur' }, PIK.viewParts.returnCard, null), moreNote(w.returns, 'retur')];
+        if (key === 'invoices' && w.invoices) return [tabTable(w.invoices.items, PIK.viewParts.invoiceColumns(), { title: 'Belum ada invoice' }, PIK.viewParts.invoiceCard, null), moreNote(w.invoices, 'invoice')];
+        if (key === 'history') return h('div.card.card-pad', ui.historyPanel('CUSTOMERS', w.customer.id));
+        return null;
+      }
+
+      load();
+    };
+
+    function tabTable(rows, columns, empty, card, onRowClick) {
+      if (!rows.length) return h('div.card', ui.emptyState(Object.assign({ icon: 'inbox' }, empty)));
+      return ui.dataTable({ columns: columns, rows: rows, card: card, onRowClick: onRowClick });
+    }
+
+    /** Row menu: edit / archive / restore (+ one extra action), shown only to roles that can write the module. */
+    function rowActions(module, record, options) {
+      if (!canWrite(module)) return null;
+      var button = h('button.btn.btn-quiet.btn-sm', { type: 'button', 'aria-label': 'Aksi', 'aria-haspopup': 'menu' }, icon('more', 'icon-sm'));
+      button.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var items = [];
+        if (options.edit && record.is_active !== false) items.push({ label: 'Ubah', icon: 'edit', onClick: options.edit });
+        if (options.extra) items.push(options.extra);
+        if (options.archive) {
+          items.push(record.is_active === false
+            ? { label: 'Pulihkan', icon: 'restore', onClick: function () { ui.restoreFlow({ restoreAction: options.archive + '.restore', id: record.id, onDone: options.reload }); } }
+            : { label: 'Arsipkan', icon: 'archive', danger: true, onClick: function () { ui.archiveFlow({ archiveAction: options.archive + '.archive', restoreAction: options.archive + '.restore', id: record.id, onDone: options.reload }); } });
+        }
+        PIK.popover(button, items);
+      });
+      return button;
+    }
+    PIK.rowActions = rowActions;
+
+    function poRows(items) {
+      if (!items.length) return h('p.muted', 'Tidak ada PO terbuka.');
+      return h('div.mini-list', items.map(function (po) {
+        return h('button.mini-item', { type: 'button', onClick: go('purchase-orders/' + po.id) },
+          h('div.mini-main', h('div.mini-title', po.po_label || po.id), h('div.mini-sub', fmt.date(po.po_date) + ' · ' + PIK.enumLabel('PO_STATUS', po.status)),
+            h('div', { style: { marginTop: '6px' } }, ui.progress(po.delivered_quantity - po.returned_quantity, po.order_quantity))),
+          h('div.mini-side', h('div.num', { style: { color: 'var(--color-text)', fontWeight: '600' } }, fmt.number(po.outstanding_quantity)), 'outstanding'));
+      }));
+    }
+
+    function followUpRows(items, reload) {
+      return h('div.mini-list', items.map(function (item) {
+        var open = item.due_state !== 'DONE' && item.due_state !== 'CANCELLED' && item.is_active !== false;
+        var actions = open && canWrite('followUps') ? h('div.row', { style: { gap: '4px' } },
+          h('button.btn.btn-sm', { type: 'button', onClick: function () { forms.completeFollowUp(item, function () { PIK.notifyChanged(); reload(); }); } }, icon('check', 'icon-sm'), h('span.hide-mobile', 'Selesai')),
+          h('button.btn.btn-quiet.btn-sm', { type: 'button', 'aria-label': 'Aksi lain', onClick: function (e) {
+            PIK.popover(e.currentTarget, [
+              { label: 'Jadwalkan ulang', icon: 'calendar', onClick: function () { forms.rescheduleFollowUp(item, function () { PIK.notifyChanged(); reload(); }); } },
+              { label: 'Ubah', icon: 'edit', onClick: function () { forms.followUp(item, reload); } },
+              { label: 'Batalkan', icon: 'close', danger: true, onClick: function () { forms.cancelFollowUp(item, function () { PIK.notifyChanged(); reload(); }); } }
+            ]);
+          } }, icon('more', 'icon-sm'))) : null;
+        return h('div.mini-item',
+          h('div.mini-main',
+            h('div.row', { style: { gap: '8px' } }, h('div.mini-title', item.purpose || PIK.enumLabel('ACTIVITY_TYPE', item.type) || 'Follow-up'), ui.statusBadge('DUE_STATE', item.due_state)),
+            h('div.mini-sub', dueText(item) + (item.lead_name ? ' · ' + item.lead_name : '') + (item.owner_name ? ' · ' + item.owner_name : '')),
+            item.result ? h('div.mini-sub', 'Hasil: ' + item.result) : null),
+          actions);
+      }));
+    }
+
+    function leadColumns() {
+      return [
+        { key: 'name', label: 'Lead', sortable: true, render: function (r) { return [h('span.primary', r.name), h('span.secondary', r.customer_name || '—')]; } },
+        { key: 'status', label: 'Status', sortable: true, render: function (r) { return ui.statusBadge('LEAD_STATUS', r.status); } },
+        { key: 'priority', label: 'Prioritas', sortable: true, render: function (r) { return ui.priority(r.priority); } },
+        { key: 'estimated_value', label: 'Estimasi nilai', sortable: true, align: 'right', render: function (r) { return r.estimated_value === null ? null : fmt.money(r.estimated_value); } },
+        { key: 'expected_closing_date', label: 'Closing', sortable: true, render: function (r) { return r.expected_closing_date ? fmt.date(r.expected_closing_date) : null; } },
+        { key: 'owner_name', label: 'PIC', sortable: true }
+      ];
+    }
+    function leadCard(r) {
+      return ui.listCard({ title: r.name, badge: ui.statusBadge('LEAD_STATUS', r.status), lines: [r.customer_name, r.estimated_value ? fmt.compactMoney(r.estimated_value) : null, r.owner_name, r.expected_closing_date ? 'Closing ' + fmt.date(r.expected_closing_date) : null] });
+    }
+    function activityColumns() {
+      return [
+        { key: 'activity_at', label: 'Waktu', sortable: true, render: function (r) { return h('span.nowrap', fmt.dateTime(r.activity_at)); } },
+        { key: 'type', label: 'Jenis', sortable: true, render: function (r) { return ui.badge(PIK.enumLabel('ACTIVITY_TYPE', r.type), null, true); } },
+        { key: 'subject', label: 'Subjek', sortable: true, render: function (r) { return [h('span.primary', r.subject), r.description ? h('span.secondary.truncate', { style: { maxWidth: '420px' } }, r.description) : null]; } },
+        { key: 'customer_name', label: 'Customer', sortable: true, render: function (r) { return customerLink(r.customer_id, r.customer_name); } },
+        { key: 'owner_name', label: 'PIC', sortable: true }
+      ];
+    }
+    function activityCard(r) {
+      return ui.listCard({ title: r.subject, badge: ui.badge(PIK.enumLabel('ACTIVITY_TYPE', r.type), null, true), lines: [fmt.dateTime(r.activity_at), r.customer_name, r.owner_name] });
+    }
+
+    // ============================================================================================ Contacts
+    views.contacts = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Contact', subtitle: 'Contact person per customer. Satu contact utama per customer.',
+        actions: canWrite('contacts') ? [addButton('Contact baru', function () { forms.contact(null, function () { list.reload(); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'contacts.list', query: query, searchPlaceholder: 'Cari nama, customer, telepon, email…',
+        filters: [{ key: 'is_primary', label: 'Contact utama', type: 'toggle' }],
+        defaultSort: { field: 'name', direction: 'asc' },
+        columns: [
+          { key: 'name', label: 'Nama', sortable: true, render: function (r) { return [h('span.primary', r.name), r.is_primary ? [' ', ui.badge('Utama', 'accent', true)] : null, h('span.secondary', r.position || '')]; } },
+          { key: 'customer_name', label: 'Customer', sortable: true, render: function (r) { return customerLink(r.customer_id, r.customer_name); } },
+          { key: 'phone', label: 'Telepon / WA', render: function (r) { return [r.phone, r.whatsapp && r.whatsapp !== r.phone ? 'WA ' + r.whatsapp : null].filter(Boolean).join(' · ') || null; } },
+          { key: 'email', label: 'Email' },
+          { key: 'actions', label: '', render: function (r) { return rowActions('contacts', r, { edit: function () { forms.contact(r, function () { list.reload(); }); }, archive: 'contacts', reload: function () { list.reload(); },
+            extra: canWrite('contacts') && !r.is_primary && r.is_active !== false ? { label: 'Jadikan utama', icon: 'star', onClick: function () { PIK.api('contacts.setPrimary', { id: r.id, expectedUpdatedAt: r.updated_at }).then(function () { PIK.toast.success('Contact utama diperbarui.'); list.reload(); }).catch(function (e) { PIK.toast.error(e.message); }); } } : null }); } }
+        ],
+        card: function (r) { return ui.listCard({ title: r.name, badge: r.is_primary ? ui.badge('Utama', 'accent', true) : null, lines: [r.customer_name, r.position, r.phone || r.whatsapp, r.email] }); },
+        onRowClick: function (r) { PIK.router.go('customers/' + r.customer_id, { tab: 'contacts' }); },
+        empty: { icon: 'contacts', title: 'Belum ada contact', action: canWrite('contacts') ? { label: 'Contact baru', onClick: function () { forms.contact(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    // ============================================================================================ Leads
+    views.leads = function (container, params, query) {
+      var mobile = window.matchMedia('(max-width: 767px)').matches;
+      var mode = query.view || (mobile ? 'list' : 'board');
+      var host = h('div');
+      var toggle = ui.tabs([{ key: 'board', label: 'Pipeline' }, { key: 'list', label: 'Daftar' }], mode, function (key) { mode = key; PIK.router.setQuery({ view: key }); paint({}); }, { segmented: true });
+      container.appendChild(PIK.pageHead({
+        title: 'Lead & Pipeline', subtitle: 'Peluang penjualan per tahap. Seret kartu, atau pakai menu ⋯ pada kartu, untuk memindahkan tahap.',
+        actions: [toggle].concat(canWrite('leads') ? [addButton('Lead baru', function () { forms.lead(null, function () { paint(PIK.router.current.query); }); })] : [])
+      }));
+      container.appendChild(host);
+
+      function paint(q) {
+        if (mode === 'list') {
+          ui.listPage(host, {
+            action: 'leads.list', query: q || {}, keepQuery: { view: 'list' }, searchPlaceholder: 'Cari lead, customer, produk…',
+            filters: [
+              { key: 'status', label: 'Status', enumName: 'LEAD_STATUS' }, { key: 'priority', label: 'Prioritas', enumName: 'PRIORITY' },
+              { key: 'owner_user_id', label: 'PIC', type: 'user' }, { key: 'open', label: 'Hanya terbuka', type: 'toggle' }
+            ],
+            defaultSort: { field: 'updated_at', direction: 'desc' },
+            columns: leadColumns(), card: leadCard, onRowClick: function (r) { PIK.router.go('leads/' + r.id, {}); },
+            empty: { icon: 'leads', title: 'Belum ada lead', action: canWrite('leads') ? { label: 'Lead baru', onClick: function () { forms.lead(null, function () { paint({}); }); } } : null }
+          });
+        } else {
+          board(host, q || {});
+        }
+      }
+      paint(query);
+    };
+
+    function board(host, query) {
+      var filters = {};
+      if (query.owner_user_id) filters.owner_user_id = query.owner_user_id;
+      var search = query.q || '';
+      var searchInput = h('input.input', { type: 'search', placeholder: 'Cari lead atau customer…', value: search, 'aria-label': 'Cari lead' });
+      var owner = h('select.select', { 'aria-label': 'PIC' }, h('option', { value: '' }, 'PIC: Semua'), h('option', { value: PIK.session.user.id, selected: filters.owner_user_id === PIK.session.user.id }, 'PIC: Saya'));
+      var area = h('div', h('div.kanban', [0, 1, 2, 3].map(function () { return h('div.skeleton', { style: { height: '320px', borderRadius: '12px' } }); })));
+      PIK.mount(host, [h('div.toolbar', h('div.search-box', icon('search'), searchInput), owner), area]);
+      var reload = function () {
+        var q = { view: 'board' };
+        if (search) q.q = search;
+        if (filters.owner_user_id) q.owner_user_id = filters.owner_user_id;
+        PIK.router.setQuery(q);
+        area.style.opacity = area.dataset.state === 'ready' ? '.55' : '';
+        PIK.api('leads.board', { search: search, filters: filters }).then(function (data) {
+          area.style.opacity = '';
+          area.dataset.state = 'ready';
+          PIK.mount(area, data.total === 0 && !search && !filters.owner_user_id
+            ? h('div.card', ui.emptyState({ icon: 'leads', title: 'Pipeline masih kosong', text: 'Buat lead untuk mulai melacak peluang penjualan.', action: canWrite('leads') ? { label: 'Lead baru', onClick: function () { forms.lead(null, reload); } } : null }))
+            : renderBoard(data, reload));
+        }).catch(function (error) { area.style.opacity = ''; PIK.mount(area, h('div.card', ui.errorState(error, reload))); });
+      };
+      searchInput.addEventListener('input', PIK.debounce(function () { search = searchInput.value.trim(); reload(); }, 300));
+      owner.addEventListener('change', function () { if (owner.value) filters.owner_user_id = owner.value; else delete filters.owner_user_id; reload(); });
+      reload();
+    }
+
+    function renderBoard(data, reload) {
+      var writable = canWrite('leads');
+      var dragging = null;
+      function move(lead, status, card) {
+        if (lead.status === status) return;
+        if (card) card.style.opacity = '.5';
+        PIK.api('leads.move', { id: lead.id, status: status, expectedUpdatedAt: lead.updated_at }).then(function () {
+          PIK.toast.success(lead.name + ' → ' + PIK.enumLabel('LEAD_STATUS', status));
+          reload();
+        }).catch(function (error) {
+          if (card) card.style.opacity = '';
+          PIK.toast.error(error.message);
+          if (error.code === 'CONFLICT') reload();
+        });
+      }
+      return h('div.kanban', { role: 'list', 'aria-label': 'Pipeline lead' }, data.columns.map(function (col) {
+        var column = h('section.kanban-col', { role: 'listitem', 'aria-label': col.label + ', ' + col.count + ' lead', dataset: { status: col.status } },
+          h('div.kanban-head', h('h3', col.label), h('span.count', fmt.number(col.count, 0)), col.total_value ? h('span.value', fmt.compactMoney(col.total_value)) : null),
+          col.items.map(function (lead) {
+            var menu = writable ? h('button.btn.btn-quiet.btn-sm', { type: 'button', 'aria-label': 'Pindah tahap ' + lead.name, style: { marginLeft: 'auto', height: '24px', padding: '0 6px' } }, icon('more', 'icon-sm')) : null;
+            var card = h('div.kanban-card', { draggable: writable ? 'true' : null, tabindex: '0', role: 'button', 'aria-label': lead.name + ', ' + (lead.customer_name || '') },
+              h('div.row', { style: { gap: '6px', alignItems: 'flex-start' } }, h('div.title', { style: { flex: '1', minWidth: '0' } }, lead.name), menu),
+              h('div.muted', { style: { fontSize: '12.5px' } }, lead.customer_name || '—'),
+              h('div.meta', h('span', lead.estimated_value ? fmt.compactMoney(lead.estimated_value) : '—'), ui.priority(lead.priority)),
+              h('div.meta', h('span', lead.owner_name || ''), h('span', lead.expected_closing_date ? fmt.date(lead.expected_closing_date) : '')));
+            card.addEventListener('click', function (e) { if (!e.target.closest('button')) PIK.router.go('leads/' + lead.id, {}); });
+            card.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target === card) PIK.router.go('leads/' + lead.id, {}); });
+            if (menu) menu.addEventListener('click', function (e) {
+              e.stopPropagation();
+              PIK.popover(menu, PIK.enumOptions('LEAD_STATUS').filter(function (o) { return o.value !== lead.status; }).map(function (o) {
+                return { label: 'Pindah ke ' + o.label, onClick: function () { move(lead, o.value, card); } };
+              }));
+            });
+            if (writable) {
+              card.addEventListener('dragstart', function (e) { dragging = { lead: lead, card: card }; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', lead.id); });
+              card.addEventListener('dragend', function () { card.classList.remove('dragging'); });
+            }
+            return card;
+          }),
+          col.count > col.items.length ? h('div.kanban-more', '+ ' + (col.count - col.items.length) + ' lead lainnya — buka tampilan Daftar') : null,
+          col.count === 0 ? h('div.kanban-more', 'Kosong') : null);
+        if (writable) {
+          column.addEventListener('dragover', function (e) { if (dragging) { e.preventDefault(); column.classList.add('drop'); } });
+          column.addEventListener('dragleave', function () { column.classList.remove('drop'); });
+          column.addEventListener('drop', function (e) {
+            e.preventDefault();
+            column.classList.remove('drop');
+            if (dragging) move(dragging.lead, col.status, dragging.card);
+            dragging = null;
+          });
+        }
+        return column;
+      }));
+    }
+
+    views.leadDetail = function (container, params) {
+      var host = h('div', ui.skeletonBlocks());
+      container.appendChild(host);
+      function load() {
+        PIK.api('leads.get', { id: params.id }).then(render).catch(function (error) {
+          PIK.mount(host, [PIK.pageHead({ title: 'Lead', breadcrumb: { label: 'Lead & Pipeline', path: 'leads' } }), h('div.card', ui.errorState(error, load))]);
+        });
+      }
+      function render(data) {
+        var lead = data.lead;
+        var preset = { customer_id: lead.customer_id, customer_name: lead.customer_name, lead_id: lead.id, lead_name: lead.name };
+        var actions = [];
+        if (canWrite('activities')) actions.push(ui.button('Aktivitas', { kind: 'primary', icon: 'plus', onClick: function () { forms.activity(null, load, preset); } }));
+        if (canWrite('followUps')) actions.push(ui.button('Follow-up', { icon: 'plus', onClick: function () { forms.followUp(null, function () { PIK.notifyChanged(); load(); }, preset); } }));
+        if (canWrite('leads')) {
+          actions.push(ui.button('Ubah', { icon: 'edit', onClick: function () { forms.lead(lead, load); } }));
+          var statusSelect = h('select.select', { 'aria-label': 'Tahap pipeline', style: { width: 'auto', height: '36px' } },
+            PIK.enumOptions('LEAD_STATUS', false, lead.status).map(function (o) { return h('option', { value: o.value, selected: o.value === lead.status }, o.label); }));
+          statusSelect.addEventListener('change', function () {
+            var target = statusSelect.value;
+            PIK.api('leads.move', { id: lead.id, status: target, expectedUpdatedAt: lead.updated_at }).then(function () {
+              PIK.toast.success('Tahap lead: ' + PIK.enumLabel('LEAD_STATUS', target));
+              load();
+            }).catch(function (error) { statusSelect.value = lead.status; PIK.toast.error(error.message); });
+          });
+          actions.unshift(statusSelect);
+          actions.push(lead.is_active === false ? ui.button('Pulihkan', { icon: 'restore', onClick: function () { ui.restoreFlow({ restoreAction: 'leads.restore', id: lead.id, onDone: load }); } })
+            : ui.button('', { icon: 'archive', ariaLabel: 'Arsipkan lead', onClick: function () { ui.archiveFlow({ archiveAction: 'leads.archive', restoreAction: 'leads.restore', id: lead.id, onDone: load }); } }));
+        }
+        PIK.mount(host, [
+          PIK.pageHead({ title: lead.name, breadcrumb: { label: 'Lead & Pipeline', path: 'leads' }, actions: actions }),
+          h('div.row-wrap', { style: { marginTop: '-12px', marginBottom: '20px' } }, ui.statusBadge('LEAD_STATUS', lead.status), ui.priority(lead.priority), lead.is_active === false ? ui.badge('Diarsipkan', 'muted') : null),
+          h('div.detail-grid',
+            h('div.stack',
+              ui.card('Aktivitas', data.activities.length ? h('div.timeline', data.activities.map(function (a) {
+                return h('div.tl-item', h('div.tl-when', fmt.dateTime(a.activity_at), ' · ', PIK.enumLabel('ACTIVITY_TYPE', a.type), a.owner_name ? ' · ' + a.owner_name : ''), h('div.tl-title', a.subject), a.description ? h('div.tl-body', a.description) : null);
+              })) : ui.emptyState({ icon: 'activities', title: 'Belum ada aktivitas untuk lead ini' })),
+              ui.card('Follow-up', data.followUps.length ? followUpRows(data.followUps, load) : h('p.muted', 'Belum ada follow-up.')),
+              ui.card('Riwayat perubahan', ui.historyPanel('LEADS', lead.id))),
+            ui.card('Detail', ui.kv([
+              ['Customer', customerLink(lead.customer_id, lead.customer_name)], ['Contact', lead.contact_name], ['Estimasi qty', lead.estimated_quantity === null ? null : fmt.number(lead.estimated_quantity)],
+              ['Estimasi nilai', lead.estimated_value === null ? null : fmt.money(lead.estimated_value)], ['Perkiraan closing', lead.expected_closing_date ? fmt.date(lead.expected_closing_date) : null],
+              ['PIC', lead.owner_name], ['Produk', lead.product_label], ['Minat produk', lead.product_interest], ['Sumber', lead.source], ['Catatan', lead.notes],
+              ['Dibuat', fmt.dateTime(lead.created_at)]
+            ])))
+        ]);
+      }
+      load();
+    };
+
+    // ============================================================================================ Activities
+    views.activities = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Aktivitas', subtitle: 'Interaksi marketing dengan customer: WhatsApp, telepon, visit, dan lainnya.',
+        actions: canWrite('activities') ? [addButton('Catat aktivitas', function () { forms.activity(null, function () { list.reload(); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'activities.list', query: query, searchPlaceholder: 'Cari subjek, deskripsi, customer…',
+        filters: [
+          { key: 'type', label: 'Jenis', enumName: 'ACTIVITY_TYPE' }, { key: 'owner_user_id', label: 'PIC', type: 'user' },
+          { key: 'activity_at', label: 'Tanggal', type: 'dateRange' }
+        ],
+        defaultSort: { field: 'activity_at', direction: 'desc' },
+        columns: activityColumns().concat([{ key: 'actions', label: '', render: function (r) { return rowActions('activities', r, { edit: function () { forms.activity(r, function () { list.reload(); }); }, archive: 'activities', reload: function () { list.reload(); } }); } }]),
+        card: activityCard,
+        onRowClick: canWrite('activities') ? function (r) { forms.activity(r, function () { list.reload(); }); } : function (r) { if (r.customer_id) PIK.router.go('customers/' + r.customer_id, { tab: 'activities' }); },
+        empty: { icon: 'activities', title: 'Belum ada aktivitas', text: 'Catat setiap interaksi agar konteks customer selalu lengkap.',
+          action: canWrite('activities') ? { label: 'Catat aktivitas', onClick: function () { forms.activity(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    // ============================================================================================ Follow-ups
+    var FOLLOW_UP_TABS = [
+      { key: 'TODAY', label: 'Hari ini' }, { key: 'OVERDUE', label: 'Terlambat' }, { key: 'UPCOMING', label: 'Mendatang' },
+      { key: 'RESCHEDULE', label: 'Dijadwalkan ulang' }, { key: 'DONE', label: 'Selesai' }, { key: 'CANCELLED', label: 'Dibatalkan' }
+    ];
+
+    views.followUps = function (container, params, query) {
+      var bucket = FOLLOW_UP_TABS.some(function (t) { return t.key === query.tab; }) ? query.tab : 'TODAY';
+      var owner = query.owner_user_id || '';
+      var tabsHost = h('div', { style: { marginBottom: '16px' } });
+      var host = h('div');
+      var list = null;
+      container.appendChild(PIK.pageHead({
+        title: 'Follow-up', subtitle: 'Jadwal tindak lanjut. Overdue dihitung otomatis dari tanggal hari ini.',
+        actions: canWrite('followUps') ? [addButton('Follow-up baru', function () { forms.followUp(null, refresh); })] : []
+      }));
+      container.appendChild(tabsHost);
+      container.appendChild(host);
+
+      function refresh() { PIK.notifyChanged(); loadCounts(); if (list) list.reload(); }
+
+      function loadCounts() {
+        PIK.api('followUps.counts', { filters: owner ? { owner_user_id: owner } : {} }).then(function (counts) {
+          PIK.mount(tabsHost, ui.tabs(FOLLOW_UP_TABS.map(function (t) { return { key: t.key, label: t.label, count: counts[t.key] }; }), bucket, function (key) {
+            bucket = key;
+            renderList({});
+          }, { segmented: true }));
+        }).catch(function () {
+          PIK.mount(tabsHost, ui.tabs(FOLLOW_UP_TABS, bucket, function (key) { bucket = key; renderList({}); }, { segmented: true }));
+        });
+      }
+
+      function renderList(q) {
+        list = ui.listPage(host, {
+          action: 'followUps.list', query: q, keepQuery: { tab: bucket }, baseParams: { filters: { bucket: bucket } },
+          searchPlaceholder: 'Cari tujuan, customer, hasil…',
+          filters: [{ key: 'owner_user_id', label: 'PIC', type: 'user' }, { key: 'priority', label: 'Prioritas', enumName: 'PRIORITY' }],
+          archivedToggle: false,
+          defaultSort: { field: 'follow_up_date', direction: bucket === 'DONE' || bucket === 'CANCELLED' ? 'desc' : 'asc' },
+          onResult: function () {
+            var current = (PIK.router.current && PIK.router.current.query.owner_user_id) || '';
+            if (current !== owner) { owner = current; loadCounts(); }
+          },
+          columns: [
+            { key: 'follow_up_date', label: 'Jadwal', sortable: true, render: function (r) { return [h('span.primary.nowrap', fmt.date(r.follow_up_date) + (r.follow_up_time ? ' · ' + fmt.time(r.follow_up_time) : '')), h('span.secondary', fmt.relativeDay(r.follow_up_date))]; } },
+            { key: 'purpose', label: 'Tujuan', render: function (r) { return [h('span.primary', r.purpose || PIK.enumLabel('ACTIVITY_TYPE', r.type) || 'Follow-up'), r.result ? h('span.secondary', 'Hasil: ' + r.result) : r.lead_name ? h('span.secondary', r.lead_name) : null]; } },
+            { key: 'customer_name', label: 'Customer', sortable: true, render: function (r) { return customerLink(r.customer_id, r.customer_name); } },
+            { key: 'priority', label: 'Prioritas', sortable: true, render: function (r) { return ui.priority(r.priority); } },
+            { key: 'owner_name', label: 'PIC', sortable: true },
+            { key: 'status', label: 'Status', render: function (r) { return ui.statusBadge('DUE_STATE', r.due_state); } },
+            { key: 'actions', label: '', render: function (r) { return followUpActions(r, refresh); } }
+          ],
+          card: function (r) {
+            var card = ui.listCard({ title: r.purpose || 'Follow-up', badge: ui.statusBadge('DUE_STATE', r.due_state), lines: [dueText(r), r.customer_name, r.owner_name], extra: followUpActions(r, refresh) });
+            return card;
+          },
+          onRowClick: function (r) { if (r.customer_id) PIK.router.go('customers/' + r.customer_id, { tab: 'followUps' }); },
+          empty: { icon: 'followUps', title: bucket === 'TODAY' ? 'Tidak ada follow-up hari ini' : bucket === 'OVERDUE' ? 'Tidak ada follow-up terlambat' : 'Tidak ada follow-up',
+            text: bucket === 'OVERDUE' ? 'Semua tindak lanjut tepat waktu.' : null,
+            action: canWrite('followUps') ? { label: 'Follow-up baru', onClick: function () { forms.followUp(null, refresh); } } : null }
+        });
+      }
+
+      loadCounts();
+      renderList(query);
+    };
+
+    function followUpActions(r, refresh) {
+      var open = r.due_state !== 'DONE' && r.due_state !== 'CANCELLED' && r.is_active !== false;
+      if (!open || !canWrite('followUps')) return null;
+      var more = h('button.btn.btn-quiet.btn-sm', { type: 'button', 'aria-label': 'Aksi lain' }, icon('more', 'icon-sm'));
+      more.addEventListener('click', function (e) {
+        e.stopPropagation();
+        PIK.popover(more, [
+          { label: 'Jadwalkan ulang', icon: 'calendar', onClick: function () { forms.rescheduleFollowUp(r, refresh); } },
+          { label: 'Ubah', icon: 'edit', onClick: function () { forms.followUp(r, refresh); } },
+          { label: 'Batalkan', icon: 'close', danger: true, onClick: function () { forms.cancelFollowUp(r, refresh); } }
+        ]);
+      });
+      return h('div.row', { style: { gap: '4px' } },
+        h('button.btn.btn-sm', { type: 'button', onClick: function (e) { e.stopPropagation(); forms.completeFollowUp(r, refresh); } }, icon('check', 'icon-sm'), 'Selesai'), more);
+    }
+
+    PIK.viewParts = PIK.viewParts || {};
+    PIK.viewParts.customerLink = customerLink;
+    PIK.viewParts.tabTable = tabTable;
+  })(PIK);
+</script>

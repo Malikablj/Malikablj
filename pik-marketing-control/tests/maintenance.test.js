@@ -209,7 +209,7 @@ test('doGet merender halaman dengan include_ privat', () => {
   const output = context.doGet();
   assert.equal(output.getTitle(), 'PIK Marketing Control');
   const html = output.getContent();
-  assert.ok(html.includes('--bg: #F5F5F7'), 'style disisipkan');
-  assert.ok(html.includes('getAppHealth()'), 'script disisipkan');
+  assert.ok(html.includes('--color-bg: #F5F5F7'), 'style disisipkan');
+  assert.ok(html.includes("PIK.api('session.get'"), 'script aplikasi disisipkan');
   assert.ok(!html.includes('<?'), 'semua scriptlet dievaluasi');
 });

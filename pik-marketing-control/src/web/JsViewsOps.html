@@ -1,0 +1,484 @@
+<script>
+  /*
+   * Screens: Purchase orders (list, detail with items, deliveries, returns, lead time, inbound and invoices),
+   * Deliveries, Returns, Products (list and detail), Stock and Lead time. Delivered / returned / outstanding come from
+   * the server (derived from the transactions); the client only displays them.
+   */
+  (function (PIK) {
+    'use strict';
+    var h = PIK.h;
+    var icon = PIK.icon;
+    var ui = PIK.ui;
+    var fmt = PIK.fmt;
+    var forms = PIK.forms;
+    var views = PIK.views = PIK.views || {};
+    var parts = PIK.viewParts = PIK.viewParts || {};
+
+    function canWrite(module) { return PIK.can(module, 'RW'); }
+    function addButton(label, onClick) { return ui.button(label, { kind: 'primary', icon: 'plus', onClick: onClick }); }
+    function link(path, label) {
+      if (!path) return h('span.subtle', label || '—');
+      return h('a', { href: '#' + path, onClick: function (e) { e.preventDefault(); e.stopPropagation(); PIK.router.go(path, {}); } }, label);
+    }
+    function poLink(id, label) { return id ? link('purchase-orders/' + id, label || id) : h('span.subtle', label || '—'); }
+    function productLink(id, label, legacy) { return id ? link('products/' + id, label || id) : h('span.subtle', legacy ? legacy + ' (belum tertaut)' : '—'); }
+    function customerLink(id, name) { return parts.customerLink(id, name); }
+
+    function fulfillmentCell(r) {
+      var net = (r.delivered_quantity || 0) - (r.returned_quantity || 0);
+      return h('div', { style: { minWidth: '140px' } }, ui.progress(net, r.order_quantity),
+        h('div.progress-label', h('span.num', fmt.number(net) + ' / ' + fmt.number(r.order_quantity)), ui.statusBadge('FULFILLMENT', r.fulfillment)));
+    }
+
+    // ------------------------------------------------------------------------------------------ Shared columns
+    parts.poColumns = function () {
+      return [
+        { key: 'po_number', label: 'Nomor PO', sortable: true, render: function (r) { return [h('span.primary', r.po_label || r.id), ' ', PIK.ui.legacyTag(r), h('span.secondary', fmt.date(r.po_date))]; } },
+        { key: 'customer_name', label: 'Customer', sortable: true, render: function (r) { return customerLink(r.customer_id, r.customer_name || 'Tanpa customer'); } },
+        { key: 'status', label: 'Status', sortable: true, render: function (r) { return ui.statusBadge('PO_STATUS', r.status); } },
+        { key: 'fulfillment', label: 'Terkirim', render: fulfillmentCell },
+        { key: 'outstanding_quantity', label: 'Outstanding', sortable: true, align: 'right', render: function (r) { return fmt.number(r.outstanding_quantity); } },
+        { key: 'expected_delivery_date', label: 'Target kirim', sortable: true, render: function (r) { return r.expected_delivery_date ? fmt.date(r.expected_delivery_date) : null; } }
+      ];
+    };
+    parts.poCard = function (r) {
+      return ui.listCard({ title: r.po_label || r.id, badge: ui.statusBadge('PO_STATUS', r.status), lines: [r.customer_name, fmt.date(r.po_date), 'Outstanding ' + fmt.number(r.outstanding_quantity)],
+        extra: h('div', { style: { marginTop: '4px' } }, ui.progress((r.delivered_quantity || 0) - (r.returned_quantity || 0), r.order_quantity)) });
+    };
+    parts.deliveryColumns = function (withPo) {
+      var cols = [
+        { key: 'delivery_date', label: 'Tanggal', sortable: true, render: function (r) { return [h('span.primary.nowrap', fmt.date(r.delivery_date)), ' ', PIK.ui.legacyTag(r)]; } },
+        { key: 'sj_number', label: 'Nomor SJ', sortable: true }
+      ];
+      if (withPo !== false) {
+        cols.push({ key: 'po_label', label: 'PO', sortable: true, render: function (r) { return [poLink(r.purchase_order_id, r.po_label), h('span.secondary', r.customer_name || '')]; } });
+      }
+      return cols.concat([
+        { key: 'product_label', label: 'Produk', sortable: true, render: function (r) { return [productLink(r.product_id, r.product_label), !r.is_linked ? h('span.secondary', { style: { color: 'var(--ink-warning)' } }, 'Belum tertaut ke item PO') : null]; } },
+        { key: 'quantity', label: 'Qty', sortable: true, align: 'right', render: function (r) { return fmt.number(r.quantity); } },
+        { key: 'status', label: 'Status', sortable: true, render: function (r) { return r.status ? ui.statusBadge('DELIVERY_STATUS', r.status) : ui.badge('Tanpa status', 'muted'); } }
+      ]);
+    };
+    parts.deliveryCard = function (r) {
+      return ui.listCard({ title: (r.sj_number || 'Tanpa SJ') + ' · ' + fmt.number(r.quantity), badge: r.status ? ui.statusBadge('DELIVERY_STATUS', r.status) : ui.badge('Tanpa status', 'muted'),
+        lines: [fmt.date(r.delivery_date), r.po_label, r.product_label || 'Produk belum tertaut', r.customer_name] });
+    };
+    parts.returnColumns = function (withPo) {
+      var cols = [{ key: 'return_date', label: 'Tanggal', sortable: true, render: function (r) { return [h('span.primary.nowrap', fmt.date(r.return_date)), ' ', PIK.ui.legacyTag(r)]; } }];
+      if (withPo !== false) cols.push({ key: 'po_label', label: 'PO', sortable: true, render: function (r) { return [poLink(r.purchase_order_id, r.po_label || r.po_number_legacy), h('span.secondary', r.customer_name || '')]; } });
+      return cols.concat([
+        { key: 'product_label', label: 'Produk', sortable: true, render: function (r) { return [productLink(r.product_id, r.product_label, r.product_legacy), !r.is_linked ? h('span.secondary', 'Tanpa item PO') : null]; } },
+        { key: 'quantity', label: 'Qty', sortable: true, align: 'right', render: function (r) { return fmt.number(r.quantity); } },
+        { key: 'reason', label: 'Alasan', render: function (r) { return r.reason ? h('span.truncate', { style: { maxWidth: '260px', display: 'inline-block' } }, r.reason) : null; } },
+        { key: 'status', label: 'Status', sortable: true, render: function (r) { return r.status ? ui.statusBadge('RETURN_STATUS', r.status) : ui.badge('Tanpa status', 'muted'); } }
+      ]);
+    };
+    parts.returnCard = function (r) {
+      return ui.listCard({ title: (r.product_label || r.product_legacy || 'Produk') + ' · ' + fmt.number(r.quantity), badge: r.status ? ui.statusBadge('RETURN_STATUS', r.status) : null,
+        lines: [fmt.date(r.return_date), r.po_label || r.po_number_legacy, r.reason] });
+    };
+
+    // ============================================================================================ Purchase orders
+    views.purchaseOrders = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Purchase Order', subtitle: 'PO customer. Terkirim, retur, dan outstanding dihitung dari delivery dan retur.',
+        actions: canWrite('purchaseOrders') ? [addButton('PO baru', function () { forms.purchaseOrder(null, function (po) { PIK.router.go('purchase-orders/' + po.id, {}); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'purchaseOrders.list', query: query, searchPlaceholder: 'Cari nomor PO atau customer…',
+        filters: [
+          { key: 'status', label: 'Status', enumName: 'PO_STATUS' },
+          { key: 'fulfillment', label: 'Pengiriman', options: [{ value: 'NOT_STARTED', label: 'Belum dikirim' }, { value: 'PARTIAL', label: 'Sebagian' }, { value: 'COMPLETE', label: 'Lengkap' }, { value: 'NO_LINES', label: 'Belum ada item' }] },
+          { key: 'owner_user_id', label: 'PIC', type: 'user' },
+          { key: 'open', label: 'Hanya terbuka', type: 'toggle' },
+          { key: 'po_date', label: 'Tanggal PO', type: 'dateRange' }
+        ],
+        defaultSort: { field: 'po_date', direction: 'desc' },
+        columns: parts.poColumns(), card: parts.poCard,
+        onRowClick: function (r) { PIK.router.go('purchase-orders/' + r.id, {}); },
+        empty: { icon: 'purchaseOrders', title: 'Belum ada PO', action: canWrite('purchaseOrders') ? { label: 'PO baru', onClick: function () { forms.purchaseOrder(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    views.purchaseOrderDetail = function (container, params, query) {
+      var host = h('div', ui.skeletonBlocks());
+      container.appendChild(host);
+      function load() {
+        PIK.api('purchaseOrders.get', { id: params.id }).then(render).catch(function (error) {
+          PIK.mount(host, [PIK.pageHead({ title: 'Purchase Order', breadcrumb: { label: 'Purchase Order', path: 'purchase-orders' } }), h('div.card', ui.errorState(error, load))]);
+        });
+      }
+
+      function render(d) {
+        var po = d.purchaseOrder;
+        var preset = { purchase_order_id: po.id, po_label: po.po_label };
+        var actions = [];
+        if (canWrite('purchaseOrders')) {
+          var statusSelect = h('select.select', { 'aria-label': 'Status PO', style: { width: 'auto', height: '36px' } },
+            PIK.enumOptions('PO_STATUS', false, po.status).map(function (o) { return h('option', { value: o.value, selected: o.value === po.status }, o.label); }));
+          statusSelect.addEventListener('change', function () {
+            var target = statusSelect.value;
+            var closing = target === 'CLOSED' || target === 'CANCELLED';
+            var confirmIt = closing && po.outstanding_quantity > 0 ? PIK.confirm({
+              title: 'Ubah status ke ' + PIK.enumLabel('PO_STATUS', target) + '?',
+              message: 'PO ini masih memiliki outstanding ' + fmt.number(po.outstanding_quantity) + '. PO tertutup tidak lagi dihitung di outstanding dan tidak dapat menerima delivery baru.',
+              confirmLabel: 'Ubah status', danger: target === 'CANCELLED'
+            }) : Promise.resolve(true);
+            confirmIt.then(function (ok) {
+              if (!ok) { statusSelect.value = po.status; return; }
+              PIK.api('purchaseOrders.setStatus', { id: po.id, status: target, expectedUpdatedAt: po.updated_at }).then(function () {
+                PIK.toast.success('Status PO: ' + PIK.enumLabel('PO_STATUS', target));
+                load();
+              }).catch(function (error) { statusSelect.value = po.status; PIK.toast.error(error.message); });
+            });
+          });
+          actions.push(statusSelect);
+        }
+        if (canWrite('deliveries') && po.is_open) actions.push(ui.button('Delivery', { kind: 'primary', icon: 'plus', onClick: function () { forms.delivery(null, load, preset); } }));
+        var more = [];
+        if (canWrite('purchaseOrders')) {
+          more.push({ label: 'Ubah PO', icon: 'edit', onClick: function () { forms.purchaseOrder(po, load); } });
+          more.push({ label: 'Tambah item', icon: 'plus', onClick: function () { forms.poLine(null, load, preset); } });
+        }
+        if (canWrite('returns')) more.push({ label: 'Catat retur', icon: 'returns', onClick: function () { forms.returnItem(null, load, preset); } });
+        if (canWrite('leadTime')) more.push({ label: 'Jadwal lead time', icon: 'leadTime', onClick: function () { forms.leadTime(null, load, preset); } });
+        if (canWrite('finance')) more.push({ label: 'Invoice baru', icon: 'finance', onClick: function () { forms.invoice(null, load, preset); } });
+        if (canWrite('purchaseOrders')) more.push(po.is_active === false
+          ? { label: 'Pulihkan PO', icon: 'restore', onClick: function () { ui.restoreFlow({ restoreAction: 'purchaseOrders.restore', id: po.id, onDone: load }); } }
+          : { label: 'Arsipkan PO', icon: 'archive', danger: true, onClick: function () { ui.archiveFlow({ archiveAction: 'purchaseOrders.archive', restoreAction: 'purchaseOrders.restore', id: po.id, onDone: load }); } });
+        if (more.length) {
+          var moreButton = h('button.btn.btn-icon', { type: 'button', 'aria-label': 'Aksi lainnya', 'aria-haspopup': 'menu' }, icon('more', 'icon-sm'));
+          moreButton.addEventListener('click', function () { PIK.popover(moreButton, more); });
+          actions.push(moreButton);
+        }
+
+        var unlinked = (po.unlinked_delivered_quantity || 0) + (po.unlinked_returned_quantity || 0);
+        var sections = [
+          PIK.pageHead({ title: po.po_label || po.id, breadcrumb: { label: 'Purchase Order', path: 'purchase-orders' }, actions: actions }),
+          h('div.row-wrap', { style: { marginTop: '-12px', marginBottom: '8px' } }, ui.statusBadge('PO_STATUS', po.status), ui.statusBadge('FULFILLMENT', po.fulfillment),
+            po.is_active === false ? ui.badge('Diarsipkan', 'muted') : null, ui.legacyTag(po)),
+          h('div.detail-meta', { style: { marginBottom: '20px' } },
+            h('span', icon('customers', 'icon-sm'), customerLink(po.customer_id, po.customer_name || 'Tanpa customer')),
+            h('span', icon('calendar', 'icon-sm'), 'PO ' + fmt.date(po.po_date)),
+            po.expected_delivery_date ? h('span', 'Target kirim ' + fmt.date(po.expected_delivery_date)) : null,
+            po.owner_name ? h('span', icon('user', 'icon-sm'), po.owner_name) : null,
+            po.payment_term ? h('span', 'Termin: ' + po.payment_term) : null),
+          h('div.card.stat-strip',
+            stat('Order', fmt.number(po.order_quantity)), stat('Terkirim', fmt.number(po.delivered_quantity)), stat('Retur', fmt.number(po.returned_quantity)),
+            stat('Outstanding', fmt.number(po.outstanding_quantity)), stat(po.order_value !== null ? 'Nilai PO' : 'Terjadwal', po.order_value !== null ? fmt.compactMoney(po.order_value) : fmt.number(po.scheduled_quantity))),
+          unlinked > 0 ? h('div.form-alert.warn', { style: { marginBottom: '16px' } }, icon('alert', 'icon-sm'),
+            h('span', 'Ada transaksi legacy yang belum ditautkan ke item PO (terkirim ' + fmt.number(po.unlinked_delivered_quantity) + ', retur ' + fmt.number(po.unlinked_returned_quantity) +
+              '). Qty ini tidak dihitung ke outstanding sampai Admin menautkannya ke item yang benar.')) : null,
+          po.is_legacy ? ui.migrationIssuesNotice(po.id) : null,
+          po.notes ? h('div.card.card-pad', { style: { marginBottom: '16px' } }, h('div.section-title', 'Catatan'), h('p', { style: { whiteSpace: 'pre-wrap' } }, po.notes)) : null,
+          section('Item PO', d.lines.length, canWrite('purchaseOrders') ? ui.button('Item', { size: 'sm', icon: 'plus', onClick: function () { forms.poLine(null, load, preset); } }) : null,
+            d.lines.length ? ui.dataTable({ rows: d.lines, columns: lineColumns(load), card: lineCard }) : h('div.card', ui.emptyState({ icon: 'products', title: 'Belum ada item', text: 'Tambahkan produk dan qty yang dipesan customer.' }))),
+          section('Delivery', d.deliveries.length, canWrite('deliveries') && po.is_open ? ui.button('Delivery', { size: 'sm', icon: 'plus', onClick: function () { forms.delivery(null, load, preset); } }) : null,
+            d.deliveries.length ? ui.dataTable({ rows: d.deliveries, columns: parts.deliveryColumns(false).concat([{ key: 'actions', label: '', render: function (r) { return PIK.rowActions('deliveries', r, { edit: function () { forms.delivery(r, load); }, archive: 'deliveries', reload: load }); } }]), card: parts.deliveryCard }) :
+              h('div.card', ui.emptyState({ icon: 'deliveries', title: 'Belum ada delivery' }))),
+          section('Retur', d.returns.length, canWrite('returns') ? ui.button('Retur', { size: 'sm', icon: 'plus', onClick: function () { forms.returnItem(null, load, preset); } }) : null,
+            d.returns.length ? ui.dataTable({ rows: d.returns, columns: parts.returnColumns(false).concat([{ key: 'actions', label: '', render: function (r) { return PIK.rowActions('returns', r, { edit: function () { forms.returnItem(r, load); }, archive: 'returns', reload: load }); } }]), card: parts.returnCard }) :
+              h('div.card', ui.emptyState({ icon: 'returns', title: 'Belum ada retur' })))
+        ];
+        if (d.leadTimes) {
+          sections.push(section('Jadwal lead time', d.leadTimes.length, null, d.leadTimes.length ? ui.dataTable({ rows: d.leadTimes, columns: leadTimeColumns(false, load), card: leadTimeCard }) :
+            h('div.card', ui.emptyState({ icon: 'leadTime', title: 'Belum ada jadwal', text: 'Jadwal rencana kirim tidak dihitung sebagai qty terkirim.' }))));
+        }
+        if (d.inbound && d.inbound.length) {
+          sections.push(section('Inbound maklon', d.inbound.length, null, ui.dataTable({ rows: d.inbound, columns: inboundColumns(false) })));
+        }
+        if (d.invoices) {
+          sections.push(section('Invoice & pembayaran', d.invoices.length, canWrite('finance') ? ui.button('Invoice', { size: 'sm', icon: 'plus', onClick: function () { forms.invoice(null, load, preset); } }) : null,
+            d.invoices.length ? ui.dataTable({ rows: d.invoices, columns: parts.invoiceColumns(load, false), card: parts.invoiceCard }) : h('div.card', ui.emptyState({ icon: 'finance', title: 'Belum ada invoice' }))));
+        }
+        sections.push(section('Riwayat perubahan', null, null, h('div.card.card-pad', ui.historyPanel('PURCHASE_ORDERS', po.id))));
+        PIK.mount(host, sections);
+      }
+
+      function stat(label, value) { return h('div.stat', h('div.label', label), h('div.value', value)); }
+      function section(title, count, action, body) {
+        return h('section', { style: { marginBottom: '24px' } }, h('div.row', { style: { marginBottom: '10px' } }, h('h2', title, count !== null && count !== undefined ? h('span.muted', { style: { fontWeight: '500', marginLeft: '8px', fontSize: '15px' } }, fmt.number(count, 0)) : null), h('div.spacer'), action), body);
+      }
+      function lineColumns(reload) {
+        return [
+          { key: 'product_label', label: 'Produk', render: function (r) { return [productLink(r.product_id, r.product_label), r.is_active === false ? [' ', ui.badge('Diarsipkan', 'muted')] : null, r.product_name_legacy && !r.product_label ? h('span.secondary', r.product_name_legacy) : null]; } },
+          { key: 'order_quantity', label: 'Order', align: 'right', render: function (r) { return fmt.qty(r.order_quantity, r.unit); } },
+          { key: 'delivered_quantity', label: 'Terkirim', align: 'right', render: function (r) { return fmt.number(r.delivered_quantity); } },
+          { key: 'returned_quantity', label: 'Retur', align: 'right', render: function (r) { return fmt.number(r.returned_quantity); } },
+          { key: 'outstanding_quantity', label: 'Outstanding', align: 'right', render: function (r) {
+            return h('div', { style: { minWidth: '110px' } }, h('div.num', { style: { fontWeight: '600' } }, fmt.number(r.outstanding_quantity)),
+              r.over_delivered_quantity > 0 ? h('span.secondary', { style: { color: 'var(--ink-warning)' } }, 'Lebih kirim ' + fmt.number(r.over_delivered_quantity)) :
+                r.scheduled_quantity > 0 ? h('span.secondary', 'Terjadwal ' + fmt.number(r.scheduled_quantity)) : null,
+              legacyOutstanding(r) === null ? null : h('span.secondary', { title: LEGACY_OUTSTANDING_HINT }, 'Legacy ' + fmt.number(legacyOutstanding(r))));
+          } },
+          { key: 'line_value', label: 'Nilai', align: 'right', render: function (r) { return r.line_value === null ? null : fmt.money(r.line_value); } },
+          { key: 'actions', label: '', render: function (r) { return PIK.rowActions('purchaseOrders', r, { edit: function () { forms.poLine(r, reload); }, archive: 'poLines', reload: reload }); } }
+        ];
+      }
+      // D3: the outstanding the legacy workbook recorded, shown only where it differs from the computed value (a line to
+      // reconcile, e.g. deliveries not linked yet). A comparison only; it is never used in any calculation.
+      var LEGACY_OUTSTANDING_HINT = 'Outstanding menurut workbook lama. Hanya pembanding, tidak dipakai dalam perhitungan.';
+      function legacyOutstanding(r) {
+        var legacy = r.outstanding_qty_legacy;
+        return r.is_legacy && typeof legacy === 'number' && Math.abs(legacy - r.outstanding_quantity) > 1e-9 ? legacy : null;
+      }
+      function lineCard(r) {
+        return ui.listCard({ title: r.product_label || r.product_name_legacy || 'Produk', badge: null, lines: ['Order ' + fmt.qty(r.order_quantity, r.unit), 'Terkirim ' + fmt.number(r.delivered_quantity), 'Outstanding ' + fmt.number(r.outstanding_quantity) + (legacyOutstanding(r) === null ? '' : ' (legacy ' + fmt.number(legacyOutstanding(r)) + ')')],
+          extra: h('div', { style: { marginTop: '4px' } }, ui.progress(r.delivered_quantity - r.returned_quantity, r.order_quantity)) });
+      }
+      load();
+    };
+
+    // ============================================================================================ Deliveries
+    views.deliveries = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Delivery', subtitle: 'Pengiriman per surat jalan. Delivery baru selalu terhubung ke item PO.',
+        actions: canWrite('deliveries') ? [addButton('Catat delivery', function () { forms.delivery(null, function () { list.reload(); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'deliveries.list', query: query, searchPlaceholder: 'Cari nomor SJ, PO, customer, produk…',
+        filters: [
+          { key: 'status', label: 'Status', options: PIK.enumOptions('DELIVERY_STATUS', true).concat([{ value: 'NONE', label: 'Tanpa status (legacy)' }]) },
+          { key: 'linked', label: 'Tertaut item PO', options: [{ value: 'true', label: 'Tertaut' }, { value: 'false', label: 'Belum tertaut' }] },
+          { key: 'delivery_date', label: 'Tanggal', type: 'dateRange' }
+        ],
+        defaultSort: { field: 'delivery_date', direction: 'desc' },
+        columns: parts.deliveryColumns(true).concat([{ key: 'actions', label: '', render: function (r) { return PIK.rowActions('deliveries', r, { edit: function () { forms.delivery(r, function () { list.reload(); }); }, archive: 'deliveries', reload: function () { list.reload(); } }); } }]),
+        card: parts.deliveryCard,
+        onRowClick: function (r) { if (r.purchase_order_id) PIK.router.go('purchase-orders/' + r.purchase_order_id, {}); },
+        empty: { icon: 'deliveries', title: 'Belum ada delivery', action: canWrite('deliveries') ? { label: 'Catat delivery', onClick: function () { forms.delivery(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    // ============================================================================================ Returns
+    views.returns = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Retur', subtitle: 'Barang yang dikembalikan customer. Retur pada item PO menambah outstanding.',
+        actions: canWrite('returns') ? [addButton('Catat retur', function () { forms.returnItem(null, function () { list.reload(); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'returns.list', query: query, searchPlaceholder: 'Cari SJ, alasan, PO, produk…',
+        filters: [
+          { key: 'status', label: 'Status', enumName: 'RETURN_STATUS' },
+          { key: 'linked', label: 'Tertaut item PO', options: [{ value: 'true', label: 'Tertaut' }, { value: 'false', label: 'Belum tertaut' }] },
+          { key: 'return_date', label: 'Tanggal', type: 'dateRange' }
+        ],
+        defaultSort: { field: 'return_date', direction: 'desc' },
+        columns: parts.returnColumns(true).concat([{ key: 'actions', label: '', render: function (r) { return PIK.rowActions('returns', r, { edit: function () { forms.returnItem(r, function () { list.reload(); }); }, archive: 'returns', reload: function () { list.reload(); } }); } }]),
+        card: parts.returnCard,
+        onRowClick: canWrite('returns') ? function (r) { forms.returnItem(r, function () { list.reload(); }); } : null,
+        empty: { icon: 'returns', title: 'Belum ada retur', action: canWrite('returns') ? { label: 'Catat retur', onClick: function () { forms.returnItem(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    // ============================================================================================ Products
+    views.products = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Produk', subtitle: 'Master produk dengan stok terbaru dan outstanding PO terbuka.',
+        actions: canWrite('products') ? [addButton('Produk baru', function () { forms.product(null, function (p) { PIK.router.go('products/' + p.id, {}); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'products.list', query: query, searchPlaceholder: 'Cari kode, nama, varian, kategori…',
+        filters: [{ key: 'has_open_order', label: 'Ada order terbuka', type: 'toggle' }],
+        defaultSort: { field: 'name', direction: 'asc' },
+        columns: [
+          { key: 'name', label: 'Produk', sortable: true, render: function (r) { return [h('span.primary', r.name + (r.variant ? ' — ' + r.variant : '')), ' ', ui.legacyTag(r), h('span.secondary', [r.product_code, r.category].filter(Boolean).join(' · ') || '—')]; } },
+          { key: 'customer_name', label: 'Customer', sortable: true, render: function (r) { return r.customer_id ? customerLink(r.customer_id, r.customer_name) : h('span.subtle', 'Umum'); } },
+          { key: 'unit', label: 'Satuan' },
+          { key: 'stock_fg', label: 'Stok FG', sortable: true, align: 'right', render: function (r) { return r.stock_fg === null ? null : fmt.number(r.stock_fg); } },
+          { key: 'stock_wip', label: 'Stok WIP', align: 'right', render: function (r) { return r.stock_wip === null ? null : fmt.number(r.stock_wip); } },
+          { key: 'open_outstanding_quantity', label: 'Outstanding PO', sortable: true, align: 'right', render: function (r) { return fmt.number(r.open_outstanding_quantity); } }
+        ],
+        card: function (r) { return ui.listCard({ title: r.label, lines: [r.category, r.stock_fg !== null ? 'FG ' + fmt.number(r.stock_fg) : null, 'Outstanding ' + fmt.number(r.open_outstanding_quantity)] }); },
+        onRowClick: function (r) { PIK.router.go('products/' + r.id, {}); },
+        empty: { icon: 'products', title: 'Belum ada produk', action: canWrite('products') ? { label: 'Produk baru', onClick: function () { forms.product(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    views.productDetail = function (container, params) {
+      var host = h('div', ui.skeletonBlocks());
+      container.appendChild(host);
+      function load() {
+        PIK.api('products.get', { id: params.id }).then(render).catch(function (error) {
+          PIK.mount(host, [PIK.pageHead({ title: 'Produk', breadcrumb: { label: 'Produk', path: 'products' } }), h('div.card', ui.errorState(error, load))]);
+        });
+      }
+      function render(d) {
+        var p = d.product;
+        var actions = [];
+        if (canWrite('stock')) actions.push(ui.button('Catat stok', { kind: 'primary', icon: 'plus', onClick: function () { forms.stock(null, load, { product_id: p.id, product_label: p.label }); } }));
+        if (canWrite('products')) {
+          actions.push(ui.button('Ubah', { icon: 'edit', onClick: function () { forms.product(p, load); } }));
+          actions.push(p.is_active === false ? ui.button('Pulihkan', { icon: 'restore', onClick: function () { ui.restoreFlow({ restoreAction: 'products.restore', id: p.id, onDone: load }); } })
+            : ui.button('', { icon: 'archive', ariaLabel: 'Arsipkan produk', onClick: function () { ui.archiveFlow({ archiveAction: 'products.archive', restoreAction: 'products.restore', id: p.id, onDone: load }); } }));
+        }
+        PIK.mount(host, [
+          PIK.pageHead({ title: p.label, breadcrumb: { label: 'Produk', path: 'products' }, actions: actions }),
+          h('div.row-wrap', { style: { marginTop: '-12px', marginBottom: '20px' } }, p.category ? ui.badge(p.category, null, true) : null, p.is_active === false ? ui.badge('Diarsipkan', 'muted') : null, ui.legacyTag(p)),
+          h('div.card.stat-strip',
+            h('div.stat', h('div.label', 'Stok FG'), h('div.value', p.stock_fg === null ? '—' : fmt.number(p.stock_fg))),
+            h('div.stat', h('div.label', 'Stok WIP'), h('div.value', p.stock_wip === null ? '—' : fmt.number(p.stock_wip))),
+            h('div.stat', h('div.label', 'Outstanding PO'), h('div.value', fmt.number(p.open_outstanding_quantity))),
+            h('div.stat', h('div.label', 'Lead time'), h('div.value', p.lead_time_days === null ? '—' : p.lead_time_days + ' hari')),
+            h('div.stat', h('div.label', 'Satuan'), h('div.value', p.unit || '—'))),
+          p.is_legacy ? ui.migrationIssuesNotice(p.id) : null,
+          h('div.detail-grid',
+            h('div.stack',
+              ui.card('Item PO', d.lines.length ? ui.dataTable({ rows: d.lines, compact: true, columns: [
+                { key: 'po_label', label: 'PO', render: function (r) { return [poLink(r.purchase_order_id, r.po_label), h('span.secondary', r.customer_name || '')]; } },
+                { key: 'po_status', label: 'Status', render: function (r) { return ui.statusBadge('PO_STATUS', r.po_status); } },
+                { key: 'order_quantity', label: 'Order', align: 'right', render: function (r) { return fmt.number(r.order_quantity); } },
+                { key: 'outstanding_quantity', label: 'Outstanding', align: 'right', render: function (r) { return fmt.number(r.outstanding_quantity); } }
+              ], card: function (r) { return ui.listCard({ title: r.po_label || '—', badge: ui.statusBadge('PO_STATUS', r.po_status), lines: [r.customer_name, 'Outstanding ' + fmt.number(r.outstanding_quantity)] }); } })
+                : h('p.muted', 'Produk ini belum ada di PO mana pun.')),
+              ui.card('Catatan stok', d.stock.length ? ui.dataTable({ rows: d.stock, compact: true, columns: stockColumns(false, load), card: stockCard }) : h('p.muted', 'Belum ada catatan stok.')),
+              ui.card('Riwayat perubahan', ui.historyPanel('PRODUCTS', p.id))),
+            ui.card('Detail', ui.kv([
+              ['Kode', p.product_code], ['Nama', p.name], ['Varian', p.variant], ['Kategori', p.category], ['Satuan', p.unit],
+              ['Customer', p.customer_id ? customerLink(p.customer_id, p.customer_name) : 'Umum'], ['Deskripsi', p.description],
+              p.is_legacy ? ['Sumber legacy', p.import_ref] : null
+            ])))
+        ]);
+      }
+      load();
+    };
+
+    // ============================================================================================ Stock
+    function stockColumns(withProduct, reload) {
+      var cols = [{ key: 'stock_date', label: 'Tanggal', sortable: true, render: function (r) { return [h('span.nowrap', fmt.date(r.stock_date)), ' ', ui.legacyTag(r)]; } }];
+      if (withProduct !== false) cols.push({ key: 'product_label', label: 'Produk', sortable: true, render: function (r) { return productLink(r.product_id, r.product_label, r.product_legacy); } });
+      return cols.concat([
+        { key: 'stock_type', label: 'Jenis', sortable: true, render: function (r) { return ui.badge(PIK.enumLabel('STOCK_TYPE', r.stock_type), null, true); } },
+        { key: 'status', label: 'Status', sortable: true, render: function (r) { return r.status ? ui.statusBadge('STOCK_STATUS', r.status) : null; } },
+        { key: 'quantity', label: 'Qty', sortable: true, align: 'right', render: function (r) { return fmt.number(r.quantity); } },
+        { key: 'warehouse', label: 'Gudang', sortable: true },
+        { key: 'actions', label: '', render: function (r) { return PIK.rowActions('stock', r, { edit: function () { forms.stock(r, reload); }, archive: 'stock', reload: reload }); } }
+      ]);
+    }
+    function stockCard(r) {
+      return ui.listCard({ title: (r.product_label || r.product_legacy || 'Produk') + ' · ' + fmt.number(r.quantity), badge: r.status ? ui.statusBadge('STOCK_STATUS', r.status) : null,
+        lines: [fmt.date(r.stock_date), PIK.enumLabel('STOCK_TYPE', r.stock_type), r.warehouse] });
+    }
+
+    views.stock = function (container, params, query) {
+      var tab = query.tab === 'records' ? 'records' : 'summary';
+      var host = h('div');
+      var reloadCurrent = function () { paint(); };
+      container.appendChild(PIK.pageHead({
+        title: 'Stok', subtitle: 'Stok terbaru per produk dan jenis (FG/WIP), serta seluruh catatan stok.',
+        actions: canWrite('stock') ? [addButton('Catat stok', function () { forms.stock(null, reloadCurrent); })] : []
+      }));
+      container.appendChild(h('div', { style: { marginBottom: '16px' } }, ui.tabs([{ key: 'summary', label: 'Stok terbaru' }, { key: 'records', label: 'Semua catatan' }], tab, function (key) {
+        tab = key;
+        PIK.router.setQuery(key === 'records' ? { tab: 'records' } : {});
+        paint();
+      }, { segmented: true })));
+      container.appendChild(host);
+
+      function paint() {
+        if (tab === 'records') {
+          var list = ui.listPage(host, {
+            action: 'stock.list', query: {}, keepQuery: { tab: 'records' }, searchPlaceholder: 'Cari produk, gudang, catatan…',
+            filters: [
+              { key: 'stock_type', label: 'Jenis', enumName: 'STOCK_TYPE' }, { key: 'status', label: 'Status', enumName: 'STOCK_STATUS' },
+              { key: 'linked', label: 'Tertaut produk', options: [{ value: 'true', label: 'Tertaut' }, { value: 'false', label: 'Belum tertaut' }] },
+              { key: 'stock_date', label: 'Tanggal', type: 'dateRange' }
+            ],
+            defaultSort: { field: 'stock_date', direction: 'desc' },
+            columns: stockColumns(true, function () { list.reload(); }), card: stockCard,
+            empty: { icon: 'stock', title: 'Belum ada catatan stok', action: canWrite('stock') ? { label: 'Catat stok', onClick: function () { forms.stock(null, function () { list.reload(); }); } } : null }
+          });
+          reloadCurrent = function () { list.reload(); };
+          return;
+        }
+        var summaryHost = h('div');
+        var totalsHost = h('div.kpi-grid', [0, 1].map(function () { return h('div.skeleton.sk-kpi'); }));
+        PIK.mount(host, [totalsHost, summaryHost]);
+        var list2 = ui.listPage(summaryHost, {
+          action: 'stock.summary', query: {}, syncUrl: false, archivedToggle: false, searchPlaceholder: 'Cari produk atau gudang…',
+          filters: [{ key: 'stock_type', label: 'Jenis', enumName: 'STOCK_TYPE' }, { key: 'status', label: 'Status', enumName: 'STOCK_STATUS' }],
+          defaultSort: { field: 'product_label', direction: 'asc' },
+          onResult: function (result) {
+            var totals = result.totals || {};
+            PIK.mount(totalsHost, [
+              h('div.kpi', h('span.kpi-label', 'Stok FG'), h('span.kpi-value', fmt.number(totals.FG ? totals.FG.quantity : 0)), h('span.kpi-foot', fmt.number(totals.FG ? totals.FG.products : 0, 0) + ' produk')),
+              h('div.kpi', h('span.kpi-label', 'Stok WIP'), h('span.kpi-value', fmt.number(totals.WIP ? totals.WIP.quantity : 0)), h('span.kpi-foot', fmt.number(totals.WIP ? totals.WIP.products : 0, 0) + ' produk')),
+              result.unlinkedRecords ? h('div.kpi.warn', h('span.kpi-label', 'Catatan belum tertaut produk'), h('span.kpi-value', fmt.number(result.unlinkedRecords, 0)), h('span.kpi-foot', 'data legacy, tidak dihitung di atas')) : null
+            ]);
+          },
+          columns: [
+            { key: 'product_label', label: 'Produk', sortable: true, render: function (r) { return productLink(r.product_id, r.product_label); } },
+            { key: 'stock_type', label: 'Jenis', sortable: true, render: function (r) { return ui.badge(PIK.enumLabel('STOCK_TYPE', r.stock_type), null, true); } },
+            { key: 'status', label: 'Status', render: function (r) { return r.status ? ui.statusBadge('STOCK_STATUS', r.status) : null; } },
+            { key: 'quantity', label: 'Qty', sortable: true, align: 'right', render: function (r) { return fmt.number(r.quantity); } },
+            { key: 'warehouse', label: 'Gudang', sortable: true },
+            { key: 'stock_date', label: 'Per tanggal', sortable: true, render: function (r) { return fmt.date(r.stock_date); } }
+          ],
+          card: function (r) { return ui.listCard({ title: (r.product_label || 'Produk') + ' · ' + fmt.number(r.quantity), badge: r.status ? ui.statusBadge('STOCK_STATUS', r.status) : null, lines: [PIK.enumLabel('STOCK_TYPE', r.stock_type), r.warehouse, 'Per ' + fmt.date(r.stock_date)] }); },
+          onRowClick: function (r) { PIK.router.go('products/' + r.product_id, {}); },
+          empty: { icon: 'stock', title: 'Belum ada stok', text: 'Catat stok per produk untuk melihat posisi terbaru di sini.' }
+        });
+        reloadCurrent = function () { list2.reload(); };
+      }
+      paint();
+    };
+
+    // ============================================================================================ Lead time
+    function leadTimeColumns(withPo, reload) {
+      var cols = [{ key: 'planned_date', label: 'Rencana kirim', sortable: true, render: function (r) { return [h('span.primary.nowrap', fmt.date(r.planned_date)), ' ', ui.legacyTag(r)]; } }];
+      if (withPo !== false) cols.push({ key: 'po_label', label: 'PO', sortable: true, render: function (r) { return [poLink(r.purchase_order_id, r.po_label || r.po_number_legacy), h('span.secondary', r.customer_name || '')]; } });
+      return cols.concat([
+        { key: 'product_label', label: 'Produk', sortable: true, render: function (r) { return productLink(r.product_id, r.product_label, r.product_legacy); } },
+        { key: 'quantity', label: 'Qty', sortable: true, align: 'right', render: function (r) { return fmt.number(r.quantity); } },
+        { key: 'status', label: 'Status', sortable: true, render: function (r) { return r.status ? ui.statusBadge('DELIVERY_STATUS', r.status) : null; } },
+        { key: 'lead_time_days', label: 'Lead time', align: 'right', render: function (r) { return r.lead_time_days === null ? null : r.lead_time_days + ' hari'; } },
+        { key: 'actions', label: '', render: function (r) { return PIK.rowActions('leadTime', r, { edit: function () { forms.leadTime(r, reload); }, archive: 'leadTime', reload: reload }); } }
+      ]);
+    }
+    function leadTimeCard(r) {
+      return ui.listCard({ title: (r.product_label || r.product_legacy || 'Produk') + ' · ' + fmt.number(r.quantity), badge: r.status ? ui.statusBadge('DELIVERY_STATUS', r.status) : null,
+        lines: ['Rencana ' + fmt.date(r.planned_date), r.po_label || r.po_number_legacy, r.customer_name] });
+    }
+
+    views.leadTime = function (container, params, query) {
+      var list;
+      container.appendChild(PIK.pageHead({
+        title: 'Lead Time', subtitle: 'Jadwal rencana kirim per item PO. Tidak dihitung sebagai qty terkirim.',
+        actions: canWrite('leadTime') ? [addButton('Jadwal baru', function () { forms.leadTime(null, function () { list.reload(); }); })] : []
+      }));
+      var host = h('div');
+      container.appendChild(host);
+      list = ui.listPage(host, {
+        action: 'leadTime.list', query: query, searchPlaceholder: 'Cari PO, produk, customer…',
+        filters: [{ key: 'status', label: 'Status', enumName: 'DELIVERY_STATUS' }, { key: 'planned_date', label: 'Rencana', type: 'dateRange' }],
+        defaultSort: { field: 'planned_date', direction: 'asc' },
+        columns: leadTimeColumns(true, function () { list.reload(); }), card: leadTimeCard,
+        empty: { icon: 'leadTime', title: 'Belum ada jadwal lead time', action: canWrite('leadTime') ? { label: 'Jadwal baru', onClick: function () { forms.leadTime(null, function () { list.reload(); }); } } : null }
+      });
+    };
+
+    function inboundColumns() {
+      return [
+        { key: 'inbound_date', label: 'Tanggal masuk', render: function (r) { return fmt.date(r.inbound_date); } },
+        { key: 'sj_number', label: 'Nomor SJ' },
+        { key: 'vendor', label: 'Vendor' },
+        { key: 'component_name', label: 'Komponen', render: function (r) { return [h('span.primary', r.component_name || '—'), h('span.secondary', [r.internal_component_code, r.factory_component_code].filter(Boolean).join(' · '))]; } },
+        { key: 'quantity', label: 'Qty', align: 'right', render: function (r) { return fmt.number(r.quantity); } },
+        { key: 'reject_quantity', label: 'Reject', align: 'right', render: function (r) { return r.reject_quantity === null ? null : fmt.number(r.reject_quantity); } }
+      ];
+    }
+    parts.inboundColumns = inboundColumns;
+  })(PIK);
+</script>

@@ -7,11 +7,13 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:e2e": "node --test --test-concurrency=1 \"e2e/*.e2e.js\"",
     "typecheck": "node scripts/typecheck.js",
     "emulate:init": "node scripts/emulate-initializer.js",
     "docs:schema": "node scripts/render-schema-doc.js",
     "profile": "node migration/scripts/profile-workbook.js",
     "migrate": "node migration/scripts/migrate.js",
+    "dev": "node tools/dev-server/server.js --seed synthetic --demo-users",
     "push": "clasp push",
     "pull": "clasp pull",
     "open": "clasp open-script"
@@ -19,6 +21,7 @@
   "devDependencies": {
     "@google/clasp": "3.4.1",
     "@types/google-apps-script": "2.0.13",
+    "playwright": "1.56.1",
     "typescript": "5.9.3"
   }
 }

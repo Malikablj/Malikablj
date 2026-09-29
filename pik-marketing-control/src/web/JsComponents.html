@@ -1,0 +1,942 @@
+<script>
+  /*
+   * Reusable UI components: status badges, loading / empty / error states, the data table with mobile cards, the list
+   * page controller (search with debounce, filters, sorting, paging, URL state), forms built from the schema metadata
+   * with client validation and server error mapping, async pickers, tabs, key-value lists, timeline and charts.
+   */
+  (function (PIK) {
+    'use strict';
+    var h = PIK.h;
+    var icon = PIK.icon;
+    var fmt = PIK.fmt;
+
+    // ------------------------------------------------------------------------------------------ Badges
+    var TONES = {
+      CUSTOMER_STATUS: { ACTIVE: 'success', POTENTIAL: 'accent', DORMANT: 'warning', INACTIVE: 'muted' },
+      LEAD_STATUS: { NEW: 'accent', CONTACTED: 'accent', QUALIFIED: 'accent', QUOTATION: 'accent', NEGOTIATION: 'warning', WON: 'success', LOST: 'danger', DORMANT: 'muted' },
+      FOLLOW_UP_STATUS: { PLANNED: 'accent', DONE: 'success', RESCHEDULE: 'warning', CANCELLED: 'muted' },
+      DUE_STATE: { OVERDUE: 'danger', TODAY: 'warning', UPCOMING: 'accent', DONE: 'success', CANCELLED: 'muted' },
+      PO_STATUS: { OPEN: 'accent', ON_PROCESS: 'accent', PARTIAL: 'warning', ON_HOLD: 'warning', CLOSED: 'success', CANCELLED: 'muted' },
+      DELIVERY_STATUS: { SCHEDULED: 'accent', ON_DELIVERY: 'accent', DELIVERED: 'success', DELAYED: 'danger', CANCELLED: 'muted' },
+      RETURN_STATUS: { OPEN: 'warning', CLOSED: 'success', CANCELLED: 'muted' },
+      PAYMENT_STATUS: { PAID: 'success', PARTIAL: 'warning', UNPAID: 'danger' },
+      STOCK_STATUS: { READY: 'success', RESERVED: 'warning' },
+      FULFILLMENT: { NO_LINES: 'muted', NOT_STARTED: 'accent', PARTIAL: 'warning', COMPLETE: 'success' },
+      RESOLUTION_STATUS: { OPEN: 'warning', RESOLVED: 'success', ACCEPTED_AS_IS: 'muted', EXCLUDED: 'muted' },
+      ISSUE_SEVERITY: { BLOCKER: 'danger', HIGH: 'danger', MEDIUM: 'warning', LOW: 'muted', INFO: 'muted' },
+      USER_ROLE: { ADMIN: 'accent' }
+    };
+    var LABELS = {
+      DUE_STATE: { OVERDUE: 'Overdue', TODAY: 'Hari ini', UPCOMING: 'Mendatang', DONE: 'Selesai', CANCELLED: 'Batal' },
+      FULFILLMENT: { NO_LINES: 'Belum ada item', NOT_STARTED: 'Belum dikirim', PARTIAL: 'Sebagian', COMPLETE: 'Lengkap' }
+    };
+
+    function badge(text, tone, plain) {
+      return h('span.badge' + (tone ? '.' + tone : '') + (plain ? '.plain' : ''), text);
+    }
+
+    function statusBadge(enumName, value) {
+      if (value === null || value === undefined || value === '') return h('span.subtle', '—');
+      var label = LABELS[enumName] && LABELS[enumName][value] ? LABELS[enumName][value] : PIK.enumLabel(enumName, value);
+      var tone = (TONES[enumName] && TONES[enumName][value]) || null;
+      return badge(label, tone);
+    }
+
+    function priority(value) {
+      if (!value) return h('span.subtle', '—');
+      return h('span.priority.' + value, h('i'), PIK.enumLabel('PRIORITY', value));
+    }
+
+    function legacyTag(record) {
+      return record && record.is_legacy ? h('span.legacy-tag', { title: record.import_ref ? 'Sumber: ' + record.import_ref : 'Data hasil migrasi' }, 'Legacy') : null;
+    }
+
+    function progress(value, max) {
+      var pct = fmt.percent(value, max);
+      return h('div.progress' + (max > 0 && value >= max ? '.complete' : ''), { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) },
+        h('span', { style: { width: pct + '%' } }));
+    }
+
+    // ------------------------------------------------------------------------------------------ States
+    function skeletonRows(count) {
+      var rows = [];
+      for (var i = 0; i < (count || 6); i++) {
+        rows.push(h('div', { style: { display: 'flex', gap: '16px', padding: '14px 16px', borderBottom: '1px solid var(--color-hairline)' } },
+          h('div.skeleton.sk-line', { style: { width: (30 + (i * 13) % 40) + '%' } }), h('div.spacer'),
+          h('div.skeleton.sk-line', { style: { width: '14%' } })));
+      }
+      return h('div.table-wrap', { 'aria-busy': 'true', 'aria-label': 'Memuat data' }, rows);
+    }
+
+    function skeletonBlocks() {
+      return h('div', { 'aria-busy': 'true', 'aria-label': 'Memuat' },
+        h('div.kpi-grid', [0, 1, 2, 3].map(function () { return h('div.skeleton.sk-kpi'); })),
+        h('div.grid-2', h('div.skeleton.sk-block'), h('div.skeleton.sk-block')));
+    }
+
+    function emptyState(options) {
+      var o = options || {};
+      return h('div.state', { role: 'status' },
+        h('div.state-icon', icon(o.icon || 'inbox')),
+        h('h3', o.title || 'Belum ada data'),
+        o.text ? h('p', o.text) : null,
+        o.action ? h('button.btn.btn-primary', { type: 'button', onClick: o.action.onClick }, icon('plus', 'icon-sm'), o.action.label) : null);
+    }
+
+    function errorState(error, onRetry) {
+      var forbidden = error && error.code === 'FORBIDDEN';
+      return h('div.state.error', { role: 'alert' },
+        h('div.state-icon', icon(forbidden ? 'lock' : 'alert')),
+        h('h3', forbidden ? 'Tidak ada akses' : error && error.code === 'NOT_FOUND' ? 'Data tidak ditemukan' : 'Gagal memuat data'),
+        h('p', (error && error.message) || 'Terjadi kesalahan. Silakan coba lagi.'),
+        onRetry && !forbidden ? h('button.btn', { type: 'button', onClick: onRetry }, icon('refresh', 'icon-sm'), 'Coba lagi') : null);
+    }
+
+    // ------------------------------------------------------------------------------------------ Small building blocks
+    function button(label, options) {
+      var o = options || {};
+      var iconOnly = !label && !!o.icon;
+      var cls = 'button.btn' + (o.kind ? '.btn-' + o.kind : '') + (o.size ? '.btn-' + o.size : '') + (iconOnly ? '.btn-icon' : '');
+      return h(cls, { type: o.type || 'button', onClick: o.onClick, disabled: o.disabled, title: o.title || (iconOnly ? o.ariaLabel : undefined), 'aria-label': o.ariaLabel },
+        o.icon ? icon(o.icon, 'icon-sm') : null, label ? h('span', label) : null);
+    }
+
+    /** Button that shows a spinner while its async action runs and cannot be pressed twice. */
+    function busyButton(label, options, run) {
+      var el = button(label, options);
+      el.addEventListener('click', function () {
+        if (el.disabled) return;
+        el.disabled = true;
+        var spinner = h('span.spinner');
+        el.insertBefore(spinner, el.firstChild);
+        Promise.resolve().then(run).catch(function () { /* handled by caller */ }).then(function () {
+          el.disabled = false;
+          spinner.remove();
+        });
+      });
+      return el;
+    }
+
+    function tabs(items, active, onChange, options) {
+      var cls = options && options.segmented ? 'div.segmented' : 'div.tabs';
+      var el = h(cls, { role: 'tablist' });
+      items.forEach(function (item) {
+        el.appendChild(h('button', {
+          type: 'button', role: 'tab', 'aria-selected': item.key === active ? 'true' : 'false',
+          onClick: function () {
+            Array.prototype.forEach.call(el.children, function (b) { b.setAttribute('aria-selected', 'false'); });
+            this.setAttribute('aria-selected', 'true');
+            onChange(item.key);
+          }
+        }, item.label, item.count !== undefined && item.count !== null ? h('span.count', fmt.number(item.count, 0)) : null));
+      });
+      return el;
+    }
+
+    function kv(pairs) {
+      var dl = h('dl.kv');
+      pairs.forEach(function (pair) {
+        if (!pair) return;
+        dl.appendChild(h('dt', pair[0]));
+        var value = pair[1];
+        dl.appendChild(h('dd', value === null || value === undefined || value === '' ? h('span.subtle', '—') : value));
+      });
+      return dl;
+    }
+
+    function card(title, body, options) {
+      var o = options || {};
+      return h('section.card', { 'aria-label': typeof title === 'string' ? title : null },
+        title ? h('div.card-head', h('h2', title), o.action || null) : null,
+        h('div.card-body', body));
+    }
+
+    function linkButton(label, onClick) {
+      return h('button.btn.btn-ghost.btn-sm', { type: 'button', onClick: onClick }, label);
+    }
+
+    function externalLink(url, label) {
+      if (!url) return h('span.subtle', '—');
+      return h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, icon('link', 'icon-sm'), ' ', label || 'Buka');
+    }
+
+    // ------------------------------------------------------------------------------------------ Data table
+    /**
+     * config: { columns: [{ key, label, render(row), sortable, align, className }], rows, sort: { field, direction },
+     *           onSort(field), onRowClick(row), card(row) → node, rowClass(row) }
+     */
+    function dataTable(config) {
+      var thead = h('thead', h('tr', config.columns.map(function (col) {
+        var sorted = config.sort && config.sort.field === (col.sortKey || col.key);
+        var th = h('th' + (col.sortable ? '.sortable' : '') + (col.align === 'right' ? '.right' : ''), {
+          scope: 'col', 'aria-sort': sorted ? (config.sort.direction === 'desc' ? 'descending' : 'ascending') : null,
+          tabindex: col.sortable ? '0' : null,
+          onClick: col.sortable ? function () { config.onSort(col.sortKey || col.key); } : null,
+          onKeydown: col.sortable ? function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); config.onSort(col.sortKey || col.key); } } : null
+        }, col.label, sorted ? h('span.sort', config.sort.direction === 'desc' ? '↓' : '↑') : null);
+        return th;
+      })));
+      var tbody = h('tbody', config.rows.map(function (row) {
+        var tr = h('tr' + (config.onRowClick ? '.clickable' : '') + (row.is_active === false ? '.archived' : ''), {
+          tabindex: config.onRowClick ? '0' : null,
+          onClick: config.onRowClick ? function (e) { if (!e.target.closest('button, a, input')) config.onRowClick(row); } : null,
+          onKeydown: config.onRowClick ? function (e) { if (e.key === 'Enter' && e.target === tr) config.onRowClick(row); } : null
+        }, config.columns.map(function (col) {
+          var content = col.render ? col.render(row) : row[col.key];
+          return h('td' + (col.align === 'right' ? '.right.num' : '') + (col.className ? '.' + col.className : ''),
+            content === null || content === undefined || content === '' ? h('span.subtle', '—') : content);
+        }));
+        return tr;
+      }));
+      var table = h('table.table' + (config.compact ? '.table-compact' : ''), thead, tbody);
+      var cards = config.card ? h('div.cards-list', config.rows.map(function (row) {
+        var node = config.card(row);
+        if (config.onRowClick && node.tagName === 'BUTTON') node.addEventListener('click', function () { config.onRowClick(row); });
+        return node;
+      })) : null;
+      return h('div.table-wrap' + (cards ? '.responsive' : ''), h('div.table-scroll', table), cards, config.footer || null);
+    }
+
+    /** Mobile card: { title, badge, lines: [..], side } */
+    function listCard(parts) {
+      return h('button.list-card', { type: 'button' },
+        h('div.top', h('div.title', parts.title), parts.badge || null),
+        parts.lines && parts.lines.length ? h('div.meta', parts.lines.filter(Boolean).map(function (line) { return h('span', line); })) : null,
+        parts.extra || null);
+    }
+
+    function pager(result, onPage) {
+      var from = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
+      var to = Math.min(result.total, result.page * result.pageSize);
+      return h('div.table-foot',
+        h('span.num', result.total === 0 ? '0 data' : from + '–' + to + ' dari ' + fmt.number(result.total, 0)),
+        result.pageCount > 1 ? h('div.pager',
+          h('button.btn.btn-sm', { type: 'button', disabled: result.page <= 1, 'aria-label': 'Halaman sebelumnya', onClick: function () { onPage(result.page - 1); } }, icon('chevronLeft', 'icon-sm')),
+          h('span.num', 'Hal. ' + result.page + ' / ' + result.pageCount),
+          h('button.btn.btn-sm', { type: 'button', disabled: result.page >= result.pageCount, 'aria-label': 'Halaman berikutnya', onClick: function () { onPage(result.page + 1); } }, icon('chevronRight', 'icon-sm'))) : null);
+    }
+
+    // ------------------------------------------------------------------------------------------ List page controller
+    /**
+     * Server-side list with search (debounced), filters, sort and paging; state kept in the URL query.
+     * config: { action, baseParams, query, searchPlaceholder, filters: [filter], defaultSort, columns, card, onRowClick,
+     *           empty: { title, text, action }, toolbarExtra: node, archivedToggle: bool, syncUrl: bool, pageSize }
+     * filter: { key, label, options: [{ value, label }] } | { key, label, enumName } | { key, label, type: 'toggle' }
+     *         | { key, label, type: 'user' }
+     */
+    function listPage(container, config) {
+      var query = config.query || {};
+      var state = {
+        search: query.q || '',
+        page: Number(query.page) || 1,
+        sort: query.sort ? { field: query.sort, direction: query.dir === 'desc' ? 'desc' : 'asc' } : null,
+        filters: {},
+        includeInactive: query.archived === '1'
+      };
+      (config.filters || []).forEach(function (f) {
+        if (f.type === 'dateRange') {
+          if (query[f.key + '_from'] || query[f.key + '_to']) state.filters[f.key] = { from: query[f.key + '_from'] || '', to: query[f.key + '_to'] || '' };
+        } else if (query[f.key] !== undefined) state.filters[f.key] = query[f.key];
+      });
+      var sequence = 0;
+      var resultHost = h('div', { 'aria-live': 'polite' });
+      var toolbar = h('div.toolbar');
+
+      var searchInput = h('input.input', { type: 'search', placeholder: config.searchPlaceholder || 'Cari…', value: state.search, 'aria-label': 'Cari' });
+      var runSearch = PIK.debounce(function () { state.search = searchInput.value; state.page = 1; load(); }, 300);
+      searchInput.addEventListener('input', runSearch);
+      toolbar.appendChild(h('div.search-box', icon('search'), searchInput));
+      // Phones: the filters fold behind one "Filter (n)" button so the list stays visible.
+      var filtersWrap = h('div.toolbar-filters', { id: 'flt-' + Math.random().toString(36).slice(2) });
+      var filterCount = h('span.count');
+      var filterToggle = h('button.filter-chip.only-mobile', { type: 'button', 'aria-expanded': 'false', 'aria-controls': filtersWrap.id }, icon('filter', 'icon-sm'), 'Filter', filterCount);
+      filterToggle.addEventListener('click', function () {
+        var open = !filtersWrap.classList.contains('open');
+        filtersWrap.classList.toggle('open', open);
+        filterToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      function paintFilterCount() {
+        var n = Object.keys(state.filters).length + (state.includeInactive ? 1 : 0);
+        filterCount.textContent = n ? ' (' + n + ')' : '';
+      }
+      if ((config.filters || []).length || config.archivedToggle !== false) toolbar.appendChild(filterToggle);
+      toolbar.appendChild(filtersWrap);
+
+      (config.filters || []).forEach(function (f) {
+        if (f.type === 'dateRange') {
+          var current = state.filters[f.key] || {};
+          var from = h('input.input', { type: 'date', value: current.from || '', 'aria-label': f.label + ' dari' });
+          var to = h('input.input', { type: 'date', value: current.to || '', 'aria-label': f.label + ' sampai' });
+          var onRange = function () {
+            if (from.value && to.value && from.value > to.value) { to.setCustomValidity('Tanggal akhir sebelum tanggal awal'); to.reportValidity(); return; }
+            to.setCustomValidity('');
+            if (from.value || to.value) state.filters[f.key] = { from: from.value, to: to.value }; else delete state.filters[f.key];
+            state.page = 1;
+            load();
+          };
+          from.addEventListener('change', onRange);
+          to.addEventListener('change', onRange);
+          filtersWrap.appendChild(h('div.date-range', { role: 'group', 'aria-label': f.label }, from, h('span', '–'), to));
+          return;
+        }
+        if (f.type === 'toggle') {
+          var chip = h('button.filter-chip', { type: 'button', 'aria-pressed': state.filters[f.key] === 'true' ? 'true' : 'false' }, f.label);
+          chip.addEventListener('click', function () {
+            var on = chip.getAttribute('aria-pressed') !== 'true';
+            chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+            if (on) state.filters[f.key] = 'true'; else delete state.filters[f.key];
+            state.page = 1;
+            load();
+          });
+          filtersWrap.appendChild(chip);
+          return;
+        }
+        var select = h('select.select', { 'aria-label': f.label });
+        select.appendChild(h('option', { value: '' }, f.label + ': Semua'));
+        var fill = function (options) {
+          options.forEach(function (o) { select.appendChild(h('option', { value: o.value, selected: state.filters[f.key] === o.value }, o.label)); });
+        };
+        if (f.enumName) fill(PIK.enumOptions(f.enumName, true));
+        else if (f.options) fill(f.options);
+        else if (f.type === 'user') {
+          PIK.api('users.options', { limit: 50, include: state.filters[f.key] || null }).then(function (result) {
+            var me = PIK.session.user;
+            fill([{ value: me.id, label: 'Saya (' + me.name + ')' }].concat(result.items.filter(function (u) { return u.id !== me.id; })
+              .map(function (u) { return { value: u.id, label: u.label }; })));
+          }).catch(function () { /* list still works without the PIC filter */ });
+        }
+        select.addEventListener('change', function () {
+          if (select.value) state.filters[f.key] = select.value; else delete state.filters[f.key];
+          state.page = 1;
+          load();
+        });
+        filtersWrap.appendChild(select);
+      });
+      if (config.archivedToggle !== false) {
+        var archived = h('button.filter-chip', { type: 'button', 'aria-pressed': state.includeInactive ? 'true' : 'false' }, icon('archive', 'icon-sm'), 'Termasuk arsip');
+        archived.addEventListener('click', function () {
+          state.includeInactive = !state.includeInactive;
+          archived.setAttribute('aria-pressed', state.includeInactive ? 'true' : 'false');
+          state.page = 1;
+          load();
+        });
+        filtersWrap.appendChild(archived);
+      }
+      if (config.toolbarExtra) toolbar.appendChild(config.toolbarExtra);
+      PIK.mount(container, [toolbar, resultHost]);
+
+      function syncUrl() {
+        paintFilterCount();
+        if (config.syncUrl === false) return;
+        var q = {};
+        Object.keys(config.keepQuery || {}).forEach(function (k) { q[k] = config.keepQuery[k]; });
+        if (state.search) q.q = state.search;
+        if (state.page > 1) q.page = state.page;
+        if (state.sort) { q.sort = state.sort.field; q.dir = state.sort.direction; }
+        if (state.includeInactive) q.archived = '1';
+        Object.keys(state.filters).forEach(function (k) {
+          var value = state.filters[k];
+          if (value && typeof value === 'object') { q[k + '_from'] = value.from; q[k + '_to'] = value.to; }
+          else q[k] = value;
+        });
+        PIK.router.setQuery(q);
+      }
+
+      function params() {
+        var filters = Object.assign({}, (config.baseParams && config.baseParams.filters) || {});
+        Object.keys(state.filters).forEach(function (k) {
+          var f = (config.filters || []).filter(function (x) { return x.key === k; })[0];
+          var value = state.filters[k];
+          if (f && f.type === 'toggle') filters[k] = true;
+          else if (f && f.type === 'dateRange') filters[k] = { from: value.from || null, to: value.to || null };
+          else filters[k] = value;
+        });
+        return Object.assign({}, config.baseParams || {}, {
+          search: state.search, filters: filters, sort: state.sort || config.defaultSort || null, page: state.page,
+          pageSize: config.pageSize || null, includeInactive: state.includeInactive
+        });
+      }
+
+      function load() {
+        var ticket = ++sequence;
+        syncUrl();
+        if (!resultHost.firstChild || resultHost.dataset.state !== 'ready') PIK.mount(resultHost, skeletonRows(6));
+        else resultHost.style.opacity = '.6';
+        return PIK.api(config.action, params()).then(function (result) {
+          if (ticket !== sequence) return;
+          resultHost.style.opacity = '';
+          resultHost.dataset.state = 'ready';
+          if (config.onResult) config.onResult(result);
+          if (result.total === 0) {
+            var filtered = state.search || Object.keys(state.filters).length > 0;
+            PIK.mount(resultHost, h('div.card', filtered
+              ? emptyState({ icon: 'search', title: 'Tidak ada hasil', text: 'Tidak ada data yang cocok dengan pencarian atau filter ini.' })
+              : emptyState(config.empty || {})));
+            return;
+          }
+          PIK.mount(resultHost, dataTable({
+            columns: config.columns, rows: result.items, card: config.card, onRowClick: config.onRowClick,
+            sort: state.sort || config.defaultSort,
+            onSort: function (field) {
+              var current = state.sort || config.defaultSort || {};
+              // A new column starts largest-first for numbers (right-aligned) and A→Z otherwise; a second click reverses.
+              var column = config.columns.filter(function (c) { return (c.sortKey || c.key) === field; })[0] || {};
+              var first = column.firstDirection || (column.align === 'right' ? 'desc' : 'asc');
+              var direction = current.field === field ? (current.direction === 'asc' ? 'desc' : 'asc') : first;
+              state.sort = { field: field, direction: direction };
+              state.page = 1;
+              load();
+            },
+            footer: pager(result, function (page) { state.page = page; load(); window.scrollTo(0, 0); })
+          }));
+        }).catch(function (error) {
+          if (ticket !== sequence) return;
+          resultHost.style.opacity = '';
+          resultHost.dataset.state = 'error';
+          PIK.mount(resultHost, h('div.card', errorState(error, load)));
+        });
+      }
+
+      load();
+      return { reload: load, state: state };
+    }
+
+    // ------------------------------------------------------------------------------------------ Number & date input helpers
+    /** Indonesian number input: '1.500.000' or '1500000' → 1500000; '12,5' → 12.5. Returns NaN when not a number. */
+    function parseNumber(text) {
+      var t = String(text === null || text === undefined ? '' : text).trim().replace(/\s/g, '');
+      if (t === '') return null;
+      if (t.indexOf(',') !== -1) t = t.replace(/\./g, '').replace(',', '.');
+      else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+      return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
+    }
+
+    function formatNumberInput(value) {
+      if (value === null || value === undefined || value === '') return '';
+      return String(value).replace('.', ',');
+    }
+
+    /** ISO UTC ↔ 'yyyy-MM-ddTHH:mm' in the application time zone. */
+    function toLocalInput(iso) {
+      if (!iso) return '';
+      var d = PIK.fmt.localDate(iso);
+      if (!d) return '';
+      var t = PIK.fmt.dateTime(iso).split(', ')[1] || '00.00';
+      return d + 'T' + t.replace('.', ':');
+    }
+
+    function fromLocalInput(value) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value || '');
+      if (!m) return null;
+      var guess = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+      var local = toLocalInput(new Date(guess).toISOString());
+      var lm = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local);
+      var asUtc = Date.UTC(Number(lm[1]), Number(lm[2]) - 1, Number(lm[3]), Number(lm[4]), Number(lm[5]));
+      return new Date(guess - (asUtc - guess)).toISOString();
+    }
+
+    // ------------------------------------------------------------------------------------------ Async picker (combobox)
+    var pickerSeq = 0;
+    /**
+     * config: { action, params, value, label, placeholder, onChange(value, option), disabled, id, invalid }
+     * Returns { element, input, setValue(value, label), getValue(), setParams(params), focus() }
+     */
+    function picker(config) {
+      var id = config.id || 'pk-' + (++pickerSeq);
+      var listId = id + '-list';
+      var value = config.value || null;
+      var label = config.label || '';
+      var params = Object.assign({}, config.params || {});
+      var options = [];
+      var activeIndex = -1;
+      var ticket = 0;
+      var input = h('input.input', {
+        id: id, type: 'text', role: 'combobox', autocomplete: 'off', 'aria-autocomplete': 'list', 'aria-expanded': 'false',
+        'aria-controls': listId, placeholder: config.placeholder || 'Ketik untuk mencari…', value: label, disabled: config.disabled
+      });
+      var list = h('div.combo-list', { id: listId, role: 'listbox', hidden: true });
+      var clearButton = h('button.btn.btn-quiet.btn-sm.combo-clear', { type: 'button', 'aria-label': 'Kosongkan pilihan', hidden: !value || config.disabled }, icon('close', 'icon-sm'));
+      var root = h('div.combo', input, clearButton, list);
+
+      function open() { list.hidden = false; input.setAttribute('aria-expanded', 'true'); }
+      function close() { list.hidden = true; input.setAttribute('aria-expanded', 'false'); activeIndex = -1; }
+      function render() {
+        PIK.clear(list);
+        if (!options.length) { list.appendChild(h('div.combo-empty', 'Tidak ada pilihan yang cocok')); return; }
+        options.forEach(function (option, index) {
+          list.appendChild(h('div.combo-option', {
+            id: listId + '-' + index, role: 'option', 'aria-selected': index === activeIndex ? 'true' : 'false',
+            onMousedown: function (e) { e.preventDefault(); choose(option); }
+          }, h('span', option.label), (config.sublabel ? config.sublabel(option) : option.sublabel) ? h('span.sub', config.sublabel ? config.sublabel(option) : option.sublabel) : null));
+        });
+      }
+      function search() {
+        var mine = ++ticket;
+        PIK.clear(list);
+        list.appendChild(h('div.combo-empty', h('span.spinner'), ' Mencari…'));
+        open();
+        var text = input.value === label ? '' : input.value;
+        PIK.api(config.action, Object.assign({}, params, { search: text, limit: 20, include: value })).then(function (result) {
+          if (mine !== ticket) return;
+          options = result.items;
+          activeIndex = options.length ? 0 : -1;
+          render();
+        }).catch(function (error) {
+          if (mine !== ticket) return;
+          PIK.clear(list);
+          list.appendChild(h('div.combo-empty', error.message));
+        });
+      }
+      var debounced = PIK.debounce(search, 250);
+      function choose(option) {
+        // A search still waiting for the debounce, or still in flight, must not reopen the list over the next fields.
+        debounced.cancel();
+        ticket++;
+        value = option ? option.id : null;
+        label = option ? option.label : '';
+        input.value = label;
+        clearButton.hidden = !value || config.disabled;
+        close();
+        if (config.onChange) config.onChange(value, option || null);
+      }
+      input.addEventListener('focus', function () { if (!config.disabled) search(); });
+      input.addEventListener('input', debounced);
+      input.addEventListener('blur', function () {
+        setTimeout(function () {
+          debounced.cancel();
+          ticket++;
+          close();
+          if (input.value !== label) {
+            if (input.value.trim() === '') choose(null);
+            else input.value = label;
+          }
+        }, 120);
+      });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (list.hidden) search(); else { activeIndex = Math.min(options.length - 1, activeIndex + 1); render(); } }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); activeIndex = Math.max(0, activeIndex - 1); render(); }
+        else if (e.key === 'Enter' && !list.hidden) { e.preventDefault(); if (options[activeIndex]) choose(options[activeIndex]); }
+        else if (e.key === 'Escape' && !list.hidden) { e.stopPropagation(); debounced.cancel(); ticket++; close(); input.value = label; }
+        if (activeIndex >= 0) input.setAttribute('aria-activedescendant', listId + '-' + activeIndex);
+      });
+      clearButton.addEventListener('click', function () { choose(null); input.focus(); });
+      return {
+        element: root, input: input,
+        getValue: function () { return value; },
+        setValue: function (v, l) { value = v || null; label = l || ''; input.value = label; clearButton.hidden = !value || config.disabled; },
+        setParams: function (p) { params = Object.assign({}, p || {}); },
+        setDisabled: function (disabled) { config.disabled = disabled; input.disabled = disabled; clearButton.hidden = !value || disabled; },
+        focus: function () { input.focus(); }
+      };
+    }
+
+    var PICKERS = {
+      customers: { action: 'customers.options', label: 'customer_name' },
+      contacts: { action: 'contacts.options', label: 'contact_name' },
+      leads: { action: 'leads.options', label: 'lead_name' },
+      products: { action: 'products.options', label: 'product_label' },
+      purchaseOrders: { action: 'purchaseOrders.options', label: 'po_label' },
+      poLines: {
+        action: 'purchaseOrders.lineOptions', label: 'line_label',
+        sublabel: function (o) {
+          return 'Order ' + fmt.number(o.order_quantity) + ' · terkirim ' + fmt.number(o.delivered_quantity) + ' · outstanding ' + fmt.number(o.outstanding_quantity);
+        }
+      },
+      users: { action: 'users.options', label: 'owner_name' }
+    };
+
+    // ------------------------------------------------------------------------------------------ Forms
+    var TEXT_TYPES = { string: 'text', text: 'textarea', email: 'email', url: 'url', phone: 'tel' };
+    var NUMBER_TYPES = { quantity: true, money: true, integer: true, decimal: true };
+
+    /**
+     * Form built from the schema metadata of `table`. fields: ['name', { name, label, type, picker, pickerParams,
+     * required, hint, span, options, enumName, visible(values), onChange(value, form), section }]
+     * Returns { element, values(), setErrors(errors), setValue(name, value, label), validate(), field(name) }.
+     */
+    function form(config) {
+      var values = Object.assign({}, config.values || {});
+      var fields = [];
+      var alertHost = h('div');
+      var grid = h('div.form-grid');
+      var formEl = h('form', { novalidate: true, onSubmit: function (e) { e.preventDefault(); if (config.onSubmit) config.onSubmit(); } }, alertHost, grid);
+      var legacy = values.is_legacy === true;
+
+      function spec(def) {
+        var d = typeof def === 'string' ? { name: def } : def;
+        if (d.section) return d;
+        var meta = (config.table && PIK.column(config.table, d.name)) || {};
+        // Legacy rows keep their migrated values: ranges and required-unless-legacy are not enforced (as on the server).
+        return Object.assign({
+          label: meta.label || d.name, type: meta.type || 'string', required: meta.required || (meta.requiredUnlessLegacy && !legacy),
+          enumName: meta.enumName, maxLength: meta.maxLength,
+          min: legacy ? undefined : meta.min, minExclusive: legacy ? undefined : meta.minExclusive, max: legacy ? undefined : meta.max
+        }, d);
+      }
+
+      (config.fields || []).forEach(function (def) {
+        var f = spec(def);
+        if (f.section) { grid.appendChild(h('div.form-section', f.section)); return; }
+        var id = 'f-' + f.name + '-' + Math.random().toString(36).slice(2, 7);
+        var errorEl = h('div.field-error', { id: id + '-err', hidden: true });
+        var hintEl = f.hint ? h('div.field-hint', { id: id + '-hint' }, f.hint) : null;
+        var control;
+        var getValue;
+        var setValue;
+        var current = values[f.name];
+        if (f.picker) {
+          var pk = PICKERS[f.picker];
+          var p = picker({
+            id: id, action: f.action || pk.action, params: f.pickerParams || {}, value: current,
+            label: f.pickerLabel !== undefined ? f.pickerLabel : values[pk.label] || (current ? current : ''),
+            disabled: f.disabled, placeholder: f.placeholder, sublabel: pk.sublabel || null,
+            onChange: function (v, option) { values[f.name] = v; clearError(); if (f.onChange) f.onChange(v, api, option); if (config.onDirty) config.onDirty(); }
+          });
+          control = p.element;
+          f.picker_ = p;
+          getValue = function () { return p.getValue(); };
+          setValue = function (v, label) { p.setValue(v, label); values[f.name] = v; };
+        } else if (f.type === 'enum' || f.options) {
+          var select = h('select.select', { id: id, disabled: f.disabled });
+          select.appendChild(h('option', { value: '' }, f.required ? 'Pilih…' : '—'));
+          (f.options || PIK.enumOptions(f.enumName, false, current)).forEach(function (o) {
+            select.appendChild(h('option', { value: o.value, selected: current === o.value }, o.label));
+          });
+          control = select;
+          getValue = function () { return select.value === '' ? null : select.value; };
+          setValue = function (v) { select.value = v === null || v === undefined ? '' : v; };
+          select.addEventListener('change', function () { clearError(); if (f.onChange) f.onChange(getValue(), api); });
+        } else if (f.type === 'boolean') {
+          var box = h('input', { id: id, type: 'checkbox', checked: current === true, disabled: f.disabled });
+          control = h('label.check', box, h('span', f.checkLabel || f.label));
+          getValue = function () { return box.checked; };
+          setValue = function (v) { box.checked = v === true; };
+          box.addEventListener('change', function () { if (f.onChange) f.onChange(box.checked, api); });
+        } else if (NUMBER_TYPES[f.type]) {
+          var num = h('input.input.num', { id: id, type: 'text', inputmode: f.type === 'integer' ? 'numeric' : 'decimal', value: formatNumberInput(current), disabled: f.disabled, placeholder: f.placeholder || '' });
+          var preview = h('div.field-hint', { 'aria-hidden': 'true' });
+          var updatePreview = function () {
+            var n = parseNumber(num.value);
+            preview.textContent = n === null || isNaN(n) ? '' : '= ' + (f.type === 'money' ? fmt.money(n) : fmt.number(n, 3));
+          };
+          num.addEventListener('input', function () { clearError(); updatePreview(); if (f.onChange) f.onChange(parseNumber(num.value), api); });
+          updatePreview();
+          control = h('div', num, preview);
+          getValue = function () { return parseNumber(num.value); };
+          setValue = function (v) { num.value = formatNumberInput(v); updatePreview(); };
+        } else if (f.type === 'date' || f.type === 'time' || f.type === 'datetime') {
+          var type = f.type === 'datetime' ? 'datetime-local' : f.type;
+          var dt = h('input.input', { id: id, type: type, value: f.type === 'datetime' ? toLocalInput(current) : current || '', disabled: f.disabled });
+          control = dt;
+          getValue = function () { return dt.value === '' ? null : f.type === 'datetime' ? fromLocalInput(dt.value) : dt.value; };
+          setValue = function (v) { dt.value = f.type === 'datetime' ? toLocalInput(v) : v || ''; };
+          dt.addEventListener('change', function () { clearError(); if (f.onChange) f.onChange(getValue(), api); });
+        } else {
+          var isArea = (TEXT_TYPES[f.type] || 'text') === 'textarea' || f.multiline;
+          var txt = h(isArea ? 'textarea.textarea' : 'input.input', {
+            id: id, type: isArea ? null : TEXT_TYPES[f.type] || 'text', value: current === null || current === undefined ? '' : current,
+            maxlength: f.maxLength || null, disabled: f.disabled, placeholder: f.placeholder || '', autocomplete: 'off',
+            rows: isArea ? String(f.rows || 3) : null
+          });
+          control = txt;
+          getValue = function () { var v = txt.value.trim(); return v === '' ? null : v; };
+          setValue = function (v) { txt.value = v === null || v === undefined ? '' : v; };
+          txt.addEventListener('input', function () { clearError(); });
+        }
+        var inputEl = control.tagName === 'INPUT' || control.tagName === 'SELECT' || control.tagName === 'TEXTAREA' ? control : control.querySelector('input, select, textarea');
+        if (inputEl) {
+          inputEl.setAttribute('aria-describedby', [hintEl ? id + '-hint' : null, id + '-err'].filter(Boolean).join(' '));
+          if (f.required) inputEl.setAttribute('aria-required', 'true');
+        }
+        var wrapper = h('div.field' + (f.span || f.type === 'text' || f.multiline ? '.span-2' : ''),
+          f.type === 'boolean' ? null : h('label.field-label', { for: id }, f.label, f.required ? h('span.req', { 'aria-hidden': 'true' }, '*') : null),
+          control, hintEl, errorEl);
+        function showError(message) {
+          errorEl.hidden = false;
+          PIK.mount(errorEl, [icon('alert', 'icon-sm'), h('span', message)]);
+          if (inputEl) inputEl.setAttribute('aria-invalid', 'true');
+        }
+        function clearError() {
+          errorEl.hidden = true;
+          if (inputEl) inputEl.removeAttribute('aria-invalid');
+        }
+        var entry = { spec: f, wrapper: wrapper, getValue: getValue, setValue: setValue, showError: showError, clearError: clearError, input: inputEl };
+        fields.push(entry);
+        grid.appendChild(wrapper);
+        if (f.visible && !f.visible(values)) wrapper.hidden = true;
+      });
+      formEl.addEventListener('input', function () { if (config.onDirty) config.onDirty(); });
+      formEl.addEventListener('change', function () { if (config.onDirty) config.onDirty(); });
+
+      function collect() {
+        var out = {};
+        fields.forEach(function (entry) {
+          if (entry.wrapper.hidden || entry.spec.readOnly) return;
+          out[entry.spec.name] = entry.getValue();
+        });
+        return out;
+      }
+
+      function checkField(entry, value) {
+        var f = entry.spec;
+        if (value === null || value === undefined || value === '') return f.required ? f.label + ' wajib diisi.' : null;
+        if (typeof value === 'number' && isNaN(value)) return 'Isi dengan angka, mis. 1500 atau 12,5.';
+        if (typeof value === 'string') {
+          if (f.maxLength && value.length > f.maxLength) return 'Maksimal ' + f.maxLength + ' karakter.';
+          if (/^[=']/.test(value)) return 'Tidak boleh diawali tanda = atau \'.';
+          if (f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Format email tidak valid.';
+          if (f.type === 'url' && !/^https?:\/\/\S+$/i.test(value)) return 'Tautan harus diawali http:// atau https://.';
+        }
+        if (typeof value === 'number') {
+          if (f.type === 'integer' && Math.floor(value) !== value) return 'Harus bilangan bulat.';
+          if (f.minExclusive !== undefined && f.minExclusive !== null && value <= f.minExclusive) return 'Harus lebih dari ' + fmt.number(f.minExclusive) + '.';
+          if (f.min !== undefined && f.min !== null && value < f.min) return 'Minimal ' + fmt.number(f.min) + '.';
+          if (f.max !== undefined && f.max !== null && value > f.max) return 'Maksimal ' + fmt.number(f.max) + '.';
+        }
+        if (f.validate) return f.validate(value, collect());
+        return null;
+      }
+
+      var api = {
+        element: formEl,
+        values: collect,
+        field: function (name) { return fields.filter(function (e) { return e.spec.name === name; })[0] || null; },
+        setValue: function (name, value, label) { var e = api.field(name); if (e) e.setValue(value, label); },
+        setVisible: function (name, visible) { var e = api.field(name); if (e) e.wrapper.hidden = !visible; },
+        setDisabled: function (name, disabled) {
+          var e = api.field(name);
+          if (!e) return;
+          if (e.spec.picker_) e.spec.picker_.setDisabled(disabled);
+          else if (e.input) e.input.disabled = disabled;
+        },
+        setParams: function (name, params) { var e = api.field(name); if (e && e.spec.picker_) e.spec.picker_.setParams(params); },
+        validate: function () {
+          var firstInvalid = null;
+          fields.forEach(function (entry) {
+            if (entry.wrapper.hidden || entry.spec.readOnly) return;
+            var message = checkField(entry, entry.getValue());
+            if (message) { entry.showError(message); if (!firstInvalid) firstInvalid = entry; } else entry.clearError();
+          });
+          if (firstInvalid && firstInvalid.input) firstInvalid.input.focus();
+          return !firstInvalid;
+        },
+        /** Server field errors ({ field, code, message }) next to their fields; the rest as a form alert. */
+        setErrors: function (error) {
+          var errors = (error && error.details && error.details.errors) || [];
+          var unmatched = [];
+          var focused = false;
+          fields.forEach(function (entry) { entry.clearError(); });
+          errors.forEach(function (item) {
+            var entry = item.field ? api.field(item.field) : null;
+            if (entry && !entry.wrapper.hidden) {
+              entry.showError(item.message);
+              if (!focused && entry.input) { entry.input.focus(); focused = true; }
+            } else unmatched.push(item.message);
+          });
+          var message = error ? (errors.length && !unmatched.length ? null : unmatched.length ? unmatched.join(' ') : error.message) : null;
+          api.alert(message, error && error.code === 'CONFLICT' ? 'warn' : null);
+        },
+        alert: function (message, kind) {
+          PIK.clear(alertHost);
+          if (message) alertHost.appendChild(h('div.form-alert' + (kind ? '.' + kind : ''), { role: 'alert', style: { marginBottom: '16px' } }, icon(kind === 'info' ? 'info' : 'alert', 'icon-sm'), h('span', message)));
+        }
+      };
+      return api;
+    }
+
+    /**
+     * Form in a drawer: validation, save with spinner, server errors mapped to fields, CONFLICT handling and the
+     * confirmable OVER_QUANTITY flow (confirm, then resend with confirmOverQuantity).
+     * options: { title, subtitle, table, fields, values, submit(values, extra) → Promise, successMessage, onSaved(result),
+     *            submitLabel, intro (node), wide, extra (node below the form) }
+     */
+    function openForm(options) {
+      var saving = false;
+      var d;
+      var f = form({
+        table: options.table, fields: options.fields, values: options.values,
+        onSubmit: function () { save(); },
+        onDirty: function () { if (d) d.markDirty(true); }
+      });
+      var submitButton = h('button.btn.btn-primary', { type: 'button', onClick: function () { save(); } }, options.submitLabel || 'Simpan');
+      d = PIK.drawer({
+        title: options.title, subtitle: options.subtitle, wide: options.wide,
+        body: h('div.stack', options.intro || null, f.element, options.extra || null),
+        footer: [h('button.btn', { type: 'button', onClick: function () { d.requestClose(); } }, 'Batal'), submitButton]
+      });
+      if (options.onReady) options.onReady(f, d);
+
+      function save(extra) {
+        if (saving) return;
+        f.alert(null);
+        if (!f.validate()) return;
+        saving = true;
+        submitButton.disabled = true;
+        var spinner = h('span.spinner');
+        submitButton.insertBefore(spinner, submitButton.firstChild);
+        var extras = extra || {};
+        Promise.resolve().then(function () { return options.submit(f.values(), extras); }).then(function (result) {
+          d.markDirty(false);
+          d.close();
+          PIK.toast.success(options.successMessage || 'Tersimpan.');
+          if (options.onSaved) options.onSaved(result);
+          return null;
+        }, function (error) {
+          return { error: error || new PIK.ApiError('INTERNAL_ERROR', 'Terjadi kesalahan.') };
+        }).then(function (outcome) {
+          saving = false;
+          submitButton.disabled = false;
+          if (spinner.parentNode) spinner.remove();
+          if (!outcome) return;
+          var error = outcome.error;
+          if (error.details && error.details.confirmable && !extras.confirmOverQuantity) {
+            PIK.confirm({ title: 'Konfirmasi jumlah', message: error.message, confirmLabel: 'Ya, simpan' }).then(function (ok) {
+              if (ok) save(Object.assign({}, extras, { confirmOverQuantity: true }));
+              else f.setErrors(error);
+            });
+            return;
+          }
+          f.setErrors(error);
+        });
+      }
+      return { form: f, drawer: d };
+    }
+
+    /** Archive with confirmation and an undo toast. */
+    function archiveFlow(options) {
+      return PIK.confirm({
+        title: options.title || 'Arsipkan data ini?',
+        message: options.message || 'Data diarsipkan, tidak dihapus. Anda dapat memulihkannya kapan saja.',
+        confirmLabel: options.confirmLabel || 'Arsipkan', danger: true
+      }).then(function (ok) {
+        if (!ok) return false;
+        return PIK.api(options.archiveAction, { id: options.id }).then(function () {
+          PIK.toast.success(options.doneMessage || 'Diarsipkan.', options.restoreAction ? {
+            label: 'Urungkan',
+            run: function () {
+              PIK.api(options.restoreAction, { id: options.id }).then(function () {
+                PIK.toast.success('Dipulihkan.');
+                if (options.onDone) options.onDone();
+              }).catch(function (error) { PIK.toast.error(error.message); });
+            }
+          } : null);
+          if (options.onDone) options.onDone();
+          return true;
+        }).catch(function (error) { PIK.toast.error(error.message); return false; });
+      });
+    }
+
+    function restoreFlow(options) {
+      return PIK.api(options.restoreAction, { id: options.id }).then(function () {
+        PIK.toast.success('Dipulihkan.');
+        if (options.onDone) options.onDone();
+      }).catch(function (error) { PIK.toast.error(error.message); });
+    }
+
+    // ------------------------------------------------------------------------------------------ History (audit)
+    function historyPanel(entityType, entityId) {
+      var host = h('div', skeletonRows(3));
+      PIK.api('audit.history', { entityType: entityType, entityId: entityId }).then(function (result) {
+        if (!result.items.length) { PIK.mount(host, emptyState({ icon: 'history', title: 'Belum ada riwayat' })); return; }
+        PIK.mount(host, h('div.timeline', result.items.map(function (item) {
+          var changes = item.changes && item.action === 'UPDATE' ? Object.keys(item.changes).map(function (key) {
+            var pair = item.changes[key];
+            return h('li', h('b', key), ': ', formatAuditValue(pair[0]), ' → ', formatAuditValue(pair[1]));
+          }) : [];
+          var summary = item.action === 'MIGRATION_RUN' ? 'Dibuat oleh migrasi data legacy' : item.action_label;
+          return h('div.tl-item' + (item.action === 'ARCHIVE' ? '.muted' : ''),
+            h('div.tl-when', fmt.dateTime(item.occurred_at), ' · ', item.actor_name || item.actor_email),
+            h('div.tl-title', summary),
+            changes.length ? h('ul.change-list', changes) : null,
+            item.note ? h('div.tl-body.muted', item.note) : null);
+        })));
+      }).catch(function (error) { PIK.mount(host, errorState(error)); });
+      return host;
+    }
+
+    function formatAuditValue(value) {
+      if (value === null || value === undefined || value === '') return '(kosong)';
+      if (value === true) return 'Ya';
+      if (value === false) return 'Tidak';
+      var text = String(value);
+      return text.length > 80 ? text.slice(0, 77) + '…' : text;
+    }
+
+    // ------------------------------------------------------------------------------------------ Migration issues notice
+    /**
+     * Open migration issues of a migrated record (e.g. a PO date whose day and month look swapped in the source), shown
+     * where the record is read, for roles that may review them. Nothing is corrected automatically.
+     */
+    function migrationIssuesNotice(recordId) {
+      if (!recordId || !PIK.can('migrationIssues', 'R')) return null;
+      var host = h('div');
+      PIK.api('migrationIssues.list', { filters: { record_id: recordId, resolution_status: 'OPEN' }, pageSize: 5 }).then(function (result) {
+        if (!result.total) return;
+        PIK.mount(host, h('div.form-alert.warn', { role: 'status', style: { marginBottom: '16px' } }, icon('alert', 'icon-sm'),
+          h('div', { style: { minWidth: '0' } },
+            h('strong', fmt.number(result.total, 0) + ' isu migrasi terbuka untuk data ini'),
+            h('ul.change-list', { style: { color: 'inherit' } }, result.items.map(function (issue) { return h('li', h('b', issue.issue_type), ': ', issue.description); })),
+            h('button.btn.btn-ghost.btn-sm', { type: 'button', style: { marginTop: '6px', paddingLeft: '0' }, onClick: function () { PIK.router.go('settings', { tab: 'issues', q: recordId }); } }, 'Tinjau di Isu migrasi'))));
+      }).catch(function () { /* the notice is optional */ });
+      return host;
+    }
+
+    // ------------------------------------------------------------------------------------------ Charts
+    /**
+     * Horizontal bar chart (magnitude by category). items: [{ label, value, display, sub, muted, tip, onClick }].
+     * One series in the accent; `muted` bars are context in the de-emphasis gray. Every value is printed at the bar
+     * tip (the chart is its own table view); hover and keyboard focus show the same tooltip.
+     */
+    function hbars(items, options) {
+      var o = options || {};
+      if (!items.length) return emptyState({ icon: 'reports', title: o.emptyTitle || 'Belum ada data' });
+      var max = Math.max.apply(null, items.map(function (i) { return Math.abs(i.value) || 0; })) || 1;
+      return h('div.hbar-list', { role: 'list', 'aria-label': o.label || null }, items.map(function (item) {
+        var display = item.display || fmt.number(item.value);
+        var row = h(item.onClick ? 'button.hbar' : 'div.hbar', {
+          role: 'listitem', tabindex: item.onClick ? null : '0', type: item.onClick ? 'button' : null,
+          'aria-label': item.label + ': ' + display + (item.sub ? ', ' + item.sub : ''),
+          style: item.onClick ? { border: '0', background: 'none', width: 'calc(100% + 12px)', textAlign: 'left', font: 'inherit', cursor: 'pointer' } : null,
+          onClick: item.onClick || null
+        },
+          h('span.label', item.label),
+          h('span.track', item.value ? h('span.fill' + (item.muted ? '.muted' : ''), { style: { width: Math.max(0.5, (Math.abs(item.value) / max) * 100) + '%' } }) : null),
+          h('span.val', display, item.sub ? h('small', item.sub) : null));
+        attachTip(row, function () { return { value: display, label: item.tip || item.label, extra: item.sub }; });
+        return row;
+      }));
+    }
+
+    function legend(entries) {
+      return h('div.viz-legend', entries.map(function (entry) { return h('span', h('i' + (entry.muted ? '.muted' : '')), entry.label); }));
+    }
+
+    var tipEl = null;
+    function attachTip(target, content) {
+      function show(x, y) {
+        var c = content();
+        if (!tipEl) tipEl = h('div.viz-tip', { role: 'tooltip' });
+        PIK.mount(tipEl, [h('strong', c.value), h('span', c.label), c.extra ? h('div', c.extra) : null]);
+        if (!tipEl.parentNode) document.body.appendChild(tipEl);
+        var w = tipEl.offsetWidth;
+        tipEl.style.left = Math.min(window.innerWidth - w - 8, x + 14) + 'px';
+        tipEl.style.top = (y + 14) + 'px';
+      }
+      function hide() { if (tipEl && tipEl.parentNode) tipEl.parentNode.removeChild(tipEl); }
+      target.addEventListener('pointermove', function (e) { if (e.pointerType === 'mouse') show(e.clientX, e.clientY); });
+      target.addEventListener('pointerleave', hide);
+      target.addEventListener('focus', function () { var r = target.getBoundingClientRect(); show(r.left + r.width * 0.5, r.top + r.height - 10); });
+      target.addEventListener('blur', hide);
+    }
+
+    PIK.ui = {
+      badge: badge, statusBadge: statusBadge, priority: priority, legacyTag: legacyTag, progress: progress,
+      skeletonRows: skeletonRows, skeletonBlocks: skeletonBlocks, emptyState: emptyState, errorState: errorState,
+      button: button, busyButton: busyButton, tabs: tabs, kv: kv, card: card, linkButton: linkButton, externalLink: externalLink,
+      dataTable: dataTable, listCard: listCard, pager: pager, listPage: listPage,
+      parseNumber: parseNumber, toLocalInput: toLocalInput, fromLocalInput: fromLocalInput,
+      picker: picker, form: form, openForm: openForm, archiveFlow: archiveFlow, restoreFlow: restoreFlow,
+      historyPanel: historyPanel, hbars: hbars, legend: legend, migrationIssuesNotice: migrationIssuesNotice
+    };
+  })(PIK);
+</script>

@@ -148,7 +148,15 @@ function queryRecords_(records, params, spec) {
   if (sortField) {
     const getter = sortGetter_(spec, sortField);
     const direction = (sort.field ? sort.direction : spec.defaultSort && spec.defaultSort.direction) === 'desc' ? -1 : 1;
-    result = result.slice().sort(function (a, b) { return compareForSort_(getter(a), getter(b)) * direction; });
+    // Empty values stay at the end in both directions (undated legacy rows must not lead a "newest first" list).
+    result = result.slice().sort(function (a, b) {
+      const valueA = getter(a);
+      const valueB = getter(b);
+      const emptyA = valueA === null || valueA === undefined || valueA === '';
+      const emptyB = valueB === null || valueB === undefined || valueB === '';
+      if (emptyA || emptyB) return emptyA === emptyB ? 0 : emptyA ? 1 : -1;
+      return compareForSort_(valueA, valueB) * direction;
+    });
   }
   return result;
 }

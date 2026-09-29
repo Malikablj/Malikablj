@@ -215,9 +215,17 @@ test('daftar: pencarian, filter, urutan, halaman, arsip opt-in; batas halaman da
   page = app.ok('viewer', 'customers.list', { pageSize: 2, page: 99 });
   assert.equal(page.page, 3, 'halaman di luar jangkauan dijepit ke halaman terakhir');
 
+  // Empty values stay last in both directions.
+  const withoutIndustry = app.ok('admin', 'customers.create', { data: { name: 'PT Tanpa Industri' } });
+  const desc = app.ok('viewer', 'customers.list', { sort: { field: 'industry', direction: 'desc' } }).items.map((item) => item.id);
+  const asc = app.ok('viewer', 'customers.list', { sort: { field: 'industry', direction: 'asc' } }).items.map((item) => item.id);
+  assert.equal(desc[desc.length - 1], withoutIndustry.id, 'kosong di akhir (menurun)');
+  assert.equal(asc[asc.length - 1], withoutIndustry.id, 'kosong di akhir (menaik)');
+  app.ok('admin', 'customers.archive', { id: withoutIndustry.id });
+
   app.ok('admin', 'customers.archive', { id: created[0].id });
   assert.equal(app.ok('viewer', 'customers.list', {}).total, 4, 'arsip tidak tampil secara default');
-  assert.equal(app.ok('viewer', 'customers.list', { includeInactive: true }).total, 5);
+  assert.equal(app.ok('viewer', 'customers.list', { includeInactive: true }).total, 6, 'termasuk 2 arsip');
 
   app.fail('admin', 'settings.update', { key: 'MAX_PAGE_SIZE', value: '20' }, 'VALIDATION_ERROR'); // below DEFAULT_PAGE_SIZE 25
   app.ok('admin', 'settings.update', { key: 'DEFAULT_PAGE_SIZE', value: '5' });

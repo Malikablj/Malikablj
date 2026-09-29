@@ -1,0 +1,408 @@
+<script>
+  /*
+   * Application shell: sign-in screen, sidebar (desktop), bottom navigation (phones), top bar with global search and
+   * follow-up notifications, user menu, and the router that renders each screen after checking the role's access.
+   * The role never comes from the browser: every screen's data is authorized again by the server (api()).
+   */
+  (function (PIK) {
+    'use strict';
+    var h = PIK.h;
+    var icon = PIK.icon;
+    var ui = PIK.ui;
+    var fmt = PIK.fmt;
+
+    var NAV = [
+      { items: [{ key: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: 'dashboard', module: 'dashboard' }] },
+      { label: 'CRM', items: [
+        { key: 'customers', label: 'Customer', icon: 'customers', path: 'customers', module: 'customers' },
+        { key: 'contacts', label: 'Contact', icon: 'contacts', path: 'contacts', module: 'contacts' },
+        { key: 'leads', label: 'Lead & Pipeline', icon: 'leads', path: 'leads', module: 'leads' },
+        { key: 'activities', label: 'Aktivitas', icon: 'activities', path: 'activities', module: 'activities' },
+        { key: 'followUps', label: 'Follow-up', icon: 'followUps', path: 'follow-ups', module: 'followUps', badge: true }
+      ] },
+      { label: 'Operasional', items: [
+        { key: 'purchaseOrders', label: 'Purchase Order', icon: 'purchaseOrders', path: 'purchase-orders', module: 'purchaseOrders' },
+        { key: 'deliveries', label: 'Delivery', icon: 'deliveries', path: 'deliveries', module: 'deliveries' },
+        { key: 'returns', label: 'Retur', icon: 'returns', path: 'returns', module: 'returns' }
+      ] },
+      { label: 'Inventori', items: [
+        { key: 'products', label: 'Produk', icon: 'products', path: 'products', module: 'products' },
+        { key: 'stock', label: 'Stok', icon: 'stock', path: 'stock', module: 'stock' },
+        { key: 'leadTime', label: 'Lead Time', icon: 'leadTime', path: 'lead-time', module: 'leadTime' }
+      ] },
+      { label: 'Keuangan', items: [{ key: 'finance', label: 'Invoice & Pembayaran', icon: 'finance', path: 'invoices', module: 'finance' }] },
+      { label: 'Analitik', items: [{ key: 'reports', label: 'Laporan', icon: 'reports', path: 'reports', module: 'reports' }] },
+      { label: 'Sistem', items: [{ key: 'settings', label: 'Pengaturan', icon: 'settings', path: 'settings', module: null }] }
+    ];
+    var BOTTOM = ['dashboard', 'customers', 'leads', 'followUps'];
+
+    var shell = null;
+    var currentCleanup = null;
+    var notifications = { count: 0, fetchedAt: 0 };
+
+    function navItems() {
+      var list = [];
+      NAV.forEach(function (group) { group.items.forEach(function (item) { if (!item.module || PIK.can(item.module, 'R')) list.push(item); }); });
+      return list;
+    }
+
+    // ------------------------------------------------------------------------------------------ Boot & sign-in
+    function boot() {
+      var root = document.getElementById('app');
+      PIK.mount(root, h('div.boot', h('div.boot-mark', h('div.brand-mark', 'PIK'), h('span.spinner'), h('span', 'Memuat PIK Marketing Control…'))));
+      PIK.api('session.get', {}).then(function (session) {
+        PIK.session = session;
+        if (PIK.storage.get('signedIn', false)) startApp();
+        else showLogin(null);
+      }).catch(function (error) {
+        if (error.code === 'NOT_REGISTERED') showNotRegistered(error);
+        else showFatal(error);
+      });
+    }
+
+    function loginFrame(children) {
+      var company = PIK.session && PIK.session.settings && PIK.session.settings.companyName;
+      return h('main.login', h('div.login-card',
+        h('div.row', h('div.brand-mark', 'PIK'), h('div', h('div', { style: { fontWeight: '650' } }, 'PIK Marketing Control'), h('div.muted', { style: { fontSize: '13px' } }, company || 'Sistem kendali marketing'))),
+        children,
+        h('p.login-foot', 'Masuk memakai akun Google Workspace. Akses mengikuti role yang ditetapkan Admin.')));
+    }
+
+    function showLogin(message) {
+      var user = PIK.session.user;
+      var button = h('button.btn.btn-primary.btn-lg.btn-block', { type: 'button', autofocus: true }, 'Masuk');
+      button.addEventListener('click', function () {
+        button.disabled = true;
+        button.insertBefore(h('span.spinner'), button.firstChild);
+        PIK.api('session.login', {}).then(function (session) {
+          PIK.session = session;
+          PIK.storage.set('signedIn', true);
+          startApp();
+        }).catch(function (error) {
+          button.disabled = false;
+          var spinner = button.querySelector('.spinner');
+          if (spinner) spinner.remove();
+          if (error.code === 'NOT_REGISTERED') showNotRegistered(error);
+          else PIK.toast.error(error.message);
+        });
+      });
+      PIK.mount(document.getElementById('app'), loginFrame([
+        h('div', h('h1', 'Selamat datang'), h('p.muted', { style: { marginTop: '6px' } }, message || 'Lanjutkan dengan akun Anda untuk membuka dashboard.')),
+        h('div.login-identity', h('div.avatar.avatar-lg', fmt.initials(user.name)),
+          h('div', { style: { minWidth: '0' } }, h('div.truncate', { style: { fontWeight: '600' } }, user.name), h('div.muted.truncate', { style: { fontSize: '13px' } }, user.email),
+            h('div', { style: { marginTop: '4px' } }, ui.statusBadge('USER_ROLE', user.role)))),
+        button,
+        h('a.btn.btn-quiet.btn-block', { href: 'https://accounts.google.com/AccountChooser', target: '_top' }, 'Gunakan akun Google lain')
+      ]));
+    }
+
+    function showNotRegistered(error) {
+      var email = error.details && error.details.email;
+      PIK.mount(document.getElementById('app'), loginFrame([
+        h('div', h('h1', 'Akun belum terdaftar'), h('p.muted', { style: { marginTop: '6px' } }, error.message)),
+        email ? h('div.login-identity', h('div.avatar.avatar-lg', fmt.initials(email)), h('div.truncate', email)) : null,
+        h('div.form-alert.info', icon('info', 'icon-sm'), h('span', 'Minta Admin menambahkan email ini di Pengaturan › User, lalu coba lagi.')),
+        h('button.btn.btn-primary.btn-lg.btn-block', { type: 'button', onClick: boot }, 'Coba lagi'),
+        h('a.btn.btn-quiet.btn-block', { href: 'https://accounts.google.com/AccountChooser', target: '_top' }, 'Gunakan akun Google lain')
+      ]));
+    }
+
+    function showFatal(error) {
+      PIK.mount(document.getElementById('app'), loginFrame([
+        h('div', h('h1', 'Aplikasi belum dapat dibuka'), h('p.muted', { style: { marginTop: '6px' } }, error.message)),
+        h('button.btn.btn-primary.btn-lg.btn-block', { type: 'button', onClick: boot }, 'Coba lagi')
+      ]));
+    }
+
+    PIK.onSignedOut = function (error) {
+      PIK.storage.remove('signedIn');
+      closeAllLayers();
+      showNotRegistered(error);
+    };
+
+    function signOut() {
+      PIK.storage.remove('signedIn');
+      closeAllLayers();
+      shell = null;
+      showLogin('Anda telah keluar. Masuk kembali untuk melanjutkan.');
+    }
+
+    var closePalette = null;
+
+    /** Closes every overlay properly (listeners included), e.g. before a page change. */
+    function closeAllLayers() {
+      if (closePalette) closePalette();
+      PIK.closeLayers();
+      Array.prototype.forEach.call(document.querySelectorAll('.palette, .sheet-menu'), function (el) { el.remove(); });
+    }
+    PIK.closeAllLayers = closeAllLayers;
+
+    // ------------------------------------------------------------------------------------------ Shell
+    function startApp() {
+      shell = buildShell();
+      PIK.mount(document.getElementById('app'), shell.root);
+      PIK.router.start(function (location) { PIK.render(location); });
+      document.addEventListener('keydown', onGlobalKey);
+    }
+
+    function buildShell() {
+      var user = PIK.session.user;
+      var sidebarNav = h('nav', { 'aria-label': 'Menu utama' });
+      NAV.forEach(function (group) {
+        var items = group.items.filter(function (item) { return !item.module || PIK.can(item.module, 'R'); });
+        if (!items.length) return;
+        sidebarNav.appendChild(h('div.nav-group', group.label ? h('div.nav-label', group.label) : null, items.map(function (item) {
+          return h('button.nav-item', { type: 'button', dataset: { key: item.key }, title: item.label, onClick: function () { PIK.router.go(item.path, {}); } },
+            icon(item.icon), h('span', item.label), item.badge ? h('span.nav-count', { hidden: true }) : null);
+        })));
+      });
+      var sidebar = h('aside.sidebar',
+        h('div.sidebar-brand', h('div.brand-mark', 'PIK'), h('div', h('strong', 'Marketing Control'), h('span', PIK.session.settings.companyName || 'PIK'))),
+        sidebarNav,
+        h('div.sidebar-foot', 'Skema v' + PIK.session.app.schemaVersion));
+
+      var title = h('div.topbar-title');
+      var bell = h('button.icon-button', { type: 'button', 'aria-label': 'Notifikasi follow-up', onClick: function () { openNotifications(bell); } }, icon('bell'));
+      var userButton = h('button.user-button', { type: 'button', 'aria-haspopup': 'menu', onClick: function () { openUserMenu(userButton); } },
+        h('div.avatar', fmt.initials(user.name)),
+        h('div.who', { style: { textAlign: 'left' } }, h('div.name', user.name), h('div.role', PIK.enumLabel('USER_ROLE', user.role))));
+      var topbar = h('header.topbar',
+        title,
+        h('button.search-trigger', { type: 'button', onClick: openPalette, 'aria-label': 'Cari (Ctrl+K)' }, icon('search', 'icon-sm'), h('span', 'Cari customer, PO, produk…'), h('kbd', navigator.platform.indexOf('Mac') === 0 ? '⌘K' : 'Ctrl K')),
+        h('div.spacer.hide-mobile'),
+        PIK.can('followUps', 'R') ? bell : null,
+        userButton);
+      var content = h('main.content', { id: 'main', tabindex: '-1' });
+      var bottom = h('nav.bottom-nav', { 'aria-label': 'Navigasi cepat' });
+      navItems().filter(function (item) { return BOTTOM.indexOf(item.key) !== -1; }).forEach(function (item) {
+        bottom.appendChild(h('button', { type: 'button', dataset: { key: item.key }, onClick: function () { PIK.router.go(item.path, {}); } },
+          icon(item.icon), h('span', item.label === 'Lead & Pipeline' ? 'Lead' : item.label), item.badge ? h('span.badge-dot', { hidden: true }) : null));
+      });
+      bottom.appendChild(h('button', { type: 'button', dataset: { key: 'menu' }, onClick: openSheetMenu }, icon('menu'), h('span', 'Menu')));
+      var root = h('div.shell', h('a.sr-only', { href: '#main', onClick: function (e) { e.preventDefault(); content.focus(); } }, 'Lewati ke konten'),
+        sidebar, h('div.main', topbar, content), bottom);
+      return { root: root, content: content, title: title, sidebar: sidebar, bottom: bottom, bell: bell };
+    }
+
+    function setActiveNav(key) {
+      if (!shell) return;
+      Array.prototype.forEach.call(shell.root.querySelectorAll('.nav-item, .bottom-nav button'), function (el) {
+        var active = el.dataset.key === key;
+        el.classList.toggle('active', active);
+        if (active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
+      });
+    }
+
+    /** Page header; also sets the document title and the phone top bar title. */
+    PIK.pageHead = function (options) {
+      document.title = options.title + ' · PIK Marketing Control';
+      if (shell) shell.title.textContent = options.title;
+      return h('div.page-head',
+        h('div.titles',
+          options.breadcrumb ? h('nav.breadcrumb', { 'aria-label': 'Breadcrumb' }, h('button', { type: 'button', onClick: function () { PIK.router.go(options.breadcrumb.path, options.breadcrumb.query || {}); } }, options.breadcrumb.label), h('span', '/')) : null,
+          h('h1', options.title),
+          options.subtitle ? h('p.page-sub', options.subtitle) : null),
+        options.actions && options.actions.length ? h('div.actions', options.actions) : null);
+    };
+
+    // ------------------------------------------------------------------------------------------ Rendering
+    PIK.render = function (location) {
+      if (!shell) return;
+      PIK.router.current = location;
+      var match = PIK.router.match(location.path);
+      if (!match) { PIK.router.go('dashboard', {}, { replace: true }); return; }
+      var route = match.route.options;
+      if (typeof currentCleanup === 'function') { try { currentCleanup(); } catch (e) { /* ignore */ } }
+      currentCleanup = null;
+      closeAllLayers();
+      setActiveNav(route.nav);
+      var container = h('div.view');
+      PIK.mount(shell.content, container);
+      window.scrollTo(0, 0);
+      if (route.module && !PIK.can(route.module, 'R')) {
+        container.appendChild(PIK.pageHead({ title: route.title }));
+        container.appendChild(h('div.card', ui.errorState({ code: 'FORBIDDEN', message: 'Role ' + PIK.enumLabel('USER_ROLE', PIK.session.user.role) + ' tidak memiliki akses ke halaman ini.' })));
+        return;
+      }
+      try {
+        currentCleanup = route.render(container, match.params, location.query || {});
+      } catch (error) {
+        container.appendChild(h('div.card', ui.errorState(error)));
+      }
+      refreshNotifications(false);
+    };
+
+    PIK.refresh = function () { if (PIK.router.current) PIK.render(PIK.router.current); };
+
+    // ------------------------------------------------------------------------------------------ Notifications
+    function refreshNotifications(force) {
+      if (!shell || !PIK.can('followUps', 'R')) return;
+      if (!force && Date.now() - notifications.fetchedAt < 60000) { paintNotifications(); return; }
+      notifications.fetchedAt = Date.now();
+      PIK.api('followUps.counts', { filters: { owner_user_id: PIK.session.user.id } }).then(function (counts) {
+        notifications.count = (counts.OVERDUE || 0) + (counts.TODAY || 0);
+        notifications.counts = counts;
+        paintNotifications();
+      }).catch(function () { /* the badge is optional */ });
+    }
+    PIK.notifyChanged = function () { refreshNotifications(true); };
+
+    function paintNotifications() {
+      if (!shell) return;
+      var count = notifications.count;
+      var text = count > 99 ? '99+' : String(count);
+      var dot = shell.bell.querySelector('.dot');
+      if (count > 0) {
+        if (!dot) { dot = h('span.dot'); shell.bell.appendChild(dot); }
+        dot.textContent = text;
+        shell.bell.setAttribute('aria-label', 'Notifikasi follow-up: ' + count + ' perlu tindakan');
+      } else if (dot) dot.remove();
+      Array.prototype.forEach.call(shell.root.querySelectorAll('.nav-count, .badge-dot'), function (el) {
+        el.hidden = count === 0;
+        el.textContent = text;
+      });
+    }
+
+    function openNotifications(anchor) {
+      var list = h('div', { style: { width: 'min(360px, 88vw)', padding: '4px' } },
+        h('div.menu-head', h('strong', 'Follow-up saya'), h('div.muted', { style: { fontSize: '12px' } }, 'Terlambat dan jatuh tempo hari ini')),
+        h('div.state-inline', h('span.spinner')));
+      var pop = PIK.popover(anchor, [list]);
+      Promise.all([
+        PIK.api('followUps.list', { filters: { owner_user_id: PIK.session.user.id, bucket: 'OVERDUE' }, pageSize: 5 }),
+        PIK.api('followUps.list', { filters: { owner_user_id: PIK.session.user.id, bucket: 'TODAY' }, pageSize: 5 })
+      ]).then(function (results) {
+        var items = results[0].items.concat(results[1].items);
+        var body = items.length ? h('div.mini-list', items.map(function (item) {
+          return h('button.mini-item', { type: 'button', onClick: function () { pop.close(); PIK.router.go('customers/' + item.customer_id, { tab: 'followUps' }); } },
+            h('div.mini-main', h('div.mini-title', item.purpose || 'Follow-up'), h('div.mini-sub', (item.customer_name || '—') + ' · ' + fmt.date(item.follow_up_date))),
+            ui.statusBadge('DUE_STATE', item.due_state));
+        })) : ui.emptyState({ icon: 'check', title: 'Semua beres', text: 'Tidak ada follow-up terlambat atau jatuh tempo hari ini.' });
+        PIK.mount(list, [list.firstChild, body, h('button.btn.btn-ghost.btn-block', { type: 'button', onClick: function () { pop.close(); PIK.router.go('follow-ups', {}); } }, 'Buka semua follow-up')]);
+      }).catch(function (error) { PIK.mount(list, [list.firstChild, ui.errorState(error)]); });
+    }
+
+    function openUserMenu(anchor) {
+      var user = PIK.session.user;
+      PIK.popover(anchor, [
+        h('div.menu-head', h('div', { style: { fontWeight: '600' } }, user.name), h('div.muted', { style: { fontSize: '12px' } }, user.email), h('div', { style: { marginTop: '6px' } }, ui.statusBadge('USER_ROLE', user.role))),
+        { label: 'Profil & pengaturan', icon: 'settings', onClick: function () { PIK.router.go('settings', {}); } },
+        { label: 'Keluar', icon: 'logout', danger: true, onClick: signOut }
+      ]);
+    }
+
+    function openSheetMenu() {
+      var overlay = h('div.overlay');
+      var sheet = h('div.sheet-menu', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Semua menu' },
+        h('div.sheet-grip'),
+        h('div.sheet-grid', navItems().map(function (item) {
+          return h('button', { type: 'button', 'aria-current': PIK.router.current && PIK.router.match(PIK.router.current.path) && PIK.router.match(PIK.router.current.path).route.options.nav === item.key ? 'page' : null,
+            onClick: function () { close(); PIK.router.go(item.path, {}); } }, icon(item.icon), item.label);
+        })),
+        h('button.btn.btn-block', { type: 'button', style: { marginTop: '12px' }, onClick: function () { close(); signOut(); } }, icon('logout', 'icon-sm'), 'Keluar'));
+      function close() { sheet.classList.remove('open'); overlay.classList.remove('open'); setTimeout(function () { sheet.remove(); overlay.remove(); }, 240); }
+      overlay.addEventListener('click', close);
+      document.body.appendChild(overlay);
+      document.body.appendChild(sheet);
+      requestAnimationFrame(function () { overlay.classList.add('open'); sheet.classList.add('open'); });
+    }
+
+    // ------------------------------------------------------------------------------------------ Global search (command palette)
+    function onGlobalKey(event) {
+      var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((event.target && event.target.tagName) || '');
+      if ((event.key === 'k' || event.key === 'K') && (event.metaKey || event.ctrlKey)) { event.preventDefault(); openPalette(); }
+      else if (event.key === '/' && !typing && !document.querySelector('.drawer, .dialog, .palette')) { event.preventDefault(); openPalette(); }
+    }
+
+    var SEARCH_TARGETS = {
+      customers: function (item) { return ['customers/' + item.id, {}]; },
+      contacts: function (item) { return ['contacts', { q: item.title }]; },
+      leads: function (item) { return ['leads/' + item.id, {}]; },
+      purchaseOrders: function (item) { return ['purchase-orders/' + item.id, {}]; },
+      products: function (item) { return ['products/' + item.id, {}]; }
+    };
+
+    function openPalette() {
+      if (document.querySelector('.palette')) return;
+      var input = h('input', { type: 'search', placeholder: 'Cari customer, contact, lead, PO, produk…', 'aria-label': 'Pencarian global', autocomplete: 'off' });
+      var results = h('div.palette-results', { role: 'listbox' }, h('div.state.state-inline', h('p', 'Ketik minimal 2 huruf.')));
+      var palette = h('div.palette', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Pencarian global' }, h('div.palette-input', icon('search'), input, h('kbd.subtle', 'Esc')), results);
+      var overlay = h('div.overlay.open', { style: { zIndex: '80' } });
+      var entries = [];
+      var active = 0;
+      var ticket = 0;
+      function close() { closePalette = null; palette.remove(); overlay.remove(); document.removeEventListener('keydown', onKey, true); }
+      function paint() {
+        entries.forEach(function (entry, i) { entry.el.setAttribute('aria-selected', i === active ? 'true' : 'false'); });
+        if (entries[active]) entries[active].el.scrollIntoView({ block: 'nearest' });
+      }
+      function openEntry(entry) { close(); PIK.router.go(entry.target[0], entry.target[1]); }
+      var run = PIK.debounce(function () {
+        var query = input.value.trim();
+        var mine = ++ticket;
+        if (query.length < 2) { PIK.mount(results, h('div.state.state-inline', h('p', 'Ketik minimal 2 huruf.'))); entries = []; return; }
+        PIK.mount(results, h('div.state.state-inline', h('span.spinner')));
+        PIK.api('search.global', { query: query }).then(function (data) {
+          if (mine !== ticket) return;
+          entries = [];
+          if (!data.groups.length) { PIK.mount(results, ui.emptyState({ icon: 'search', title: 'Tidak ditemukan', text: 'Tidak ada data yang cocok dengan "' + query + '".' })); return; }
+          PIK.mount(results, data.groups.map(function (group) {
+            return [h('div.palette-group', group.label + (group.total > group.items.length ? ' · ' + group.total : '')), group.items.map(function (item) {
+              var entry = { target: SEARCH_TARGETS[group.key](item) };
+              entry.el = h('button.palette-item', { type: 'button', role: 'option', onClick: function () { openEntry(entry); } },
+                icon(group.key === 'purchaseOrders' ? 'purchaseOrders' : group.key, 'icon-sm'),
+                h('div', h('div', item.title), item.subtitle ? h('div.sub', item.subtitle) : null));
+              entries.push(entry);
+              return entry.el;
+            })];
+          }));
+          active = 0;
+          paint();
+        }).catch(function (error) { if (mine === ticket) PIK.mount(results, ui.errorState(error)); });
+      }, 250);
+      function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(entries.length - 1, active + 1); paint(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); paint(); }
+        else if (e.key === 'Enter' && entries[active]) { e.preventDefault(); openEntry(entries[active]); }
+      }
+      input.addEventListener('input', run);
+      overlay.addEventListener('click', close);
+      document.addEventListener('keydown', onKey, true);
+      closePalette = close;
+      document.body.appendChild(overlay);
+      document.body.appendChild(palette);
+      input.focus();
+    }
+
+    // ------------------------------------------------------------------------------------------ Routes
+    function route(pattern, options) { PIK.router.add(pattern, options); }
+    PIK.registerRoutes = function () {
+      var v = PIK.views;
+      route('dashboard', { title: 'Dashboard', nav: 'dashboard', module: 'dashboard', render: v.dashboard });
+      route('customers', { title: 'Customer', nav: 'customers', module: 'customers', render: v.customers });
+      route('customers/:id', { title: 'Customer', nav: 'customers', module: 'customers', render: v.customerDetail });
+      route('contacts', { title: 'Contact', nav: 'contacts', module: 'contacts', render: v.contacts });
+      route('leads', { title: 'Lead & Pipeline', nav: 'leads', module: 'leads', render: v.leads });
+      route('leads/:id', { title: 'Lead', nav: 'leads', module: 'leads', render: v.leadDetail });
+      route('activities', { title: 'Aktivitas', nav: 'activities', module: 'activities', render: v.activities });
+      route('follow-ups', { title: 'Follow-up', nav: 'followUps', module: 'followUps', render: v.followUps });
+      route('purchase-orders', { title: 'Purchase Order', nav: 'purchaseOrders', module: 'purchaseOrders', render: v.purchaseOrders });
+      route('purchase-orders/:id', { title: 'Purchase Order', nav: 'purchaseOrders', module: 'purchaseOrders', render: v.purchaseOrderDetail });
+      route('deliveries', { title: 'Delivery', nav: 'deliveries', module: 'deliveries', render: v.deliveries });
+      route('returns', { title: 'Retur', nav: 'returns', module: 'returns', render: v.returns });
+      route('products', { title: 'Produk', nav: 'products', module: 'products', render: v.products });
+      route('products/:id', { title: 'Produk', nav: 'products', module: 'products', render: v.productDetail });
+      route('stock', { title: 'Stok', nav: 'stock', module: 'stock', render: v.stock });
+      route('lead-time', { title: 'Lead Time', nav: 'leadTime', module: 'leadTime', render: v.leadTime });
+      route('invoices', { title: 'Invoice & Pembayaran', nav: 'finance', module: 'finance', render: v.invoices });
+      route('reports', { title: 'Laporan', nav: 'reports', module: 'reports', render: v.reports });
+      route('settings', { title: 'Pengaturan', nav: 'settings', module: null, render: v.settings });
+    };
+
+    document.addEventListener('DOMContentLoaded', function () {
+      PIK.registerRoutes();
+      boot();
+    });
+  })(PIK);
+</script>

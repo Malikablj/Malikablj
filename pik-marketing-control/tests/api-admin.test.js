@@ -121,6 +121,8 @@ test('laporan: ringkasan, grup, baris, filter periode/customer/PIC/status, ekspo
   const deliveries = app.ok('viewer', 'reports.deliveries', {});
   assert.deepEqual([deliveries.summary.delivered, deliveries.summary.scheduled, deliveries.summary.deliveredQuantity], [1, 1, 10]);
   assert.equal(deliveries.columns[0].key, 'delivery_date');
+  assert.deepEqual(Object.keys(deliveries.rows[0]).sort(), deliveries.columns.map((c) => c.key).concat(['id']).sort(),
+    'baris laporan hanya membawa kolom yang ditampilkan');
 
   const csv = app.ok('viewer', 'reports.customers', { format: 'csv' });
   assert.equal(csv.filename, `pik-customers-${TODAY}.csv`);

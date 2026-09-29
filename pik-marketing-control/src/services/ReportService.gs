@@ -50,8 +50,15 @@ function reportResult_(name, params, summary, groups, rows, columns) {
   if (params.format === 'csv') {
     return { filename: 'pik-' + name + '-' + todayIso_() + '.csv', csv: toCsvText_(rows, columns), rows: rows.length };
   }
+  // Only the displayed columns travel to the browser (full records would make large reports slow to load).
+  const keys = columns.map(function (column) { return column[0]; }).concat(['id']);
   return {
-    summary: summary, groups: groups, rows: rows.slice(0, REPORT_ROW_LIMIT), totalRows: rows.length,
+    summary: summary, groups: groups, totalRows: rows.length,
+    rows: rows.slice(0, REPORT_ROW_LIMIT).map(function (row) {
+      const slim = {};
+      keys.forEach(function (key) { slim[key] = row[key] === undefined ? null : row[key]; });
+      return slim;
+    }),
     columns: columns.map(function (column) { return { key: column[0], label: column[1] }; }),
     filters: { from: params.from || null, to: params.to || null }
   };

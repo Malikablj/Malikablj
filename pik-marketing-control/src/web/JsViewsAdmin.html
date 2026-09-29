@@ -1,0 +1,477 @@
+<script>
+  /*
+   * Screens: Invoices & payments, Reports (filters, summary, charts, table, CSV export) and Settings (profile, users,
+   * application settings, enum values, migration issues, audit log). Admin-only tabs are hidden for other roles and
+   * refused by the server anyway.
+   */
+  (function (PIK) {
+    'use strict';
+    var h = PIK.h;
+    var icon = PIK.icon;
+    var ui = PIK.ui;
+    var fmt = PIK.fmt;
+    var forms = PIK.forms;
+    var views = PIK.views = PIK.views || {};
+    var parts = PIK.viewParts = PIK.viewParts || {};
+
+    function canWrite(module) { return PIK.can(module, 'RW'); }
+    function addButton(label, onClick) { return ui.button(label, { kind: 'primary', icon: 'plus', onClick: onClick }); }
+    function poLink(id, label) {
+      if (!id) return h('span.subtle', label || '—');
+      return h('a', { href: '#purchase-orders/' + id, onClick: function (e) { e.preventDefault(); e.stopPropagation(); PIK.router.go('purchase-orders/' + id, {}); } }, label || id);
+    }
+
+    // ============================================================================================ Invoices
+    parts.invoiceColumns = function (reload, withPo) {
+      var cols = [{ key: 'invoice_number', label: 'Invoice', sortable: true, render: function (r) { return [h('span.primary', r.invoice_number), ' ', ui.legacyTag(r), h('span.secondary', r.invoice_type ? PIK.enumLabel('INVOICE_TYPE', r.invoice_type) : '')]; } }];
+      if (withPo !== false) cols.push({ key: 'customer_name', label: 'PO / Customer', sortable: true, render: function (r) { return [poLink(r.purchase_order_id, r.po_label || r.po_number_legacy), h('span.secondary', r.customer_name || '')]; } });
+      return cols.concat([
+        { key: 'invoice_date', label: 'Tanggal', sortable: true, render: function (r) { return h('span.nowrap', fmt.date(r.invoice_date)); } },
+        { key: 'due_date', label: 'Jatuh tempo', sortable: true, render: function (r) { return r.due_date ? [h('span.nowrap', fmt.date(r.due_date)), r.is_overdue ? [' ', ui.badge('Lewat', 'danger')] : null] : null; } },
+        { key: 'amount', label: 'Nilai', sortable: true, align: 'right', render: function (r) { return fmt.money(r.amount); } },
+        { key: 'outstanding_amount', label: 'Sisa', sortable: true, align: 'right', render: function (r) { return fmt.money(r.outstanding_amount); } },
+        { key: 'payment_status', label: 'Status', sortable: true, render: function (r) { return ui.statusBadge('PAYMENT_STATUS', r.payment_status); } },
+        { key: 'actions', label: '', render: function (r) {
+          if (!canWrite('finance')) return null;
+          return PIK.rowActions('finance', r, {
+            edit: function () { forms.invoice(r, reload); }, archive: 'invoices', reload: reload,
+            extra: r.is_active !== false && r.outstanding_amount > 0 ? { label: 'Catat pembayaran', icon: 'finance', onClick: function () { forms.payment(r, reload); } } : null
+          });
+        } }
+      ]);
+    };
+    parts.invoiceCard = function (r) {
+      return ui.listCard({ title: r.invoice_number, badge: ui.statusBadge('PAYMENT_STATUS', r.payment_status), lines: [r.customer_name, fmt.money(r.amount), r.outstanding_amount > 0 ? 'Sisa ' + fmt.money(r.outstanding_amount) : null, r.is_overdue ? 'Lewat jatuh tempo' : null] });
+    };
+
+    views.invoices = function (container, params, query) {
+      var list;
+      var totals = h('div.kpi-grid', [0, 1, 2].map(function () { return h('div.skeleton.sk-kpi'); }));
+      var reload = function () { list.reload(); loadTotals(); };
+      container.appendChild(PIK.pageHead({
+        title: 'Invoice & Pembayaran', subtitle: 'Status bayar dihitung dari nilai invoice dan total pembayaran.',
+        actions: canWrite('finance') ? [addButton('Invoice baru', function () { forms.invoice(null, reload); })] : []
+      }));
+      container.appendChild(totals);
+      var host = h('div');
+      container.appendChild(host);
+      function loadTotals() {
+        PIK.api('dashboard.summary', { scope: 'all' }).then(function (data) {
+          var f = data.finance || { receivable: 0, unpaidInvoices: 0, overdueInvoices: 0 };
+          PIK.mount(totals, [
+            h('div.kpi', h('span.kpi-label', 'Piutang'), h('span.kpi-value', fmt.compactMoney(f.receivable)), h('span.kpi-foot', fmt.money(f.receivable))),
+            h('div.kpi', h('span.kpi-label', 'Invoice belum lunas'), h('span.kpi-value', fmt.number(f.unpaidInvoices, 0))),
+            h('div.kpi' + (f.overdueInvoices ? '.danger' : ''), h('span.kpi-label', 'Lewat jatuh tempo'), h('span.kpi-value', fmt.number(f.overdueInvoices, 0)))
+          ]);
+        }).catch(function () { totals.remove(); });
+      }
+      loadTotals();
+      list = ui.listPage(host, {
+        action: 'invoices.list', query: query, searchPlaceholder: 'Cari nomor invoice, PO, customer, bukti bayar…',
+        filters: [
+          { key: 'payment_status', label: 'Status bayar', enumName: 'PAYMENT_STATUS' }, { key: 'invoice_type', label: 'Jenis', enumName: 'INVOICE_TYPE' },
+          { key: 'overdue', label: 'Lewat jatuh tempo', type: 'toggle' }, { key: 'invoice_date', label: 'Tanggal', type: 'dateRange' }
+        ],
+        defaultSort: { field: 'invoice_date', direction: 'desc' },
+        columns: parts.invoiceColumns(function () { reload(); }), card: parts.invoiceCard,
+        onRowClick: canWrite('finance') ? function (r) { if (r.outstanding_amount > 0 && r.is_active !== false) forms.payment(r, reload); else forms.invoice(r, reload); } : null,
+        empty: { icon: 'finance', title: 'Belum ada invoice', action: canWrite('finance') ? { label: 'Invoice baru', onClick: function () { forms.invoice(null, reload); } } : null }
+      });
+    };
+
+    // ============================================================================================ Reports
+    var REPORTS = [
+      { key: 'customers', label: 'Customer', action: 'reports.customers', statusEnum: 'CUSTOMER_STATUS', periodNote: 'Periode dipakai untuk aktivitas dan customer baru.' },
+      { key: 'leads', label: 'Lead', action: 'reports.leads', statusEnum: 'LEAD_STATUS', periodNote: 'Periode: tanggal lead dibuat.' },
+      { key: 'activities', label: 'Aktivitas', action: 'reports.activities', typeEnum: 'ACTIVITY_TYPE', periodNote: 'Periode: waktu aktivitas.' },
+      { key: 'purchaseOrders', label: 'Purchase Order', action: 'reports.purchaseOrders', statusEnum: 'PO_STATUS', periodNote: 'Periode: tanggal PO.' },
+      { key: 'deliveries', label: 'Delivery', action: 'reports.deliveries', statusEnum: 'DELIVERY_STATUS', periodNote: 'Periode: tanggal kirim.', noOwner: true }
+    ];
+    var SUMMARY_LABELS = {
+      total: 'Total', active: 'Aktif', dormant: 'Dormant', potential: 'Potential', inactive: 'Inactive', newInPeriod: 'Baru di periode',
+      open: 'Terbuka', won: 'Won', lost: 'Lost', openValue: 'Nilai terbuka', wonValue: 'Nilai won', customers: 'Customer terlibat',
+      closed: 'Closed', cancelled: 'Cancelled', orderQuantity: 'Qty order', deliveredQuantity: 'Qty terkirim', outstandingQuantity: 'Outstanding',
+      scheduled: 'Scheduled', onDelivery: 'On delivery', delivered: 'Delivered', delayed: 'Delayed', unlinked: 'Belum tertaut item PO'
+    };
+    var GROUP_LABELS = { byStatus: 'Per status', byOwner: 'Per PIC', byType: 'Per jenis', byCustomer: 'Per customer' };
+    var MONEY_KEYS = { openValue: 1, wonValue: 1, estimated_value: 1 };
+
+    function presetRange(preset) {
+      var today = PIK.today();
+      if (preset === '7') return { from: PIK.addDays(today, -6), to: today };
+      if (preset === '30') return { from: PIK.addDays(today, -29), to: today };
+      if (preset === '90') return { from: PIK.addDays(today, -89), to: today };
+      if (preset === 'month') return { from: today.slice(0, 8) + '01', to: today };
+      if (preset === 'year') return { from: today.slice(0, 5) + '01-01', to: today };
+      return { from: '', to: '' };
+    }
+
+    function cellValue(key, value) {
+      if (value === null || value === undefined || value === '') return null;
+      if (/(_at)$/.test(key)) return fmt.dateTime(value);
+      if (/(_date)$/.test(key)) return fmt.date(value);
+      if (MONEY_KEYS[key]) return fmt.money(value);
+      if (typeof value === 'number') return fmt.number(value);
+      return String(value);
+    }
+
+    views.reports = function (container, params, query) {
+      var current = REPORTS.filter(function (r) { return r.key === query.report; })[0] || REPORTS[0];
+      var state = { preset: query.preset || '30', from: query.from || '', to: query.to || '', customer_id: query.customer_id || '', owner_user_id: query.owner_user_id || '', status: query.status || '', type: query.type || '' };
+      if (state.preset !== 'custom') { var r0 = presetRange(state.preset); state.from = r0.from; state.to = r0.to; }
+      var exportButton = ui.busyButton('Ekspor CSV', { icon: 'download' }, exportCsv);
+      container.appendChild(PIK.pageHead({ title: 'Laporan', subtitle: 'Ringkasan customer, lead, aktivitas, PO, dan delivery dari data terkini.', actions: [exportButton] }));
+      var tabHost = h('div', { style: { marginBottom: '16px' } });
+      var filterHost = h('div.toolbar');
+      var body = h('div', ui.skeletonBlocks());
+      container.appendChild(tabHost);
+      container.appendChild(filterHost);
+      container.appendChild(body);
+      PIK.mount(tabHost, ui.tabs(REPORTS.map(function (r) { return { key: r.key, label: r.label }; }), current.key, function (key) {
+        current = REPORTS.filter(function (r) { return r.key === key; })[0];
+        state.status = '';
+        state.type = '';
+        buildFilters();
+        load();
+      }, { segmented: true }));
+
+      var customerPicker = ui.picker({ action: 'customers.options', placeholder: 'Semua customer', value: state.customer_id || null, onChange: function (id) { state.customer_id = id || ''; load(); } });
+      if (state.customer_id) PIK.api('customers.options', { include: state.customer_id, limit: 1 }).then(function (r) { var o = r.items.filter(function (i) { return i.id === state.customer_id; })[0]; if (o) customerPicker.setValue(o.id, o.label); }).catch(function () {});
+
+      function buildFilters() {
+        var preset = h('select.select', { 'aria-label': 'Periode' }, [['7', '7 hari terakhir'], ['30', '30 hari terakhir'], ['90', '90 hari terakhir'], ['month', 'Bulan ini'], ['year', 'Tahun ini'], ['all', 'Semua waktu'], ['custom', 'Rentang khusus']]
+          .map(function (o) { return h('option', { value: o[0], selected: state.preset === o[0] }, o[1]); }));
+        var from = h('input.input', { type: 'date', value: state.from, 'aria-label': 'Dari tanggal' });
+        var to = h('input.input', { type: 'date', value: state.to, 'aria-label': 'Sampai tanggal' });
+        var range = h('div.date-range', { hidden: state.preset !== 'custom' }, from, h('span', '–'), to);
+        preset.addEventListener('change', function () {
+          state.preset = preset.value;
+          range.hidden = state.preset !== 'custom';
+          if (state.preset !== 'custom') { var r = presetRange(state.preset); state.from = r.from; state.to = r.to; from.value = r.from; to.value = r.to; load(); }
+        });
+        var onRange = function () {
+          if (from.value && to.value && from.value > to.value) { to.setCustomValidity('Tanggal akhir sebelum tanggal awal'); to.reportValidity(); return; }
+          to.setCustomValidity('');
+          state.from = from.value; state.to = to.value; load();
+        };
+        from.addEventListener('change', onRange);
+        to.addEventListener('change', onRange);
+        var controls = [preset, range, h('div', { style: { minWidth: '220px' } }, customerPicker.element)];
+        if (!current.noOwner) {
+          var owner = h('select.select', { 'aria-label': 'PIC' }, h('option', { value: '' }, 'PIC: Semua'));
+          PIK.api('users.options', { limit: 50, include: state.owner_user_id || null }).then(function (result) {
+            result.items.forEach(function (u) { owner.appendChild(h('option', { value: u.id, selected: state.owner_user_id === u.id }, u.label)); });
+          }).catch(function () {});
+          owner.addEventListener('change', function () { state.owner_user_id = owner.value; load(); });
+          controls.push(owner);
+        }
+        var enumName = current.statusEnum || current.typeEnum;
+        if (enumName) {
+          var key = current.statusEnum ? 'status' : 'type';
+          var select = h('select.select', { 'aria-label': current.statusEnum ? 'Status' : 'Jenis' }, h('option', { value: '' }, (current.statusEnum ? 'Status' : 'Jenis') + ': Semua'),
+            PIK.enumOptions(enumName, true).map(function (o) { return h('option', { value: o.value, selected: state[key] === o.value }, o.label); }));
+          select.addEventListener('change', function () { state[key] = select.value; load(); });
+          controls.push(select);
+        }
+        PIK.mount(filterHost, controls);
+      }
+
+      function payload(format) {
+        var p = { from: state.preset === 'all' ? null : state.from || null, to: state.preset === 'all' ? null : state.to || null,
+          customer_id: state.customer_id || null, owner_user_id: current.noOwner ? null : state.owner_user_id || null, status: state.status || null, type: state.type || null };
+        if (format) p.format = format;
+        return p;
+      }
+
+      function syncQuery() {
+        var q = { report: current.key, preset: state.preset };
+        if (state.preset === 'custom') { q.from = state.from; q.to = state.to; }
+        ['customer_id', 'owner_user_id', 'status', 'type'].forEach(function (k) { if (state[k]) q[k] = state[k]; });
+        PIK.router.setQuery(q);
+      }
+
+      var ticket = 0;
+      function load() {
+        var mine = ++ticket;
+        syncQuery();
+        if (body.dataset.state === 'ready') body.style.opacity = '.55';
+        PIK.api(current.action, payload()).then(function (result) {
+          if (mine !== ticket) return;
+          body.style.opacity = '';
+          body.dataset.state = 'ready';
+          PIK.mount(body, renderReport(result));
+        }).catch(function (error) {
+          if (mine !== ticket) return;
+          body.style.opacity = '';
+          PIK.mount(body, h('div.card', ui.errorState(error, load)));
+        });
+      }
+
+      function exportCsv() {
+        return PIK.api(current.action, payload('csv')).then(function (result) {
+          PIK.downloadText(result.filename, result.csv);
+          PIK.toast.success('CSV diunduh: ' + fmt.number(result.rows, 0) + ' baris.');
+        }).catch(function (error) { PIK.toast.error(error.message); });
+      }
+
+      function renderReport(result) {
+        var summaryKeys = Object.keys(result.summary);
+        var tiles = h('div.kpi-grid', summaryKeys.slice(0, 8).map(function (key) {
+          var value = result.summary[key];
+          return h('div.kpi', h('span.kpi-label', SUMMARY_LABELS[key] || key), h('span.kpi-value', MONEY_KEYS[key] ? fmt.compactMoney(value) : fmt.number(value)), MONEY_KEYS[key] ? h('span.kpi-foot', fmt.money(value)) : null);
+        }));
+        var groupKeys = Object.keys(result.groups || {});
+        var charts = groupKeys.length ? h('div.grid-2', { style: { marginBottom: '16px' } }, groupKeys.map(function (key) {
+          var groups = result.groups[key];
+          var byValue = groups.some(function (g) { return g.value; }) && (current.key === 'leads' || current.key === 'purchaseOrders' || current.key === 'deliveries');
+          var valueLabel = current.key === 'leads' ? 'estimasi nilai' : current.key === 'purchaseOrders' ? 'outstanding' : 'qty';
+          return ui.card(GROUP_LABELS[key] || key, ui.hbars(groups.map(function (g) {
+            return { label: g.label || g.key, value: g.count, display: fmt.number(g.count, 0), sub: byValue ? (current.key === 'leads' ? fmt.compactMoney(g.value) : fmt.number(g.value)) + ' ' + (current.key === 'leads' ? '' : valueLabel) : null };
+          }), { label: (GROUP_LABELS[key] || key) + ', jumlah' }));
+        })) : null;
+        var table = result.rows.length ? ui.dataTable({
+          compact: true, rows: result.rows,
+          columns: result.columns.map(function (c) { return { key: c.key, label: c.label, align: typeof result.rows[0][c.key] === 'number' ? 'right' : null, render: function (row) { return cellValue(c.key, row[c.key]); } }; }),
+          footer: h('div.table-foot', h('span', result.totalRows > result.rows.length ? 'Menampilkan ' + fmt.number(result.rows.length, 0) + ' dari ' + fmt.number(result.totalRows, 0) + ' baris. Ekspor CSV untuk data lengkap.' : fmt.number(result.totalRows, 0) + ' baris'))
+        }) : h('div.card', ui.emptyState({ icon: 'reports', title: 'Tidak ada data untuk filter ini', text: 'Ubah periode atau filter lain.' }));
+        return [
+          h('p.muted', { style: { fontSize: '13px', marginBottom: '12px' } }, (state.preset === 'all' ? 'Semua waktu' : fmt.date(state.from) + ' – ' + fmt.date(state.to)) + '. ' + current.periodNote),
+          tiles, charts, h('h2', { style: { margin: '8px 0 12px' } }, 'Data'), table
+        ];
+      }
+
+      buildFilters();
+      load();
+    };
+
+    // ============================================================================================ Settings
+    views.settings = function (container, params, query) {
+      var tabs = [{ key: 'profile', label: 'Profil' }];
+      if (PIK.can('users', 'R')) tabs.push({ key: 'users', label: 'User' });
+      if (PIK.can('settings', 'R')) { tabs.push({ key: 'settings', label: 'Pengaturan' }); tabs.push({ key: 'enums', label: 'Nilai pilihan' }); }
+      if (PIK.can('migrationIssues', 'R')) tabs.push({ key: 'issues', label: 'Isu migrasi' });
+      if (PIK.can('audit', 'R')) tabs.push({ key: 'audit', label: 'Audit log' });
+      var tab = tabs.some(function (t) { return t.key === query.tab; }) ? query.tab : 'profile';
+      var host = h('div');
+      container.appendChild(PIK.pageHead({ title: 'Pengaturan', subtitle: 'Profil, user dan role, pengaturan aplikasi, serta jejak perubahan.' }));
+      container.appendChild(ui.tabs(tabs, tab, function (key) { tab = key; PIK.router.setQuery(key === 'profile' ? {} : { tab: key }); paint({}); }));
+      container.appendChild(host);
+      function paint(q) {
+        var renderers = { profile: profileTab, users: usersTab, settings: settingsTab, enums: enumsTab, issues: issuesTab, audit: auditTab };
+        PIK.clear(host);
+        renderers[tab](host, q || {});
+      }
+      paint(query);
+    };
+
+    var MODULE_NAMES = {
+      dashboard: 'Dashboard', customers: 'Customer', contacts: 'Contact', leads: 'Lead', activities: 'Aktivitas', followUps: 'Follow-up',
+      purchaseOrders: 'Purchase order', deliveries: 'Delivery', returns: 'Retur', products: 'Produk', stock: 'Stok', leadTime: 'Lead time',
+      inbound: 'Inbound maklon', finance: 'Invoice & pembayaran', reports: 'Laporan', users: 'User', settings: 'Pengaturan',
+      migrationIssues: 'Isu migrasi', audit: 'Audit log'
+    };
+
+    function profileTab(host) {
+      var s = PIK.session;
+      host.appendChild(h('div.detail-grid',
+        ui.card('Akun saya', h('div.stack',
+          h('div.row', h('div.avatar.avatar-lg', fmt.initials(s.user.name)), h('div', h('div', { style: { fontWeight: '600', fontSize: '16px' } }, s.user.name), h('div.muted', s.user.email))),
+          ui.kv([['Role', ui.statusBadge('USER_ROLE', s.user.role)], ['Login terakhir', s.user.lastLoginAt ? fmt.dateTime(s.user.lastLoginAt) : null]]),
+          h('p.muted', { style: { fontSize: '13px' } }, 'Nama, email, dan role dikelola Admin di tab User.'))),
+        ui.card('Hak akses role ' + PIK.enumLabel('USER_ROLE', s.user.role), ui.dataTable({
+          compact: true,
+          rows: Object.keys(MODULE_NAMES).map(function (key) { return { key: key, access: s.permissions[key] || null }; }),
+          columns: [
+            { key: 'key', label: 'Modul', render: function (r) { return MODULE_NAMES[r.key]; } },
+            { key: 'access', label: 'Akses', render: function (r) { return r.access === 'RW' ? ui.badge('Baca & ubah', 'success') : r.access === 'R' ? ui.badge('Baca', 'accent') : ui.badge('Tidak ada', 'muted'); } }
+          ]
+        }))));
+      host.appendChild(h('p.subtle', { style: { fontSize: '12px', marginTop: '16px' } }, s.app.name + ' · skema database v' + s.app.schemaVersion + ' · zona waktu ' + s.app.timeZone));
+    }
+
+    function usersTab(host, query) {
+      var list;
+      var reload = function () { list.reload(); };
+      if (canWrite('users')) host.appendChild(h('div.row', { style: { marginBottom: '12px' } }, h('div.spacer'), addButton('User baru', function () { forms.user(null, reload); })));
+      var listHost = h('div');
+      host.appendChild(listHost);
+      list = ui.listPage(listHost, {
+        action: 'users.list', query: query, keepQuery: { tab: 'users' }, searchPlaceholder: 'Cari nama atau email…',
+        filters: [{ key: 'role', label: 'Role', enumName: 'USER_ROLE' }],
+        defaultSort: { field: 'name', direction: 'asc' },
+        columns: [
+          { key: 'name', label: 'Nama', sortable: true, render: function (r) { return [h('span.primary', r.name), r.id === PIK.session.user.id ? [' ', ui.badge('Anda', 'accent', true)] : null, h('span.secondary', r.email)]; } },
+          { key: 'role', label: 'Role', sortable: true, render: function (r) { return ui.statusBadge('USER_ROLE', r.role); } },
+          { key: 'phone', label: 'Telepon' },
+          { key: 'last_login_at', label: 'Login terakhir', sortable: true, render: function (r) { return r.last_login_at ? fmt.dateTime(r.last_login_at) : h('span.subtle', 'Belum pernah'); } },
+          { key: 'actions', label: '', render: function (r) { return r.id === PIK.session.user.id ? null : PIK.rowActions('users', r, { edit: function () { forms.user(r, reload); }, archive: 'users', reload: reload }); } }
+        ],
+        card: function (r) { return ui.listCard({ title: r.name, badge: ui.statusBadge('USER_ROLE', r.role), lines: [r.email, r.last_login_at ? 'Login ' + fmt.dateTime(r.last_login_at) : 'Belum pernah login'] }); },
+        onRowClick: canWrite('users') ? function (r) { forms.user(r, reload); } : null,
+        empty: { icon: 'user', title: 'Belum ada user' }
+      });
+    }
+
+    function settingsTab(host) {
+      var body = h('div', ui.skeletonRows(4));
+      host.appendChild(body);
+      function load() {
+        PIK.api('settings.list', {}).then(function (data) {
+          PIK.mount(body, [
+            h('div.table-wrap', h('div.table-scroll', h('table.table', h('thead', h('tr', h('th', 'Pengaturan'), h('th', 'Nilai'), h('th', ''))),
+              h('tbody', data.items.map(function (item) {
+                var input = h('input.input', { value: item.value === null ? '' : item.value, disabled: item.is_system || !canWrite('settings'), 'aria-label': item.key, style: { maxWidth: '320px' } });
+                var save = item.is_system || !canWrite('settings') ? h('span.subtle', { style: { fontSize: '12px' } }, item.is_system ? 'Dikelola sistem' : '') :
+                  ui.busyButton('Simpan', { size: 'sm' }, function () {
+                    return PIK.api('settings.update', { key: item.key, value: input.value }).then(function (updated) {
+                      input.value = updated.value === null ? '' : updated.value;
+                      PIK.toast.success('Pengaturan ' + item.key + ' disimpan.');
+                      if (item.key === 'COMPANY_NAME' || /PAGE_SIZE|CURRENCY/.test(item.key)) PIK.api('session.get', {}).then(function (s) { PIK.session = s; }).catch(function () {});
+                    }).catch(function (error) { PIK.toast.error(error.message); });
+                  });
+                return h('tr', h('td', h('span.primary', item.key), h('span.secondary', item.description || ''), h('span.secondary', 'Tipe ' + item.value_type + (item.updated_by ? ' · diubah ' + fmt.dateTime(item.updated_at) + ' oleh ' + item.updated_by : ''))),
+                  h('td', input), h('td.right', save));
+              }))))),
+            h('div.card.card-pad', { style: { marginTop: '16px' } }, h('div.section-title', 'Konfigurasi deployment (Script Properties)'),
+              ui.kv([['Nama aplikasi', data.config.appName], ['Zona waktu', data.config.timeZone], ['Versi skema', String(data.config.schemaVersion)]]),
+              h('p.muted', { style: { fontSize: '12px', marginTop: '10px' } }, 'Nilai ini diatur di Script Properties oleh pemilik skrip, bukan dari aplikasi.'))
+          ]);
+        }).catch(function (error) { PIK.mount(body, h('div.card', ui.errorState(error, load))); });
+      }
+      load();
+    }
+
+    function enumsTab(host) {
+      var body = h('div', ui.skeletonRows(6));
+      host.appendChild(h('p.muted', { style: { marginBottom: '12px', fontSize: '13px' } }, 'Label dan urutan dapat diubah. Nilai bawaan sistem tetap aktif; nilai baru hanya untuk pilihan yang dapat diperluas (mis. jenis aktivitas).'));
+      host.appendChild(body);
+      function load() {
+        PIK.api('enums.list', {}).then(function (data) {
+          PIK.mount(body, h('div.stack', data.items.map(function (en) {
+            var add = en.extensible && canWrite('settings') ? ui.button('Nilai', { size: 'sm', icon: 'plus', onClick: function () { openEnumForm(en, null, load); } }) : null;
+            return h('section.card', h('div.card-head', h('div', h('h2', en.name), h('div.muted', { style: { fontSize: '12.5px' } }, en.description + (en.usage.length ? ' · dipakai: ' + en.usage.join(', ') : ''))), h('div.spacer'), add),
+              h('div.card-body', ui.dataTable({ compact: true, rows: en.values, columns: [
+                { key: 'enum_value', label: 'Nilai', render: function (r) { return [h('code', r.enum_value), r.is_system ? [' ', ui.badge('Sistem', 'muted', true)] : null]; } },
+                { key: 'label', label: 'Label' },
+                { key: 'sort_order', label: 'Urutan', align: 'right' },
+                { key: 'is_active', label: 'Status', render: function (r) { return r.is_active ? ui.badge('Aktif', 'success') : ui.badge('Nonaktif', 'muted'); } },
+                { key: 'actions', label: '', render: function (r) { return canWrite('settings') ? ui.button('', { size: 'sm', kind: 'quiet', icon: 'edit', ariaLabel: 'Ubah ' + r.enum_value, onClick: function () { openEnumForm(en, r, load); } }) : null; } }
+              ] })));
+          })));
+        }).catch(function (error) { PIK.mount(body, h('div.card', ui.errorState(error, load))); });
+      }
+      load();
+    }
+
+    function openEnumForm(en, value, onSaved) {
+      var editing = Boolean(value);
+      var fields = [];
+      if (!editing) fields.push({ name: 'enum_value', label: 'Nilai (kode)', type: 'string', required: true, maxLength: 50, hint: 'Huruf besar dan garis bawah, mis. SITE_SURVEY.' });
+      fields.push({ name: 'label', label: 'Label', type: 'string', required: true, maxLength: 100 });
+      fields.push({ name: 'sort_order', label: 'Urutan', type: 'integer', min: 0 });
+      if (editing && !value.is_system) fields.push({ name: 'is_active', type: 'boolean', checkLabel: 'Aktif (dapat dipilih di form)' });
+      fields.push({ name: 'description', label: 'Keterangan', type: 'string', maxLength: 500, span: true });
+      ui.openForm({
+        title: editing ? 'Ubah ' + en.name + '.' + value.enum_value : 'Nilai baru ' + en.name, values: value || {}, fields: fields,
+        submit: function (v) {
+          var payload = Object.assign({ enum_name: en.name }, v);
+          if (editing) payload.enum_value = value.enum_value;
+          return PIK.api(editing ? 'enums.update' : 'enums.create', payload).then(function (result) {
+            return PIK.api('session.get', {}).then(function (s) { PIK.session = s; return result; });
+          });
+        },
+        successMessage: 'Nilai pilihan disimpan.', onSaved: onSaved
+      });
+    }
+
+    function issuesTab(host, query) {
+      var countsHost = h('div.kpi-grid');
+      var listHost = h('div');
+      host.appendChild(countsHost);
+      host.appendChild(listHost);
+      var list = ui.listPage(listHost, {
+        action: 'migrationIssues.list', query: query, keepQuery: { tab: 'issues' }, archivedToggle: false, searchPlaceholder: 'Cari jenis isu, ID record, nilai, sheet sumber…',
+        filters: [
+          { key: 'severity', label: 'Tingkat', enumName: 'ISSUE_SEVERITY' }, { key: 'resolution_status', label: 'Status', enumName: 'RESOLUTION_STATUS' }
+        ],
+        defaultSort: { field: 'severity', direction: 'asc' },
+        onResult: function (result) {
+          var c = result.counts;
+          PIK.mount(countsHost, [
+            h('div.kpi', h('span.kpi-label', 'Isu terbuka'), h('span.kpi-value', fmt.number(c.open, 0)), h('span.kpi-foot', 'dari ' + fmt.number(c.total, 0) + ' isu')),
+            h('div.kpi' + ((c.bySeverity.BLOCKER || 0) + (c.bySeverity.HIGH || 0) ? '.danger' : ''), h('span.kpi-label', 'Blocker + High (terbuka)'), h('span.kpi-value', fmt.number((c.bySeverity.BLOCKER || 0) + (c.bySeverity.HIGH || 0), 0))),
+            h('div.kpi', h('span.kpi-label', 'Medium (terbuka)'), h('span.kpi-value', fmt.number(c.bySeverity.MEDIUM || 0, 0))),
+            h('div.kpi', h('span.kpi-label', 'Selesai / diterima'), h('span.kpi-value', fmt.number((c.byStatus.RESOLVED || 0) + (c.byStatus.ACCEPTED_AS_IS || 0) + (c.byStatus.EXCLUDED || 0), 0)))
+          ]);
+        },
+        columns: [
+          { key: 'severity', label: 'Tingkat', sortable: true, render: function (r) { return ui.statusBadge('ISSUE_SEVERITY', r.severity); } },
+          { key: 'issue_type', label: 'Isu', sortable: true, render: function (r) { return [h('span.primary', r.issue_type), h('span.secondary', r.description)]; } },
+          { key: 'entity_type', label: 'Data', sortable: true, render: function (r) { return [h('span', r.entity_type), h('span.secondary', [r.record_id, r.field].filter(Boolean).join(' · '))]; } },
+          { key: 'legacy_row', label: 'Sumber', sortable: true, render: function (r) { return r.source_sheet ? h('span.nowrap', r.source_sheet + (r.legacy_row ? ' baris ' + r.legacy_row : '')) : null; } },
+          { key: 'resolution_status', label: 'Status', sortable: true, render: function (r) { return ui.statusBadge('RESOLUTION_STATUS', r.resolution_status); } }
+        ],
+        card: function (r) { return ui.listCard({ title: r.issue_type, badge: ui.statusBadge('ISSUE_SEVERITY', r.severity), lines: [r.description, r.entity_type + (r.record_id ? ' ' + r.record_id : ''), PIK.enumLabel('RESOLUTION_STATUS', r.resolution_status)] }); },
+        onRowClick: function (r) { openIssue(r, function () { list.reload(); }); },
+        empty: { icon: 'check', title: 'Tidak ada isu migrasi' }
+      });
+    }
+
+    function openIssue(issue, onSaved) {
+      var details = ui.kv([
+        ['Tingkat', ui.statusBadge('ISSUE_SEVERITY', issue.severity)], ['Jenis', issue.issue_type], ['Deskripsi', issue.description],
+        ['Data', issue.entity_type + (issue.record_id ? ' · ' + issue.record_id : '')], ['Kolom', issue.field], ['Nilai', issue.value],
+        ['Kandidat', issue.candidate_reference], ['Metode kandidat', issue.candidate_method], ['Bukti', issue.evidence], ['Keputusan', issue.decision_ref],
+        ['Sumber', [issue.source_file, issue.source_sheet, issue.legacy_row ? 'baris ' + issue.legacy_row : null].filter(Boolean).join(' · ')],
+        ['Diselesaikan', issue.resolved_by ? issue.resolved_by + ' · ' + fmt.dateTime(issue.resolved_at) : null]
+      ]);
+      if (!canWrite('migrationIssues')) {
+        PIK.drawer({ title: 'Isu migrasi', body: details });
+        return;
+      }
+      ui.openForm({
+        title: 'Isu migrasi', subtitle: issue.id, table: 'MIGRATION_ISSUES', values: { resolution_status: issue.resolution_status === 'OPEN' ? 'RESOLVED' : issue.resolution_status, resolution_note: issue.resolution_note },
+        intro: h('div.stack', details, h('div.form-alert.info', icon('info', 'icon-sm'), h('span', 'Relasi data legacy tidak ditebak. Perbaiki datanya di modul terkait (mis. tautkan delivery ke item PO), lalu catat penyelesaian di sini.'))),
+        fields: [{ name: 'resolution_status', required: true }, { name: 'resolution_note', multiline: true, hint: 'Wajib diisi kecuali membuka kembali (Open).' }],
+        submitLabel: 'Simpan status',
+        submit: function (v) { return PIK.api('migrationIssues.resolve', Object.assign({ id: issue.id, expectedUpdatedAt: issue.updated_at }, v)); },
+        successMessage: 'Status isu disimpan.', onSaved: onSaved
+      });
+    }
+
+    function auditTab(host, query) {
+      var listHost = h('div');
+      host.appendChild(listHost);
+      ui.listPage(listHost, {
+        action: 'audit.list', query: query, keepQuery: { tab: 'audit' }, archivedToggle: false, searchPlaceholder: 'Cari ID record, pelaku, isi perubahan…',
+        filters: [
+          { key: 'action', label: 'Aksi', enumName: 'AUDIT_ACTION' },
+          { key: 'entity_type', label: 'Tabel', options: Object.keys(PIK.session.schema).map(function (k) { return { value: k, label: PIK.session.schema[k].label }; }).concat([{ value: 'SETTINGS', label: 'Pengaturan' }, { value: 'ENUMS', label: 'Enum' }]) },
+          { key: 'occurred_at', label: 'Tanggal', type: 'dateRange' }
+        ],
+        defaultSort: { field: 'occurred_at', direction: 'desc' },
+        columns: [
+          { key: 'occurred_at', label: 'Waktu', sortable: true, render: function (r) { return h('span.nowrap', fmt.dateTime(r.occurred_at)); } },
+          { key: 'actor_email', label: 'Pelaku', sortable: true, render: function (r) { return [h('span.primary', r.actor_name || r.actor_email), r.actor_name ? h('span.secondary', r.actor_email) : null]; } },
+          { key: 'action', label: 'Aksi', sortable: true, render: function (r) { return ui.badge(r.action_label, r.action === 'ARCHIVE' ? 'muted' : r.action === 'CREATE' ? 'success' : null, true); } },
+          { key: 'entity_type', label: 'Data', sortable: true, render: function (r) { return [h('span', r.entity_label || '—'), h('span.secondary', r.entity_id || '')]; } },
+          { key: 'changes', label: 'Perubahan', render: function (r) { return summarizeChanges(r); } }
+        ],
+        card: function (r) { return ui.listCard({ title: r.action_label + ' · ' + (r.entity_label || ''), lines: [fmt.dateTime(r.occurred_at), r.actor_name || r.actor_email, r.entity_id], extra: summarizeChanges(r) }); },
+        empty: { icon: 'history', title: 'Belum ada catatan audit' }
+      });
+    }
+
+    function summarizeChanges(r) {
+      var c = r.changes;
+      if (!c) return r.note ? h('span.secondary', r.note) : null;
+      if (r.action === 'MIGRATION_RUN') return h('span.secondary', 'Migrasi: ' + fmt.number(c.idCount || c.count || 0, 0) + ' record');
+      if (r.action === 'CREATE') return h('span.secondary', 'Record baru');
+      var keys = Object.keys(c).filter(function (k) { return Array.isArray(c[k]); });
+      if (!keys.length) return h('span.secondary', r.note || '');
+      return h('ul.change-list', keys.slice(0, 4).map(function (k) {
+        return h('li', h('b', k), ': ', String(c[k][0] === null ? '(kosong)' : c[k][0]).slice(0, 40), ' → ', String(c[k][1] === null ? '(kosong)' : c[k][1]).slice(0, 40));
+      }), keys.length > 4 ? h('li', '+' + (keys.length - 4) + ' kolom lain') : null);
+    }
+  })(PIK);
+</script>

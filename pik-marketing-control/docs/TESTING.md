@@ -9,6 +9,8 @@
 | `npm run emulate:init` | tidak | Menjalankan `setupDatabase` → `verifyDatabase` → `initializeDatabase` ulang → `runDatabaseSelfTest` di emulator dan mencetak hasilnya |
 | `npm run docs:schema` | tidak | Membuat ulang `docs/DATABASE_SCHEMA.md` dari skema di kode |
 | `npm run migrate -- migrate` | tidak | Gladi migrasi lengkap dengan workbook asli (lokal, di `migration/source/`) di emulator; laporan rahasia di `docs/MIGRATION_REPORT.md` |
+| `npm run dev` | tidak | Aplikasi lengkap di <http://127.0.0.1:8080>: kode `.gs` dan HTML asli di emulator, data sintetis hasil migrasi, satu akun uji per role. Ganti akun: `/__dev/sign-in?email=sales@example.com` (juga `marketing@`, `management@`, `viewer@`; tanpa cookie = pemilik skrip `owner@example.com`). Opsi: `--seed none\|synthetic\|workbook=<file.xlsx>`, `--port`, `--latency <ms>`, `--now <ISO>` |
+| `npm run test:e2e` | ya, plus `npx playwright install chromium` (sekali) | Test browser (Playwright) terhadap dev server: alur bisnis, role, daftar, state UI, ponsel/tablet. Screenshot di `e2e/artifacts/` (di-ignore git) |
 | `runDatabaseSelfTest()` | — (di Apps Script) | Kasus uji database yang sama, dijalankan di Google Sheets sungguhan |
 
 ## Cakupan
@@ -21,6 +23,24 @@
 | `tests/project.test.js` | 8 | Semua `.gs` dapat di-parse; tanpa sintaks yang dihindari (`?.`, `??`, `replaceAll`, dll.); tiap berkas dapat dimuat sendirian; tidak ada nama global ganda; daftar fungsi publik tertutup; urutan muat terbalik tetap lulus; manifest; HTML tanpa `innerHTML` |
 | `tests/emulator.test.js` | 8 | Asumsi perilaku Google Sheets yang ditiru emulator (lihat di bawah) |
 | `tests/docs.test.js` | 1 | `docs/DATABASE_SCHEMA.md` sesuai kode |
+| `tests/api-core.test.js` | 10 | Lewat `api()` sebagai user nyata (`tests/support/api-harness.js`): login (akun tak terdaftar ditolak; pemilik skrip menjadi Admin pertama hanya bila belum ada Admin aktif; role dari `USERS`; user diarsipkan ditolak; `last_login_at` paling sering tiap 10 menit); sesi (izin per role, enum, metadata form); **otorisasi: setiap route × setiap role** dicocokkan dengan matriks (ditolak `FORBIDDEN` tanpa menulis apa pun, tidak pernah `FORBIDDEN` bila berizin) + contoh PRD; amplop (error per kolom, error tak terduga disamarkan, aksi tak dikenal); semua penulisan di bawah lock, batch `setValues`, lock sibuk = `LOCK_TIMEOUT` tanpa menulis; `CONFLICT`; daftar (cari, filter, urut dengan nilai kosong di akhir, halaman, arsip opt-in, batas halaman dari SETTINGS); picker & pencarian global hanya modul yang boleh dibaca |
+| `tests/api-crm.test.js` | 6 | Customer CRUD + arsip/pulihkan + riwayat; workspace customer; contact utama (pertukaran atomik, input gagal tidak mengubah contact utama lama); lead (default, relasi, board, pindah status); aktivitas + follow-up berikutnya dalam satu unit; follow-up (bucket Today/Overdue/Upcoming dari tanggal hari ini, complete + berikutnya atomik, reschedule, cancel) |
+| `tests/api-operations.test.js` | 8 | PO + item dalam satu unit; delivery wajib item PO, outstanding, konfirmasi kelebihan qty; retur (menambah outstanding, konfirmasi, `CANCELLED` tidak dihitung); outstanding tidak negatif + kelebihan kirim; item PO (produk terkunci setelah transaksi, qty order < terkirim perlu konfirmasi, arsip dijaga); daftar PO (filter, urut, cari); produk & stok terbaru; lead time dan inbound |
+| `tests/api-admin.test.js` | 8 | Invoice (jenis dari nomor, status bayar dari nilai, pembayaran bertahap, jatuh tempo); dashboard (KPI dari data, scope "mine"); laporan (filter, grup, baris ringkas, CSV aman untuk Excel); audit log & riwayat; user (email unik, pengaman Admin); setting (tipe & batas, audit); enum (hanya enum yang dapat diperluas, dropdown sheet); isu migrasi (hitungan, catatan wajib, dibuka ulang) |
+| `tests/api-migrated.test.js` | 4 | Workbook sintetis dimigrasikan lalu dipakai lewat API: semua daftar/detail/laporan berjalan pada record legacy; outstanding PO dari API = rekonsiliasi migrasi; lineage & riwayat `MIGRATION_RUN`; Admin menautkan delivery legacy ke item PO yang benar (D3) |
+
+Test browser (`npm run test:e2e`, Playwright, Chromium headless, dev server dengan workbook sintetis yang dimigrasikan):
+
+| Berkas | Jumlah | Isi |
+|---|---:|---|
+| `e2e/flow.e2e.js` | 15 | Alur utama sebagai Admin: Login → Dashboard → Customer (form → workspace) → Contact utama → Lead (nilai format Indonesia) → pipeline (drag & drop) → Aktivitas + follow-up berikutnya → Follow-up selesai + berikutnya → PO + dua item → Delivery (kelebihan qty: batal lalu konfirmasi) → Retur → Outstanding → Dashboard (KPI berubah). Juga: tambah/ubah item PO dengan konfirmasi, validasi form (browser & server, isian tidak hilang), arsip + urungkan + riwayat, audit log. Setiap langkah dicek ulang lewat API |
+| `e2e/roles.e2e.js` | 5 | Akun belum terdaftar → didaftarkan Admin lewat Pengaturan › User → dapat masuk; Viewer hanya baca (tombol tersembunyi, URL langsung ditolak, server menolak); Sales (CRM ya, PO/delivery baca, keuangan tidak); Marketing (PO ya, delivery baca) dan Management (keuangan baca); keluar; user dinonaktifkan langsung kehilangan akses |
+| `e2e/lists.e2e.js` | 9 | Pagination server (halaman di URL, bertahan saat muat ulang); urutan kolom (angka: terbesar dulu); pencarian debounce (≤ 2 panggilan server); filter dan kombinasinya; arsip opt-in; pencarian global Ctrl+K; palet yang ditutup tombol Back tidak meninggalkan listener; pipeline "Pindah ke" (tanpa seret); laporan (filter, grafik, CSV terunduh) |
+| `e2e/ui-states.e2e.js` | 9 | Loading (skeleton + bar muat); error jaringan + Coba lagi; simpan gagal tanpa kehilangan isian; empty state dengan langkah berikutnya; dialog konfirmasi (Batal tidak mengubah apa pun); keyboard ("/", Escape, fokus kembali); fokus awal drawer tidak merebut kolom yang sudah dipilih; ponsel 390 px (navigasi bawah, menu, kartu, filter di balik tombol, header detail tidak terjepit, bottom sheet, tanpa scroll ke samping); tablet 820 px (rel ikon) |
+| `e2e/admin-data.e2e.js` | 7 | Data migrasi (tanda Legacy, transaksi belum tertaut, pembanding outstanding workbook, isu migrasi di detail, sumber legacy, riwayat); Admin menautkan delivery legacy (D3) dan outstanding dihitung ulang; isu migrasi diselesaikan; jenis aktivitas baru langsung dipakai; setting; invoice + pembayaran sebagian; stok & lead time |
+
+Setiap berkas E2E juga memeriksa bahwa sesi browsernya tidak mencatat error JavaScript atau error console (kecuali test yang sengaja
+memutus koneksi ke server).
 
 ## Hasil Phase 02 (2026-09-28)
 
@@ -49,6 +69,55 @@
   ditimpa, isi/total tidak dibandingkan, outstanding tanpa `MAX(0, …)`, hash paket tidak diperiksa, update batch tidak atomik,
   penanda dry run selalu OK. **16/16 tertangkap**.
 
+## Hasil Phase 04 — backend (2026-09-29)
+
+- `npm test`: **121/121 lulus** (36 test API baru; test database, migrasi, dan pemeliharaan tetap lulus).
+- `npm run typecheck`: **35 berkas `.gs`, 0 masalah tipe**.
+- Uji mutasi (sekali jalan, skrip tidak disimpan di repo): 34 cacat disisipkan satu per satu ke backend, antara lain izin route
+  tidak diperiksa, R dianggap RW, invoice tampil untuk semua role, outstanding tanpa `MAX(0, …)`, retur tidak menambah outstanding,
+  delivery terjadwal dihitung terkirim, cek kelebihan qty mati, jadwal tidak mengurangi sisa, overdue termasuk hari ini, contact utama
+  atau follow-up berikutnya tidak divalidasi sebelum menulis, status bayar dari klien, Admin terakhir dapat diturunkan, filter tanggal
+  memakai UTC, riwayat tanpa cek izin, CSV tanpa pelindung formula, PO bertransaksi dapat diarsipkan, unit of work tidak atomik, filter
+  tak dikenal diabaikan, delivery ke PO tertutup, dan item PO milik PO lain diterima. **33/34 tertangkap**. Tiga mutasi yang awalnya
+  lolos (Admin mengarsipkan akunnya sendiri, follow-up tanpa customer, konflik pada update multi-record) menghasilkan test tambahan.
+  Satu mutasi ekuivalen: menghapus syarat "belum ada Admin aktif" di luar lock tidak mengubah perilaku, karena syarat yang sama
+  diperiksa ulang di dalam lock sebelum Admin pertama didaftarkan.
+
+## Hasil Phase 05 — frontend (2026-09-29)
+
+- 18 layar (Login, Dashboard, Customer + detail, Contact, Lead/pipeline, Aktivitas, Follow-up, PO + detail, Delivery, Retur, Produk,
+  Stok, Lead Time, Invoice/Pembayaran, Laporan, Pengaturan) diperiksa lewat screenshot pada 1440, 820, dan 390 px dengan data
+  sintetis: tanpa error console, tanpa scroll ke samping.
+- Pemeriksaan lokal dengan workbook asli (dimigrasikan di dev server, `--seed workbook=…`; hanya angka agregat yang dicatat di sini):
+  semua route dan halaman detail PO/customer dibuka, **50 panggilan server, 0 gagal, 0 error browser**, tanpa scroll ke samping.
+  Temuan yang diperbaiki: tanggal kosong muncul paling atas pada urutan terbaru (P4-10); payload laporan terlalu besar (P4-11);
+  kandidat tanggal tertukar kini terlihat Admin sebagai isu migrasi di detail record (D6). Screenshot data asli tidak disimpan di repo.
+
+## Hasil Phase 06 — integrasi end-to-end (2026-09-29)
+
+- `npm run test:e2e`: **45/45 lulus** (Chromium headless, satu proses per berkas, ±40 detik), tiga kali berturut-turut setelah perbaikan
+  terakhir.
+- Bug yang ditemukan test E2E dan diperbaiki (akar masalah → perbaikan → test ulang):
+  - Picker (mis. pilih customer) terbuka lagi setelah pilihan dibuat, karena pencarian ber-debounce yang masih tertunda tetap
+    berjalan → debounce dibatalkan saat memilih/Escape/blur.
+  - Lencana notifikasi follow-up tidak diperbarui setelah simpan yang membuat follow-up → semua form terkait memicu pembaruan.
+  - Judul halaman di ponsel disembunyikan dengan `display: none` sehingga hilang bagi pembaca layar → disembunyikan secara visual saja.
+  - Ponsel: nama di header detail customer terjepit menjadi satu huruf per baris bila ada tiga tombol aksi → tombol turun ke baris
+    sendiri; tombol ikon tetap persegi. Test ponsel kini memeriksa ukuran judul (gagal sebelum perbaikan, lulus sesudahnya).
+  - Isian masuk ke kolom yang salah. Muncul sebagai kegagalan sesekali pada test validasi form; diagnostik saat gagal menunjukkan
+    teks untuk Email tersimpan di Nama customer. Akar masalah: fokus awal drawer dijalankan pada frame animasi pertama dan dapat
+    menarik fokus kembali ke kolom pertama setelah pengguna berpindah ke kolom lain (perangkat lambat, pengguna cepat) → fokus awal
+    hanya bila fokus belum berada di dalam drawer. Test baru memaksa urutan itu secara deterministik (gagal sebelum perbaikan).
+  - Overlay yang ditutup oleh perpindahan halaman (mis. tombol Back) hanya dihapus elemennya. Listener palet pencarian tertinggal,
+    sehingga Enter di halaman berikutnya membuka hasil pencarian lama → perpindahan halaman menutup drawer, dialog, menu, dan palet
+    lewat fungsi close-nya (listener ikut dilepas). Test baru gagal sebelum perbaikan (Enter membuka PO lama).
+- Perbaikan dari tinjauan screenshot: label PO (bukan ID) di daftar terkait, filter ponsel di balik tombol "Filter (n)", kolom angka
+  diurutkan terbesar dulu pada klik pertama, pembanding outstanding workbook pada item PO legacy (D3).
+- Kegagalan sesekali diperlakukan sebagai bug sampai terbukti sebaliknya, tidak diulang begitu saja. Satu ternyata bug aplikasi
+  (fokus, di atas). Dua lainnya kesalahan test: (1) bar muat diperiksa pada frame pertama animasi lebarnya (lebar 0) → test menunggu
+  bar terlihat; (2) setelah user dinonaktifkan, helper navigasi menunggu tampilan halaman yang justru diganti layar "belum terdaftar"
+  bila respons server datang lebih dulu → test menunggu layar itu langsung.
+
 ## Emulator (`tools/gas-emulator/`)
 
 Emulator adalah test double untuk `SpreadsheetApp`, `PropertiesService`, `LockService`, `Session`, `Utilities`, `DriveApp`,
@@ -70,7 +139,9 @@ dalam satu proses).
 ## Belum diverifikasi
 
 Kode belum dijalankan di Google Apps Script sungguhan karena kredensial Google tidak tersedia di environment pengembangan.
-Migrasi data ke database produksi juga belum dijalankan. Setelah `npm run push`, jalankan dari editor Apps Script:
+Migrasi data ke database produksi dan deployment web app juga belum dijalankan. Backend dan UI diuji end-to-end, tetapi di atas
+emulator: yang belum terbukti adalah perilaku Apps Script sendiri (identitas `Session` di web app domain, `google.script.history`
+di iframe HtmlService, kuota, dan waktu respons Sheets). Setelah `npm run push`, jalankan dari editor Apps Script:
 
 1. `setupDatabase` → log `setupDatabase: {...}`.
 2. `runDatabaseSelfTest` → log per kasus (`PASSED`/`FAILED`) dan ringkasan `Self-test: 35/35 lulus`. Spreadsheet uji dibuat sementara
@@ -78,6 +149,7 @@ Migrasi data ke database produksi juga belum dijalankan. Setelah `npm run push`,
 3. `verifyDatabase` → `ok: true`.
 4. Migrasi: langkah di `docs/DEPLOYMENT.md` §7. Hasil `dryRunMigration`, `runMigration`, dan `verifyMigration` harus sama dengan
    `docs/MIGRATION_REPORT.md` (jumlah per tabel, total, dan pemeriksaan).
+5. Web app: deploy dan jalankan daftar periksa di `docs/DEPLOYMENT.md` §6.3 dengan akun per role.
 
 Bila self-test melewati batas waktu eksekusi, kasus yang tersisa ditandai `SKIPPED`. Jalankan per kelompok dengan memanggil
 `runDatabaseSelfTest('init')`, `('relasi')`, `('validasi')`, dan seterusnya dari fungsi pembungkus sementara.

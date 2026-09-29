@@ -1,0 +1,613 @@
+<script>
+  /*
+   * PIK Marketing Control — client core: DOM helper, icons, formatting, API client (google.script.run), router,
+   * toasts, dialogs and drawers. Server text is only ever inserted as text nodes, never as HTML.
+   */
+  var PIK = window.PIK || {};
+  (function (PIK) {
+    'use strict';
+
+    // ------------------------------------------------------------------------------------------ DOM
+    var SVG_NS = 'http://www.w3.org/2000/svg';
+
+    /** h('div.card', { onClick, attrs... }, children...) — children: text, numbers, nodes, arrays; null/false skipped. */
+    function h(tag, props) {
+      var parts = String(tag).split('.');
+      var el = document.createElement(parts[0] || 'div');
+      if (parts.length > 1) el.className = parts.slice(1).join(' ');
+      var start = 1;
+      if (props && typeof props === 'object' && !(props instanceof Node) && !Array.isArray(props)) {
+        applyProps(el, props);
+        start = 2;
+      }
+      for (var i = start; i < arguments.length; i++) append(el, arguments[i]);
+      return el;
+    }
+
+    function applyProps(el, props) {
+      Object.keys(props).forEach(function (key) {
+        var value = props[key];
+        if (value === null || value === undefined || value === false) return;
+        if (key === 'class' || key === 'className') el.className = (el.className ? el.className + ' ' : '') + value;
+        else if (key === 'style' && typeof value === 'object') Object.keys(value).forEach(function (k) { el.style[k] = value[k]; });
+        else if (key === 'dataset') Object.keys(value).forEach(function (k) { el.dataset[k] = value[k]; });
+        else if (key.indexOf('on') === 0 && typeof value === 'function') el.addEventListener(key.slice(2).toLowerCase(), value);
+        else if (key === 'text') el.textContent = value;
+        else if (key === 'value') el.value = value;
+        else if (key === 'checked' || key === 'disabled' || key === 'selected' || key === 'hidden') el[key] = Boolean(value);
+        else if (value === true) el.setAttribute(key, '');
+        else el.setAttribute(key, String(value));
+      });
+    }
+
+    function append(el, child) {
+      if (child === null || child === undefined || child === false || child === true) return;
+      if (Array.isArray(child)) { child.forEach(function (c) { append(el, c); }); return; }
+      el.appendChild(child instanceof Node ? child : document.createTextNode(String(child)));
+    }
+
+    function clear(el) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+      return el;
+    }
+
+    function mount(el, content) {
+      clear(el);
+      append(el, content);
+      return el;
+    }
+
+    // ------------------------------------------------------------------------------------------ Icons (24px stroke)
+    var ICONS = {
+      dashboard: ['M3 13h8V3H3z', 'M13 21h8V11h-8z', 'M3 21h8v-6H3z', 'M13 3v6h8V3z'],
+      customers: ['M3 21V7l9-4 9 4v14', 'M9 21v-6h6v6', 'M7 10h.01', 'M12 10h.01', 'M17 10h.01'],
+      contacts: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+      leads: ['M3 3h18l-7 8.5V19l-4 2v-9.5z'],
+      activities: ['M22 12h-4l-3 9L9 3l-3 9H2'],
+      followUps: ['M8 2v4', 'M16 2v4', 'M3 10h18', 'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M9 16l2 2 4-4'],
+      purchaseOrders: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M8 13h8', 'M8 17h5'],
+      deliveries: ['M1 3h15v13H1z', 'M16 8h4l3 3v5h-7z', 'M5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z', 'M18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
+      returns: ['M9 14 4 9l5-5', 'M4 9h11a5 5 0 0 1 0 10h-1'],
+      products: ['M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', 'M3.3 7 12 12l8.7-5', 'M12 22V12'],
+      stock: ['M3 21h18', 'M5 21V10l7-5 7 5v11', 'M9 21v-5h6v5'],
+      leadTime: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 6v6l4 2'],
+      finance: ['M2 7h20v12H2z', 'M2 11h20', 'M6 15h4'],
+      reports: ['M18 20V10', 'M12 20V4', 'M6 20v-6'],
+      settings: ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'],
+      search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', 'M21 21l-4.35-4.35'],
+      bell: ['M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9', 'M13.73 21a2 2 0 0 1-3.46 0'],
+      plus: ['M12 5v14', 'M5 12h14'],
+      close: ['M18 6 6 18', 'M6 6l12 12'],
+      check: ['M20 6 9 17l-5-5'],
+      chevronRight: ['M9 18l6-6-6-6'],
+      chevronLeft: ['M15 18l-6-6 6-6'],
+      chevronDown: ['M6 9l6 6 6-6'],
+      more: ['M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z', 'M19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z', 'M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'],
+      edit: ['M12 20h9', 'M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'],
+      archive: ['M21 8v13H3V8', 'M1 3h22v5H1z', 'M10 12h4'],
+      restore: ['M3 12a9 9 0 1 0 3-6.7L3 8', 'M3 3v5h5'],
+      alert: ['M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z', 'M12 9v4', 'M12 17h.01'],
+      info: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 16v-4', 'M12 8h.01'],
+      inbox: ['M22 12h-6l-2 3h-4l-2-3H2', 'M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'],
+      phone: ['M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z'],
+      mail: ['M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M22 6l-10 7L2 6'],
+      globe: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M2 12h20', 'M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'],
+      user: ['M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2', 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z'],
+      logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
+      download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
+      refresh: ['M23 4v6h-6', 'M1 20v-6h6', 'M3.51 9a9 9 0 0 1 14.85-3.36L23 10', 'M20.49 15a9 9 0 0 1-14.85 3.36L1 14'],
+      star: ['M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z'],
+      menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
+      board: ['M3 3h7v18H3z', 'M14 3h7v10h-7z'],
+      list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
+      history: ['M12 8v4l3 3', 'M3.05 11a9 9 0 1 1 .5 4', 'M3 4v5h5'],
+      link: ['M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71', 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'],
+      lock: ['M5 11h14v10H5z', 'M8 11V7a4 4 0 0 1 8 0v4'],
+      calendar: ['M8 2v4', 'M16 2v4', 'M3 10h18', 'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z'],
+      filter: ['M22 3H2l8 9.46V19l4 2v-8.54z']
+    };
+
+    function icon(name, extraClass) {
+      var svg = document.createElementNS(SVG_NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('class', 'icon' + (extraClass ? ' ' + extraClass : ''));
+      svg.setAttribute('aria-hidden', 'true');
+      (ICONS[name] || ICONS.info).forEach(function (d) {
+        var path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', d);
+        svg.appendChild(path);
+      });
+      return svg;
+    }
+
+    function svg(tag, attrs, children) {
+      var el = document.createElementNS(SVG_NS, tag);
+      Object.keys(attrs || {}).forEach(function (key) { el.setAttribute(key, String(attrs[key])); });
+      (children || []).forEach(function (child) {
+        if (child === null || child === undefined) return;
+        el.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+      });
+      return el;
+    }
+
+    // ------------------------------------------------------------------------------------------ Formatting
+    var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    var numberFormatters = {};
+
+    function numberFormatter(decimals) {
+      var key = String(decimals);
+      if (!numberFormatters[key]) {
+        numberFormatters[key] = new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: decimals });
+      }
+      return numberFormatters[key];
+    }
+
+    var fmt = {
+      number: function (value, decimals) {
+        if (value === null || value === undefined || value === '' || isNaN(Number(value))) return '—';
+        return numberFormatter(decimals === undefined ? 3 : decimals).format(Number(value));
+      },
+      qty: function (value, unit) {
+        var text = fmt.number(value, 3);
+        return unit && text !== '—' ? text + ' ' + unit : text;
+      },
+      money: function (value) {
+        if (value === null || value === undefined || value === '' || isNaN(Number(value))) return '—';
+        var currency = (PIK.session && PIK.session.settings && PIK.session.settings.currency) || 'IDR';
+        var prefix = currency === 'IDR' ? 'Rp ' : currency + ' ';
+        return prefix + numberFormatter(2).format(Number(value));
+      },
+      compactMoney: function (value) {
+        var n = Number(value) || 0;
+        var abs = Math.abs(n);
+        if (abs >= 1e12) return 'Rp ' + numberFormatter(1).format(n / 1e12) + ' T';
+        if (abs >= 1e9) return 'Rp ' + numberFormatter(1).format(n / 1e9) + ' M';
+        if (abs >= 1e6) return 'Rp ' + numberFormatter(1).format(n / 1e6) + ' jt';
+        return fmt.money(n);
+      },
+      /** 'yyyy-MM-dd' → '28 Sep 2026' */
+      date: function (value) {
+        if (!value) return '—';
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+        if (!m) return String(value);
+        if (String(value).length > 10) return fmt.dateTime(value);
+        return Number(m[3]) + ' ' + MONTHS[Number(m[2]) - 1] + ' ' + m[1];
+      },
+      /** ISO UTC timestamp → date and time in the application time zone. */
+      dateTime: function (value) {
+        if (!value) return '—';
+        var parts = zonedParts(value);
+        if (!parts) return String(value);
+        return Number(parts.day) + ' ' + MONTHS[Number(parts.month) - 1] + ' ' + parts.year + ', ' + parts.hour + '.' + parts.minute;
+      },
+      time: function (value) { return value ? String(value).replace(':', '.') : ''; },
+      /** Calendar date ('yyyy-MM-dd') of a timestamp in the application time zone. */
+      localDate: function (value) {
+        var parts = zonedParts(value);
+        return parts ? parts.year + '-' + parts.month + '-' + parts.day : null;
+      },
+      relativeDay: function (dateText) {
+        if (!dateText) return '';
+        var diff = daysBetween(PIK.today(), String(dateText).slice(0, 10));
+        if (diff === 0) return 'Hari ini';
+        if (diff === 1) return 'Besok';
+        if (diff === -1) return 'Kemarin';
+        if (diff > 1 && diff <= 6) return diff + ' hari lagi';
+        if (diff < -1) return Math.abs(diff) + ' hari lalu';
+        return fmt.date(dateText);
+      },
+      initials: function (name) {
+        var words = String(name || '?').replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/);
+        var skip = { PT: 1, CV: 1, UD: 1, TBK: 1 };
+        var filtered = words.filter(function (w) { return !skip[w.toUpperCase()]; });
+        var list = filtered.length ? filtered : words;
+        return ((list[0] || '?').charAt(0) + (list[1] ? list[1].charAt(0) : '')).toUpperCase();
+      },
+      percent: function (part, total) {
+        if (!total) return 0;
+        return Math.max(0, Math.min(100, Math.round((part / total) * 100)));
+      }
+    };
+
+    var zoneFormatter = null;
+    function zonedParts(value) {
+      var date = new Date(value);
+      if (isNaN(date.getTime())) return null;
+      if (!zoneFormatter) {
+        var timeZone = (PIK.session && PIK.session.app && PIK.session.app.timeZone) || 'Asia/Jakarta';
+        zoneFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+      }
+      var parts = {};
+      zoneFormatter.formatToParts(date).forEach(function (p) { parts[p.type] = p.value; });
+      return parts;
+    }
+
+    function daysBetween(fromIso, toIso) {
+      var a = Date.UTC(Number(fromIso.slice(0, 4)), Number(fromIso.slice(5, 7)) - 1, Number(fromIso.slice(8, 10)));
+      var b = Date.UTC(Number(toIso.slice(0, 4)), Number(toIso.slice(5, 7)) - 1, Number(toIso.slice(8, 10)));
+      return Math.round((b - a) / 86400000);
+    }
+
+    /** 'yyyy-MM-dd' shifted by n days. */
+    function addDays(iso, n) {
+      var d = new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)) + n));
+      return d.toISOString().slice(0, 10);
+    }
+
+    // ------------------------------------------------------------------------------------------ API
+    function ApiError(code, message, details) {
+      this.name = 'ApiError';
+      this.code = code;
+      this.message = message;
+      this.details = details || null;
+    }
+    ApiError.prototype = Object.create(Error.prototype);
+
+    var pending = 0;
+    function setBusy(delta) {
+      pending = Math.max(0, pending + delta);
+      var bar = document.getElementById('loading-bar');
+      if (bar) bar.classList.toggle('active', pending > 0);
+    }
+
+    /** google.script.run.api(action, payload) as a Promise of `data`; rejects with ApiError. */
+    function api(action, payload) {
+      setBusy(1);
+      return new Promise(function (resolve, reject) {
+        google.script.run
+          .withSuccessHandler(function (response) {
+            setBusy(-1);
+            if (!response || typeof response !== 'object') {
+              reject(new ApiError('INTERNAL_ERROR', 'Respons server tidak valid. Silakan coba lagi.'));
+            } else if (response.success) {
+              resolve(response.data);
+            } else {
+              var error = response.error || {};
+              var apiError = new ApiError(error.code || 'INTERNAL_ERROR', error.message || 'Terjadi kesalahan.', error.details);
+              if (apiError.code === 'NOT_REGISTERED' && PIK.onSignedOut) PIK.onSignedOut(apiError);
+              reject(apiError);
+            }
+          })
+          .withFailureHandler(function (error) {
+            setBusy(-1);
+            reject(new ApiError('NETWORK', 'Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.', { cause: String(error && error.message || error) }));
+          })
+          .api(action, payload || {});
+      });
+    }
+
+    // ------------------------------------------------------------------------------------------ Utilities
+    /** Delays fn until `wait` ms after the last call; .cancel() drops a pending call. */
+    function debounce(fn, wait) {
+      var timer = null;
+      var debounced = function () {
+        var args = arguments;
+        var self = this;
+        clearTimeout(timer);
+        timer = setTimeout(function () { timer = null; fn.apply(self, args); }, wait);
+      };
+      debounced.cancel = function () { clearTimeout(timer); timer = null; };
+      return debounced;
+    }
+
+    var storage = {
+      get: function (key, fallback) {
+        try {
+          var value = window.sessionStorage.getItem('pik.' + key);
+          return value === null ? fallback : JSON.parse(value);
+        } catch (e) { return fallback; }
+      },
+      set: function (key, value) {
+        try { window.sessionStorage.setItem('pik.' + key, JSON.stringify(value)); } catch (e) { /* storage unavailable */ }
+      },
+      remove: function (key) {
+        try { window.sessionStorage.removeItem('pik.' + key); } catch (e) { /* storage unavailable */ }
+      }
+    };
+
+    function can(module, access) {
+      var permissions = (PIK.session && PIK.session.permissions) || {};
+      var granted = permissions[module];
+      if (!granted) return false;
+      return access === 'RW' ? granted === 'RW' : true;
+    }
+
+    function enumLabel(name, value) {
+      if (value === null || value === undefined || value === '') return '—';
+      var list = (PIK.session && PIK.session.enums && PIK.session.enums[name]) || [];
+      for (var i = 0; i < list.length; i++) if (list[i].value === value) return list[i].label;
+      return String(value);
+    }
+
+    function enumOptions(name, includeInactive, current) {
+      var list = (PIK.session && PIK.session.enums && PIK.session.enums[name]) || [];
+      return list.filter(function (item) { return item.active || includeInactive || item.value === current; })
+        .map(function (item) { return { value: item.value, label: item.label + (item.active ? '' : ' (nonaktif)') }; });
+    }
+
+    function column(table, name) {
+      var schema = PIK.session && PIK.session.schema && PIK.session.schema[table];
+      if (!schema) return null;
+      for (var i = 0; i < schema.columns.length; i++) if (schema.columns[i].name === name) return schema.columns[i];
+      return null;
+    }
+
+    function downloadText(filename, text, mime) {
+      var blob = new Blob([text], { type: mime || 'text/csv;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = h('a', { href: url, download: filename, target: '_self' });
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
+    }
+
+    // ------------------------------------------------------------------------------------------ Router
+    var routes = [];
+    var router = {
+      current: null,
+      /** pattern: 'customers/:id' */
+      add: function (pattern, options) {
+        var keys = [];
+        var regex = new RegExp('^' + pattern.replace(/\//g, '\\/').replace(/:([a-zA-Z]+)/g, function (m, key) {
+          keys.push(key);
+          return '([^/?]+)';
+        }) + '$');
+        routes.push({ pattern: pattern, regex: regex, keys: keys, options: options });
+      },
+      parse: function (hash) {
+        var text = String(hash || '').replace(/^#?\/?/, '');
+        var q = text.indexOf('?');
+        var path = q === -1 ? text : text.slice(0, q);
+        var query = {};
+        if (q !== -1) {
+          text.slice(q + 1).split('&').forEach(function (pair) {
+            if (!pair) return;
+            var i = pair.indexOf('=');
+            var key = decodeURIComponent(i === -1 ? pair : pair.slice(0, i));
+            query[key] = i === -1 ? '' : decodeURIComponent(pair.slice(i + 1).replace(/\+/g, ' '));
+          });
+        }
+        return { path: path || 'dashboard', query: query };
+      },
+      build: function (path, query) {
+        var keys = Object.keys(query || {}).filter(function (k) { return query[k] !== '' && query[k] !== null && query[k] !== undefined; });
+        return path + (keys.length ? '?' + keys.map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(query[k]); }).join('&') : '');
+      },
+      match: function (path) {
+        for (var i = 0; i < routes.length; i++) {
+          var m = routes[i].regex.exec(path);
+          if (m) {
+            var params = {};
+            routes[i].keys.forEach(function (key, index) { params[key] = decodeURIComponent(m[index + 1]); });
+            return { route: routes[i], params: params };
+          }
+        }
+        return null;
+      },
+      /** Navigate: pushes history (google.script.history in Apps Script, location.hash elsewhere) and renders. */
+      go: function (path, query, options) {
+        var target = router.build(path, query);
+        var opts = options || {};
+        if (google.script && google.script.history) {
+          if (opts.replace) google.script.history.replace(null, null, target);
+          else google.script.history.push(null, null, target);
+        } else if (opts.replace) {
+          window.history.replaceState(null, '', '#' + target);
+        } else {
+          window.history.pushState(null, '', '#' + target);
+        }
+        if (!opts.silent) PIK.render(router.parse(target));
+        else router.current = router.parse(target);
+      },
+      /** Updates the query of the current route without re-rendering (list filters, tabs). */
+      setQuery: function (query) {
+        var current = router.current || { path: 'dashboard', query: {} };
+        router.go(current.path, query, { replace: true, silent: true });
+      },
+      start: function (onChange) {
+        if (google.script && google.script.history && google.script.url) {
+          google.script.history.setChangeHandler(function (event) { onChange(router.parse(event.location.hash)); });
+          google.script.url.getLocation(function (location) { onChange(router.parse(location.hash)); });
+        } else {
+          window.addEventListener('popstate', function () { onChange(router.parse(window.location.hash)); });
+          onChange(router.parse(window.location.hash));
+        }
+      }
+    };
+
+    // ------------------------------------------------------------------------------------------ Toasts
+    var toast = {
+      show: function (message, kind, action) {
+        var host = document.getElementById('toasts');
+        if (!host) return;
+        var el = h('div.toast' + (kind === 'error' ? '.error' : ''), { role: kind === 'error' ? 'alert' : 'status' },
+          icon(kind === 'error' ? 'alert' : 'check'), h('span', message),
+          action ? h('button', { type: 'button', onClick: function () { action.run(); dismiss(); } }, action.label) : null);
+        var timer = setTimeout(dismiss, kind === 'error' ? 6500 : 3600);
+        function dismiss() {
+          clearTimeout(timer);
+          if (el.parentNode) el.parentNode.removeChild(el);
+        }
+        host.appendChild(el);
+        while (host.children.length > 3) host.removeChild(host.firstChild);
+      },
+      success: function (message, action) { toast.show(message, 'success', action); },
+      error: function (message) { toast.show(message, 'error'); }
+    };
+
+    // ------------------------------------------------------------------------------------------ Overlays
+    var openLayers = [];
+
+    function trapFocus(container, event) {
+      if (event.key !== 'Tab') return;
+      var focusable = Array.prototype.filter.call(
+        container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
+        function (el) { return !el.disabled && el.offsetParent !== null; });
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { last.focus(); event.preventDefault(); }
+      else if (!event.shiftKey && document.activeElement === last) { first.focus(); event.preventDefault(); }
+    }
+
+    document.addEventListener('keydown', function (event) {
+      var layer = openLayers[openLayers.length - 1];
+      if (!layer) return;
+      if (event.key === 'Escape') { event.preventDefault(); layer.requestClose(); }
+      else trapFocus(layer.element, event);
+    });
+
+    function openLayer(element, overlayClass, onRequestClose) {
+      var previous = document.activeElement;
+      var overlay = h('div.overlay' + (overlayClass ? '.' + overlayClass : ''), { onClick: function () { layer.requestClose(); } });
+      var layer = {
+        element: element,
+        requestClose: onRequestClose,
+        close: function () {
+          element.classList.remove('open');
+          overlay.classList.remove('open');
+          openLayers = openLayers.filter(function (l) { return l !== layer; });
+          setTimeout(function () { overlay.remove(); element.remove(); }, 240);
+          if (previous && previous.focus) try { previous.focus(); } catch (e) { /* element gone */ }
+        }
+      };
+      document.body.appendChild(overlay);
+      document.body.appendChild(element);
+      openLayers.push(layer);
+      requestAnimationFrame(function () {
+        overlay.classList.add('open');
+        element.classList.add('open');
+        // Initial focus only when the user has not already put it inside the layer: a late frame (slow device) must not
+        // pull focus back to the first field while the user types in another one, or the text lands in the wrong field.
+        if (element.contains(document.activeElement)) return;
+        var target = element.querySelector('[autofocus], input:not([type=hidden]), select, textarea, button.btn-primary') || element;
+        try { target.focus(); } catch (e) { /* not focusable */ }
+      });
+      return layer;
+    }
+
+    /** Confirmation dialog. Resolves true (confirmed) or false. */
+    function confirmDialog(options) {
+      return new Promise(function (resolve) {
+        var titleId = 'dlg-' + Math.random().toString(36).slice(2);
+        var layer;
+        var finish = function (value) { layer.close(); resolve(value); };
+        var confirmButton = h('button.btn.' + (options.danger ? 'btn-danger' : 'btn-primary'), { type: 'button', onClick: function () { finish(true); } }, options.confirmLabel || 'Ya, lanjutkan');
+        var el = h('div.dialog', { role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': titleId, tabindex: '-1' },
+          h('h2', { id: titleId }, options.title),
+          options.message ? h('p', options.message) : null,
+          options.body || null,
+          h('div.actions',
+            h('button.btn', { type: 'button', onClick: function () { finish(false); } }, options.cancelLabel || 'Batal'),
+            confirmButton));
+        layer = openLayer(el, 'dialog-overlay', function () { finish(false); });
+        setTimeout(function () { if (document.activeElement === el || !el.contains(document.activeElement)) confirmButton.focus(); }, 30);
+      });
+    }
+
+    /**
+     * Side drawer (bottom sheet on phones). options: { title, subtitle, body (node), footer (node), wide, onClose }.
+     * Returns { close, setBody, setFooter, element }.
+     */
+    function drawer(options) {
+      var titleId = 'drw-' + Math.random().toString(36).slice(2);
+      var body = h('div.drawer-body');
+      var foot = h('div.drawer-foot');
+      var closeButton = h('button.icon-button', { type: 'button', 'aria-label': 'Tutup', onClick: function () { handle.requestClose(); } }, icon('close'));
+      var el = h('div.drawer' + (options.wide ? '.drawer-wide' : ''), { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId },
+        h('div.drawer-head', h('div', { style: { flex: '1', minWidth: '0' } }, h('h2', { id: titleId }, options.title),
+          options.subtitle ? h('div.muted', { style: { fontSize: '13px' } }, options.subtitle) : null), closeButton),
+        body, foot);
+      var dirty = false;
+      var handle = {
+        element: el,
+        setBody: function (node) { mount(body, node); },
+        setFooter: function (node) { mount(foot, node); foot.style.display = node ? '' : 'none'; },
+        markDirty: function (value) { dirty = value !== false; },
+        requestClose: function () {
+          if (!dirty) { handle.close(); return; }
+          confirmDialog({ title: 'Buang perubahan?', message: 'Perubahan yang belum disimpan akan hilang.', confirmLabel: 'Buang', danger: true })
+            .then(function (ok) { if (ok) handle.close(); });
+        },
+        close: function () {
+          layer.close();
+          if (options.onClose) options.onClose();
+        }
+      };
+      var layer = openLayer(el, null, function () { handle.requestClose(); });
+      if (options.body) handle.setBody(options.body);
+      handle.setFooter(options.footer || null);
+      return handle;
+    }
+
+    /**
+     * Page change: closes every drawer, dialog and popover at once, their document listeners included — removing only
+     * their elements would leave stale layers that still react to Escape, Tab or clicks.
+     */
+    function closeLayers() {
+      openLayers = [];
+      openPopovers.slice().forEach(function (p) { p.close(); });
+      Array.prototype.forEach.call(document.querySelectorAll('.drawer, .dialog, .overlay, .menu'), function (el) { el.remove(); });
+    }
+
+    var openPopovers = [];
+
+    /** Popover menu anchored to a button. items: [{ label, icon, onClick, danger, href }] or nodes. */
+    function popover(anchor, items, options) {
+      var menu = h('div.menu', { role: 'menu' });
+      (items || []).forEach(function (item) {
+        if (!item) return;
+        if (item instanceof Node) { menu.appendChild(item); return; }
+        menu.appendChild(h('button' + (item.danger ? '.danger' : ''), { type: 'button', role: 'menuitem', onClick: function () { close(); item.onClick(); } },
+          item.icon ? icon(item.icon, 'icon-sm') : null, item.label));
+      });
+      var rect = anchor.getBoundingClientRect();
+      menu.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+      if (options && options.alignLeft) menu.style.left = (rect.left + window.scrollX) + 'px';
+      else menu.style.right = Math.max(8, document.documentElement.clientWidth - rect.right - window.scrollX) + 'px';
+      document.body.appendChild(menu);
+      var closed = false;
+      var onDocument = function (event) { if (!menu.contains(event.target) && event.target !== anchor) close(); };
+      var onKey = function (event) { if (event.key === 'Escape') { close(); anchor.focus(); } };
+      // Listeners start after the click that opened the menu; a menu closed before that never registers them.
+      setTimeout(function () { if (closed) return; document.addEventListener('mousedown', onDocument); document.addEventListener('keydown', onKey); }, 0);
+      var first = menu.querySelector('button');
+      if (first) first.focus();
+      var handle = { close: close };
+      openPopovers.push(handle);
+      function close() {
+        closed = true;
+        openPopovers = openPopovers.filter(function (p) { return p !== handle; });
+        document.removeEventListener('mousedown', onDocument);
+        document.removeEventListener('keydown', onKey);
+        menu.remove();
+      }
+      return handle;
+    }
+
+    PIK.h = h;
+    PIK.svg = svg;
+    PIK.icon = icon;
+    PIK.clear = clear;
+    PIK.mount = mount;
+    PIK.fmt = fmt;
+    PIK.addDays = addDays;
+    PIK.daysBetween = daysBetween;
+    PIK.api = api;
+    PIK.ApiError = ApiError;
+    PIK.debounce = debounce;
+    PIK.storage = storage;
+    PIK.can = can;
+    PIK.enumLabel = enumLabel;
+    PIK.enumOptions = enumOptions;
+    PIK.column = column;
+    PIK.downloadText = downloadText;
+    PIK.router = router;
+    PIK.toast = toast;
+    PIK.confirm = confirmDialog;
+    PIK.drawer = drawer;
+    PIK.popover = popover;
+    PIK.closeLayers = closeLayers;
+    PIK.today = function () { return (PIK.session && PIK.session.app && PIK.session.app.today) || new Date().toISOString().slice(0, 10); };
+  })(PIK);
+</script>
