@@ -299,3 +299,37 @@ function excerpt(?string $text, int $length = 80): string
     $text = trim(preg_replace('/\s+/', ' ', (string) $text) ?? '');
     return mb_strlen($text) > $length ? mb_substr($text, 0, $length - 1) . '…' : $text;
 }
+
+/** Ikon Bootstrap Icons untuk tipe aktivitas / follow up. */
+function activity_icon(?string $type): string
+{
+    return match ((string) $type) {
+        'WhatsApp' => 'bi-whatsapp',
+        'Phone Call' => 'bi-telephone',
+        'Email' => 'bi-envelope',
+        'Meeting' => 'bi-people',
+        'Visit' => 'bi-geo-alt',
+        'Quotation' => 'bi-file-earmark-text',
+        'Sample' => 'bi-box2',
+        'Presentation' => 'bi-easel',
+        'Follow Up' => 'bi-arrow-repeat',
+        'Complaint' => 'bi-exclamation-octagon',
+        default => 'bi-three-dots',
+    };
+}
+
+/** Persentase aman untuk progress bar (0–100). */
+function pct(float|int $part, float|int $total): int
+{
+    if ($total <= 0) {
+        return 0;
+    }
+    return (int) max(0, min(100, round($part / $total * 100)));
+}
+
+/** URL internal dari path yang boleh berisi query string, mis. "/customers/5?tab=contacts". */
+function to(string $pathWithQuery): string
+{
+    [$path, $query] = array_pad(explode('?', $pathWithQuery, 2), 2, '');
+    return url($path) . ($query !== '' ? '?' . $query : '');
+}

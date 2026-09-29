@@ -548,6 +548,7 @@ textarea.form-control { min-height: 96px; }
 .divider-text::before, .divider-text::after { content: ""; flex: 1; height: 1px; background: var(--pik-border); }
 .dot-sep::before { content: "·"; margin: 0 6px; color: var(--pik-subtle); }
 .inline-form { display: inline; }
+.min-w-0 { min-width: 0; }
 .muted-link { color: var(--pik-muted); }
 .muted-link:hover { color: var(--pik-accent); }
 .legacy-note { font-size: .75rem; color: var(--pik-subtle); }
