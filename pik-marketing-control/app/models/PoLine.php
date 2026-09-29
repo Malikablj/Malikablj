@@ -57,6 +57,46 @@ final class PoLine extends Model
                 FROM (' . self::totalsSql() . ') t GROUP BY t.po_id';
     }
 
+    /** Jumlah delivery & retur yang merujuk line ini. */
+    public static function dependents(int $id): int
+    {
+        return (int) Database::fetchValue(
+            'SELECT (SELECT COUNT(*) FROM deliveries WHERE po_line_id = :a) + (SELECT COUNT(*) FROM returns WHERE po_line_id = :b)',
+            ['a' => $id, 'b' => $id]
+        );
+    }
+
+    public static function removeLine(int $id): void
+    {
+        $line = self::find($id);
+        if ($line === null) {
+            throw new \DomainException('PO line tidak ditemukan.');
+        }
+        $deps = self::dependents($id);
+        if ($deps > 0) {
+            throw new \DomainException("Baris PO tidak dapat dihapus karena sudah memiliki {$deps} delivery/retur.");
+        }
+        $remaining = (int) Database::fetchValue('SELECT COUNT(*) FROM po_lines WHERE po_id = :p', ['p' => $line['po_id']]);
+        if ($remaining <= 1) {
+            throw new \DomainException('PO minimal memiliki satu baris produk.');
+        }
+        self::delete($id, $line);
+        PurchaseOrder::syncStatus((int) $line['po_id']);
+    }
+
+    /** @return array<string,mixed>|null line + info PO & produk */
+    public static function findFull(int $id): ?array
+    {
+        return Database::fetch(
+            'SELECT pl.*, p.po_number, p.code AS po_code, p.status AS po_status, p.customer_id, c.name AS customer_name, pr.name AS product_name,
+                    t.delivered_qty, t.return_qty, t.outstanding_qty
+             FROM po_lines pl JOIN purchase_orders p ON p.id = pl.po_id LEFT JOIN customers c ON c.id = p.customer_id
+             JOIN products pr ON pr.id = pl.product_id JOIN (' . self::totalsSql() . ') t ON t.line_id = pl.id
+             WHERE pl.id = :id',
+            ['id' => $id]
+        );
+    }
+
     /** Hitung outstanding (fungsi murni, dipakai juga oleh test). */
     public static function outstanding(int $orderQty, int $deliveredQty, int $returnQty): int
     {

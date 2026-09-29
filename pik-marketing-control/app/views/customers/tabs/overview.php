@@ -48,14 +48,15 @@ $id = (int) $customer['id'];
                 <?php else: ?>
                     <div class="table-wrap">
                         <table class="table-pik table-compact">
-                            <thead><tr><th>No. PO</th><th class="d-none d-md-table-cell">Tanggal</th><th>Status</th><th class="num">Order</th><th class="num">Outstanding</th><th class="d-none d-md-table-cell">Progres</th></tr></thead>
+                            <thead><tr><th>No. PO</th><th class="d-none d-md-table-cell">Tanggal</th><th class="d-none d-sm-table-cell">Status</th><th class="num d-none d-sm-table-cell">Order</th><th class="num">Outstanding</th><th class="d-none d-md-table-cell">Progres</th></tr></thead>
                             <tbody>
                             <?php foreach ($data['openPos'] as $po): $progress = pct((int) $po['delivered_qty'], (int) $po['total_qty']); ?>
                                 <tr>
-                                    <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e($po['po_number'] ?? '(tanpa nomor)') ?></a></td>
+                                    <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e($po['po_number'] ?? '(tanpa nomor)') ?></a>
+                                        <div class="cell-sub d-sm-none">Order <?= e(fmt_qty($po['total_qty'])) ?> · <?= status_badge($po['status']) ?></div></td>
                                     <td class="d-none d-md-table-cell text-secondary nowrap"><?= e(fmt_date($po['po_date'])) ?></td>
-                                    <td><?= status_badge($po['status']) ?></td>
-                                    <td class="num"><?= e(fmt_qty($po['total_qty'])) ?></td>
+                                    <td class="d-none d-sm-table-cell"><?= status_badge($po['status']) ?></td>
+                                    <td class="num d-none d-sm-table-cell"><?= e(fmt_qty($po['total_qty'])) ?></td>
                                     <td class="num fw-semibold<?= (int) $po['outstanding_qty'] < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($po['outstanding_qty'])) ?></td>
                                     <td class="d-none d-md-table-cell"><div class="progress-thin<?= $progress >= 100 ? ' is-done' : '' ?>"><span style="width: <?= $progress ?>%"></span></div></td>
                                 </tr>

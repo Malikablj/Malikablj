@@ -178,6 +178,29 @@ test('route tidak dikenal → 404, method salah → 405', function () {
     assert_status(405, $c->get('/logout'));
 });
 
+test('setiap route: controller & method ada, parameter URL cocok, permission valid', function () {
+    $router = new App\Helpers\Router();
+    (require APP_ROOT . '/app/routes.php')($router);
+    $routes = $router->all();
+    assert_true(count($routes) > 20, 'routes terdaftar');
+    $seen = [];
+    foreach ($routes as $route) {
+        $key = $route['method'] . ' ' . $route['pattern'];
+        assert_true(!isset($seen[$key]), 'route ganda: ' . $key);
+        $seen[$key] = true;
+        [$class, $action] = $route['handler'];
+        assert_true(method_exists($class, $action), "method $class::$action ada");
+        preg_match_all('/\{(\w+)\}/', $route['pattern'], $m);
+        $params = array_map(static fn (ReflectionParameter $p) => $p->getName(), (new ReflectionMethod($class, $action))->getParameters());
+        assert_same($m[1], $params, "parameter $key");
+        $perm = $route['permission'];
+        assert_true(in_array($perm, ['guest', 'auth'], true) || preg_match('/^[a-z_]+\.[a-z_]+$/', $perm) === 1, "permission $key");
+        if ($route['method'] === 'POST') {
+            assert_true($perm !== 'guest' || in_array($route['pattern'], ['/login', '/setup'], true), "POST tanpa login hanya login/setup: $key");
+        }
+    }
+});
+
 test('logout via POST mengakhiri sesi', function () {
     $c = client_as('Viewer');
     assert_status(200, $c->get('/'));

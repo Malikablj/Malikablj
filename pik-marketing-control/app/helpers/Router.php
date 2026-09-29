@@ -48,10 +48,10 @@ final class Router
         ];
     }
 
-    /** @return list<array{method:string,pattern:string,permission:string}> */
+    /** @return list<array{method:string,pattern:string,handler:array{0:class-string,1:string},permission:string}> */
     public function all(): array
     {
-        return array_map(static fn ($r) => ['method' => $r['method'], 'pattern' => $r['pattern'], 'permission' => $r['permission']], $this->routes);
+        return array_map(static fn ($r) => ['method' => $r['method'], 'pattern' => $r['pattern'], 'handler' => $r['handler'], 'permission' => $r['permission']], $this->routes);
     }
 
     public function dispatch(string $method, string $path): void

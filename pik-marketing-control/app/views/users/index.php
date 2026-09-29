@@ -42,7 +42,7 @@ use App\Helpers\Permission;
                 <thead>
                 <tr>
                     <th>Nama</th>
-                    <th>Role</th>
+                    <th class="d-none d-sm-table-cell">Role</th>
                     <th>Status</th>
                     <th class="d-none d-md-table-cell">Login terakhir</th>
                     <th class="col-actions"></th>
@@ -57,10 +57,11 @@ use App\Helpers\Permission;
                                 <div>
                                     <div class="cell-title"><?= e($u['name']) ?></div>
                                     <div class="cell-sub"><?= e($u['email']) ?></div>
+                                    <div class="cell-sub d-sm-none"><?= e($u['role']) ?></div>
                                 </div>
                             </div>
                         </td>
-                        <td><span class="chip"><?= e($u['role']) ?></span></td>
+                        <td class="d-none d-sm-table-cell"><span class="chip"><?= e($u['role']) ?></span></td>
                         <td>
                             <?= (int) $u['is_active'] === 1 ? status_badge('Active', 'Aktif') : status_badge('Inactive', 'Nonaktif') ?>
                             <?php if ((int) $u['must_change_password'] === 1): ?><span class="badge-soft badge-soft-warning no-dot ms-1">Wajib ganti password</span><?php endif; ?>

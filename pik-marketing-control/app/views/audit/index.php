@@ -47,17 +47,18 @@ $actionTone = static fn (string $a): string => match (true) {
         <div class="table-wrap">
             <table class="table-pik table-compact">
                 <thead>
-                <tr><th>Waktu</th><th>User</th><th>Aksi</th><th>Data</th><th class="d-none d-lg-table-cell">IP</th><th class="col-actions"></th></tr>
+                <tr><th class="d-none d-sm-table-cell">Waktu</th><th class="d-none d-sm-table-cell">User</th><th class="d-none d-sm-table-cell">Aksi</th><th>Data</th><th class="d-none d-lg-table-cell">IP</th><th class="col-actions"></th></tr>
                 </thead>
                 <tbody>
                 <?php foreach ($logs->items as $log): ?>
                     <tr>
-                        <td class="nowrap tabular text-secondary"><?= e(fmt_datetime($log['created_at'])) ?></td>
-                        <td><?= e($log['user_name'] ?? '—') ?></td>
-                        <td><span class="badge-soft badge-soft-<?= $actionTone((string) $log['action']) ?> no-dot"><?= e($log['action']) ?></span></td>
+                        <td class="nowrap tabular text-secondary d-none d-sm-table-cell"><?= e(fmt_datetime($log['created_at'])) ?></td>
+                        <td class="d-none d-sm-table-cell"><?= e($log['user_name'] ?? '—') ?></td>
+                        <td class="d-none d-sm-table-cell"><span class="badge-soft badge-soft-<?= $actionTone((string) $log['action']) ?> no-dot"><?= e($log['action']) ?></span></td>
                         <td>
                             <div class="cell-title"><?= e(excerpt($log['entity_label'] ?? '', 60)) ?></div>
                             <div class="cell-sub"><?= e($log['entity_type'] ?? '') ?><?= $log['entity_id'] ? ' #' . (int) $log['entity_id'] : '' ?></div>
+                            <div class="cell-sub d-sm-none"><span class="badge-soft badge-soft-<?= $actionTone((string) $log['action']) ?> no-dot"><?= e($log['action']) ?></span> <?= e(fmt_datetime($log['created_at'])) ?> · <?= e($log['user_name'] ?? '—') ?></div>
                         </td>
                         <td class="d-none d-lg-table-cell text-secondary small"><?= e($log['ip_address'] ?? '') ?></td>
                         <td class="col-actions"><a class="btn btn-light btn-sm" href="<?= e(url('/audit-log/' . $log['id'])) ?>">Detail</a></td>

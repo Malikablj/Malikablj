@@ -190,4 +190,29 @@
       });
     });
   }
+  /* Form PO: tambah / hapus baris produk */
+  var lineList = document.querySelector('[data-line-list]');
+  var lineTpl = document.querySelector('template[data-line-template]');
+  var lineAdd = document.querySelector('[data-line-add]');
+  if (lineList && lineTpl && lineAdd) {
+    var nextIndex = lineList.querySelectorAll('[data-line]').length;
+    lineAdd.addEventListener('click', function () {
+      var wrap = document.createElement('div');
+      wrap.innerHTML = lineTpl.innerHTML.replace(/__INDEX__/g, String(nextIndex++)).trim();
+      var row = wrap.firstElementChild;
+      lineList.appendChild(row);
+      var select = row.querySelector('select');
+      if (select) { select.focus(); }
+    });
+    lineList.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-line-remove]');
+      if (!btn) { return; }
+      var row = btn.closest('[data-line]');
+      if (lineList.querySelectorAll('[data-line]').length > 1) {
+        row.remove();
+      } else {
+        row.querySelectorAll('input, select').forEach(function (el) { el.value = ''; });
+      }
+    });
+  }
 })();

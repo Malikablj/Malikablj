@@ -8,10 +8,13 @@ use App\Controllers\AuthController;
 use App\Controllers\ContactController;
 use App\Controllers\CustomerController;
 use App\Controllers\DashboardController;
+use App\Controllers\DeliveryController;
 use App\Controllers\FollowUpController;
 use App\Controllers\LeadController;
 use App\Controllers\NotificationController;
 use App\Controllers\ProfileController;
+use App\Controllers\PurchaseOrderController;
+use App\Controllers\ReturnController;
 use App\Controllers\SearchController;
 use App\Controllers\SetupController;
 use App\Controllers\UserController;
@@ -85,6 +88,33 @@ return static function (Router $r): void {
     $r->post('/follow-ups/{id}/done', [FollowUpController::class, 'done'], 'followups.edit');
     $r->post('/follow-ups/{id}/reschedule', [FollowUpController::class, 'reschedule'], 'followups.edit');
     $r->post('/follow-ups/{id}/delete', [FollowUpController::class, 'destroy'], 'followups.delete');
+
+    // Operations: purchase orders, PO lines, deliveries, returns
+    $r->get('/purchase-orders', [PurchaseOrderController::class, 'index'], 'purchase_orders.view');
+    $r->get('/purchase-orders/create', [PurchaseOrderController::class, 'create'], 'purchase_orders.create');
+    $r->post('/purchase-orders', [PurchaseOrderController::class, 'store'], 'purchase_orders.create');
+    $r->get('/purchase-orders/{id}', [PurchaseOrderController::class, 'show'], 'purchase_orders.view');
+    $r->get('/purchase-orders/{id}/edit', [PurchaseOrderController::class, 'edit'], 'purchase_orders.edit');
+    $r->post('/purchase-orders/{id}', [PurchaseOrderController::class, 'update'], 'purchase_orders.edit');
+    $r->post('/purchase-orders/{id}/delete', [PurchaseOrderController::class, 'destroy'], 'purchase_orders.delete');
+    $r->post('/purchase-orders/{id}/lines', [PurchaseOrderController::class, 'addLine'], 'purchase_orders.edit');
+    $r->get('/po-lines/{id}/edit', [PurchaseOrderController::class, 'editLine'], 'purchase_orders.edit');
+    $r->post('/po-lines/{id}', [PurchaseOrderController::class, 'updateLine'], 'purchase_orders.edit');
+    $r->post('/po-lines/{id}/delete', [PurchaseOrderController::class, 'destroyLine'], 'purchase_orders.edit');
+    $r->get('/deliveries', [DeliveryController::class, 'index'], 'deliveries.view');
+    $r->get('/deliveries/create', [DeliveryController::class, 'create'], 'deliveries.create');
+    $r->post('/deliveries', [DeliveryController::class, 'store'], 'deliveries.create');
+    $r->get('/deliveries/{id}', [DeliveryController::class, 'show'], 'deliveries.view');
+    $r->get('/deliveries/{id}/edit', [DeliveryController::class, 'edit'], 'deliveries.edit');
+    $r->post('/deliveries/{id}', [DeliveryController::class, 'update'], 'deliveries.edit');
+    $r->post('/deliveries/{id}/link', [DeliveryController::class, 'link'], 'deliveries.edit');
+    $r->post('/deliveries/{id}/delete', [DeliveryController::class, 'destroy'], 'deliveries.delete');
+    $r->get('/returns', [ReturnController::class, 'index'], 'returns.view');
+    $r->get('/returns/create', [ReturnController::class, 'create'], 'returns.create');
+    $r->post('/returns', [ReturnController::class, 'store'], 'returns.create');
+    $r->get('/returns/{id}/edit', [ReturnController::class, 'edit'], 'returns.edit');
+    $r->post('/returns/{id}', [ReturnController::class, 'update'], 'returns.edit');
+    $r->post('/returns/{id}/delete', [ReturnController::class, 'destroy'], 'returns.delete');
 
     // Settings (Admin)
     $r->get('/users', [UserController::class, 'index'], 'users.view');

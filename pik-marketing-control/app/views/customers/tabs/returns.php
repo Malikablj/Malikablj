@@ -11,15 +11,17 @@ $list = $data['returns'];
     <?php else: ?>
         <div class="table-wrap">
             <table class="table-pik">
-                <thead><tr><th>Tanggal</th><th>PO</th><th class="d-none d-md-table-cell">Produk</th><th>Alasan</th><th class="num">Qty</th></tr></thead>
+                <thead><tr><th class="d-none d-sm-table-cell">Tanggal</th><th>PO</th><th class="d-none d-md-table-cell">Produk</th><th class="d-none d-sm-table-cell">Alasan</th><th class="num">Qty</th></tr></thead>
                 <tbody>
-                <?php foreach ($list->items as $r): ?>
+                <?php foreach ($list->items as $r): $reason = $r['reason'] ? (App\Models\ProductReturn::REASON_LABELS[$r['reason']] ?? $r['reason']) : null; ?>
                     <tr>
-                        <td class="nowrap"><?= e(fmt_date($r['return_date'])) ?></td>
+                        <td class="nowrap d-none d-sm-table-cell"><?= e(fmt_date($r['return_date'], 'Tanpa tanggal')) ?></td>
                         <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $r['po_id'])) ?>"><?= e($r['po_number'] ?? $r['po_code']) ?></a>
+                            <div class="cell-sub d-sm-none"><?= e(fmt_date($r['return_date'], 'Tanpa tanggal')) ?><?= $reason ? ' · ' . e($reason) : '' ?></div>
+                            <div class="cell-sub d-md-none"><?= e($r['product_name'] ?? ($r['product_legacy'] ?? '')) ?></div>
                             <?php if (empty($r['po_line_id'])): ?><div class="cell-sub"><span class="badge-soft badge-soft-warning no-dot">Belum terhubung ke PO line</span></div><?php endif; ?></td>
                         <td class="d-none d-md-table-cell small"><?= e($r['product_name'] ?? ($r['product_legacy'] ?? '—')) ?></td>
-                        <td><?= e($r['reason'] ?? '—') ?></td>
+                        <td class="d-none d-sm-table-cell"><?= e($reason ?? '—') ?></td>
                         <td class="num fw-semibold"><?= e(fmt_qty($r['return_qty'])) ?></td>
                     </tr>
                 <?php endforeach; ?>

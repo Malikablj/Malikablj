@@ -14,16 +14,17 @@ $list = $data['pos'];
     <?php else: ?>
         <div class="table-wrap">
             <table class="table-pik">
-                <thead><tr><th>No. PO</th><th class="d-none d-md-table-cell">Tanggal</th><th>Status</th><th class="num d-none d-lg-table-cell">Item</th><th class="num">Order</th><th class="num d-none d-md-table-cell">Terkirim</th><th class="num d-none d-lg-table-cell">Retur</th><th class="num">Outstanding</th></tr></thead>
+                <thead><tr><th>No. PO</th><th class="d-none d-md-table-cell">Tanggal</th><th class="d-none d-sm-table-cell">Status</th><th class="num d-none d-lg-table-cell">Item</th><th class="num d-none d-sm-table-cell">Order</th><th class="num d-none d-md-table-cell">Terkirim</th><th class="num d-none d-lg-table-cell">Retur</th><th class="num">Outstanding</th></tr></thead>
                 <tbody>
                 <?php foreach ($list->items as $po): ?>
                     <tr>
                         <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e($po['po_number'] ?? '(tanpa nomor)') ?></a>
-                            <div class="cell-sub"><span class="code-chip"><?= e($po['code']) ?></span><?= $po['payment_term'] ? ' · ' . e($po['payment_term']) : '' ?></div></td>
+                            <div class="cell-sub"><span class="code-chip"><?= e($po['code']) ?></span><?= $po['payment_term'] ? ' · ' . e($po['payment_term']) : '' ?></div>
+                            <div class="cell-sub d-sm-none">Order <?= e(fmt_qty($po['total_qty'])) ?> · <?= status_badge($po['status']) ?></div></td>
                         <td class="d-none d-md-table-cell nowrap text-secondary"><?= e(fmt_date($po['po_date'])) ?></td>
-                        <td><?= status_badge($po['status']) ?></td>
+                        <td class="d-none d-sm-table-cell"><?= status_badge($po['status']) ?></td>
                         <td class="num d-none d-lg-table-cell"><?= (int) $po['line_count'] ?></td>
-                        <td class="num"><?= e(fmt_qty($po['total_qty'])) ?></td>
+                        <td class="num d-none d-sm-table-cell"><?= e(fmt_qty($po['total_qty'])) ?></td>
                         <td class="num d-none d-md-table-cell"><?= e(fmt_qty($po['delivered_qty'])) ?></td>
                         <td class="num d-none d-lg-table-cell"><?= e(fmt_qty($po['return_qty'])) ?></td>
                         <td class="num fw-semibold<?= (int) $po['outstanding_qty'] < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($po['outstanding_qty'])) ?></td>

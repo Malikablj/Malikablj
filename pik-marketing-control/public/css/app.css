@@ -408,11 +408,20 @@ textarea.form-control { min-height: 96px; }
 .table-pik .cell-sub { font-size: .78rem; color: var(--pik-muted); margin-top: 2px; }
 .table-wrap { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-compact tbody td { padding: 10px 14px; }
+@media (max-width: 575.98px) {
+  .table-pik thead th { padding: 10px 12px; }
+  .table-pik tbody td, .table-compact tbody td { padding: 12px; }
+  /* Tombol aksi ditumpuk agar kolom data utama tetap terlihat di layar HP */
+  .table-pik .col-actions { white-space: normal; }
+  .table-pik .col-actions .btn { display: flex; justify-content: center; }
+  .table-pik .col-actions .btn + .btn { margin-top: 6px; }
+}
 .sort-link { color: inherit; display: inline-flex; align-items: center; gap: 4px; }
 .sort-link:hover, .sort-link.active { color: var(--pik-text); }
 .row-muted td { color: var(--pik-subtle); }
 .is-negative { color: var(--pik-danger-ink); }
 .is-positive { color: var(--pik-success-ink); }
+.text-warning-ink { color: var(--pik-warning-ink) !important; }
 
 .list-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--pik-border); flex-wrap: wrap; font-size: .8125rem; color: var(--pik-muted); }
 .pagination { --bs-pagination-border-radius: 9px; --bs-pagination-font-size: .8125rem; --bs-pagination-color: var(--pik-text); --bs-pagination-border-color: var(--pik-border); --bs-pagination-active-bg: var(--pik-text); --bs-pagination-active-border-color: var(--pik-text); --bs-pagination-hover-bg: #F2F2F4; --bs-pagination-focus-box-shadow: 0 0 0 4px rgba(0, 113, 227, .12); margin: 0; gap: 4px; }
@@ -441,7 +450,7 @@ textarea.form-control { min-height: 96px; }
 .tabs-pik a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; color: #3A3A3C; font-size: .8438rem; font-weight: 550; white-space: nowrap; }
 .tabs-pik a:hover { color: var(--pik-text); background: rgba(255, 255, 255, .6); }
 .tabs-pik a.active { background: var(--pik-surface); color: var(--pik-text); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
-.tabs-pik .tab-count { font-size: .6875rem; font-weight: 650; color: var(--pik-muted); background: rgba(0, 0, 0, .05); border-radius: 999px; padding: 1px 7px; }
+.tab-count { display: inline-block; vertical-align: middle; line-height: 1.5; font-size: .6875rem; font-weight: 650; color: var(--pik-muted); background: rgba(0, 0, 0, .05); border-radius: 999px; padding: 1px 7px; }
 .tabs-pik a.active .tab-count { background: var(--pik-accent-soft); color: var(--pik-accent); }
 
 .detail-hero { display: flex; gap: 18px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }
