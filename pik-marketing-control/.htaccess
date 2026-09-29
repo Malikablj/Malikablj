@@ -1,0 +1,17 @@
+# =============================================================================
+# Fallback bila SELURUH folder proyek diunggah langsung ke document root
+# (mis. public_html/). Rekomendasi utama tetap: arahkan DocumentRoot ke public/.
+# File ini memblokir akses ke folder sensitif dan meneruskan request ke public/.
+# =============================================================================
+Options -Indexes
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(app|config|database|storage|tests|cron)(/.*)?$ - [F,L]
+    RewriteRule ^(README\.md|composer\.(json|lock))$ - [F,L]
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
