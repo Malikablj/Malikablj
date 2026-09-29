@@ -33,7 +33,7 @@ function loginSession_(input, user) {
   const last = user.lastLoginAt ? new Date(user.lastLoginAt).getTime() : 0;
   if (!last || currentDate_().getTime() - last > LOGIN_RECORD_INTERVAL_MS) {
     const updated = dbUpdate_('USERS', user.id, { last_login_at: nowIso_() }, { actor: user.email, internal: true });
-    CURRENT_USER_ = toSessionUser_(updated);
+    CURRENT_USER_ = toSessionUser_(updated, user.signInMethod);
   }
   return getSession_(input, CURRENT_USER_ || user);
 }
@@ -57,7 +57,7 @@ function schemaForClient_() {
     if (table.kind !== TABLE_KIND.DATA) return;
     result[table.name] = {
       label: table.label,
-      columns: table.columns.map(function (column) {
+      columns: table.columns.filter(function (column) { return !column.sensitive; }).map(function (column) {
         return {
           name: column.name, type: column.type, label: column.label, required: column.required === true,
           requiredUnlessLegacy: column.requiredUnlessLegacy === true, enumName: column.enumName, ref: column.ref,

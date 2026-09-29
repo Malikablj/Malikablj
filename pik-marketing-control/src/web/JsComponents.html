@@ -546,7 +546,45 @@
     };
 
     // ------------------------------------------------------------------------------------------ Forms
-    var TEXT_TYPES = { string: 'text', text: 'textarea', email: 'email', url: 'url', phone: 'tel' };
+    var TEXT_TYPES = { string: 'text', text: 'textarea', email: 'email', url: 'url', phone: 'tel', password: 'password' };
+
+    /** Temporary password like 'k7mq-2hxa-9rtd' (letters and digits without look-alikes), from the browser's CSPRNG. */
+    function randomPassword() {
+      var alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+      for (;;) {
+        var bytes = new Uint8Array(32);
+        window.crypto.getRandomValues(bytes);
+        var chars = [];
+        for (var i = 0; i < bytes.length && chars.length < 12; i++) {
+          if (bytes[i] < 248) chars.push(alphabet.charAt(bytes[i] % alphabet.length));   // 248 = 8 × 31: no bias
+        }
+        var password = chars.slice(0, 4).join('') + '-' + chars.slice(4, 8).join('') + '-' + chars.slice(8, 12).join('');
+        if (chars.length === 12 && /[a-z]/.test(password) && /[0-9]/.test(password)) return password;
+      }
+    }
+
+    /** Password input with "Tampilkan" (show/hide) and, for passwords set by an Admin, "Buat otomatis". */
+    function passwordControl(input, spec) {
+      var toggle = h('button.btn.btn-quiet.btn-sm', { type: 'button', 'aria-pressed': 'false', title: 'Tampilkan atau sembunyikan password' }, 'Tampilkan');
+      function reveal(show) {
+        input.type = show ? 'text' : 'password';
+        toggle.textContent = show ? 'Sembunyikan' : 'Tampilkan';
+        toggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+      }
+      toggle.addEventListener('click', function () { reveal(input.type === 'password'); });
+      var generate = null;
+      if (spec.generate) {
+        generate = h('button.btn.btn-quiet.btn-sm', { type: 'button' }, 'Buat otomatis');
+        generate.addEventListener('click', function () {
+          input.value = randomPassword();
+          reveal(true);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.focus();
+          input.select();
+        });
+      }
+      return h('div.password-field', input, toggle, generate);
+    }
     var NUMBER_TYPES = { quantity: true, money: true, integer: true, decimal: true };
 
     /**
@@ -633,13 +671,15 @@
           dt.addEventListener('change', function () { clearError(); if (f.onChange) f.onChange(getValue(), api); });
         } else {
           var isArea = (TEXT_TYPES[f.type] || 'text') === 'textarea' || f.multiline;
+          var isPassword = f.type === 'password';
           var txt = h(isArea ? 'textarea.textarea' : 'input.input', {
             id: id, type: isArea ? null : TEXT_TYPES[f.type] || 'text', value: current === null || current === undefined ? '' : current,
-            maxlength: f.maxLength || null, disabled: f.disabled, placeholder: f.placeholder || '', autocomplete: 'off',
-            rows: isArea ? String(f.rows || 3) : null
+            maxlength: f.maxLength || null, disabled: f.disabled, placeholder: f.placeholder || '', autocomplete: f.autocomplete || 'off',
+            rows: isArea ? String(f.rows || 3) : null, spellcheck: isPassword ? 'false' : null, autocapitalize: isPassword ? 'off' : null
           });
-          control = txt;
-          getValue = function () { var v = txt.value.trim(); return v === '' ? null : v; };
+          control = isPassword ? passwordControl(txt, f) : txt;
+          // Passwords are taken exactly as typed (spaces included); other text is trimmed.
+          getValue = function () { var v = isPassword ? txt.value : txt.value.trim(); return v === '' ? null : v; };
           setValue = function (v) { txt.value = v === null || v === undefined ? '' : v; };
           txt.addEventListener('input', function () { clearError(); });
         }
@@ -683,7 +723,7 @@
         if (typeof value === 'number' && isNaN(value)) return 'Isi dengan angka, mis. 1500 atau 12,5.';
         if (typeof value === 'string') {
           if (f.maxLength && value.length > f.maxLength) return 'Maksimal ' + f.maxLength + ' karakter.';
-          if (/^[=']/.test(value)) return 'Tidak boleh diawali tanda = atau \'.';
+          if (f.type !== 'password' && /^[=']/.test(value)) return 'Tidak boleh diawali tanda = atau \'.';
           if (f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Format email tidak valid.';
           if (f.type === 'url' && !/^https?:\/\/\S+$/i.test(value)) return 'Tautan harus diawali http:// atau https://.';
         }

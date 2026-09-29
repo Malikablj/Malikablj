@@ -410,7 +410,7 @@ function dbInsert_(tableName, inputs, context) {
       }], ctx, now);
     } else {
       writeAuditEntries_(records.map(function (record) {
-        return { action: 'CREATE', entityType: table.name, entityId: record.id, changes: compactRecord_(record), note: ctx.auditNote };
+        return { action: 'CREATE', entityType: table.name, entityId: record.id, changes: compactRecord_(record, table), note: ctx.auditNote };
       }), ctx, now);
     }
     resetDbCache_();
@@ -602,23 +602,30 @@ function idSet_(ids) {
   return set;
 }
 
-/** { column: [before, after] } for columns that changed, ignoring updated_at/updated_by. */
+/** Stands in for the value of a sensitive column (password hash) in AUDIT_LOG: the change is visible, the value is not. */
+const SENSITIVE_AUDIT_MASK = '[disembunyikan]';
+
+function auditValue_(column, value) {
+  return column && column.sensitive && value !== null && value !== undefined ? SENSITIVE_AUDIT_MASK : value;
+}
+
+/** { column: [before, after] } for columns that changed, ignoring updated_at/updated_by; sensitive values masked. */
 function diffRecords_(table, before, after) {
   const changes = {};
   table.columns.forEach(function (column) {
     if (column.name === 'updated_at' || column.name === 'updated_by') return;
     const a = before[column.name] === undefined ? null : before[column.name];
     const b = after[column.name] === undefined ? null : after[column.name];
-    if (a !== b) changes[column.name] = [a, b];
+    if (a !== b) changes[column.name] = [auditValue_(column, a), auditValue_(column, b)];
   });
   return changes;
 }
 
-/** Record without empty fields, for AUDIT_LOG. */
-function compactRecord_(record) {
+/** Record without empty fields, for AUDIT_LOG; sensitive values masked. */
+function compactRecord_(record, table) {
   const compact = {};
   Object.keys(record).forEach(function (key) {
-    if (record[key] !== null && record[key] !== undefined) compact[key] = record[key];
+    if (record[key] !== null && record[key] !== undefined) compact[key] = auditValue_(table && table.columnByName[key], record[key]);
   });
   return compact;
 }

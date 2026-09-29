@@ -1,9 +1,11 @@
 /**
  * Administration (Admin only): users and roles, application settings, enum values and migration issues.
  *
- * Users: sign-in is by Google account, so a user is an email plus a role. Guards keep the application administrable:
- * an Admin cannot archive their own account or change their own email, and the last active Admin can be neither
- * archived nor given another role.
+ * Users: a user is an email plus a role, signing in with their Google account (Workspace) or with a password
+ * (PasswordAuth.gs: an initial password can be given at creation, users.setPassword resets one). The password hash
+ * never leaves the server: user rows carry has_password instead. Guards keep the application administrable: an Admin
+ * cannot archive their own account or change their own email, and the last active Admin can be neither archived nor
+ * given another role.
  * Settings: non-system keys only; values are checked by type (Settings.gs) and by the ranges in SETTING_RULES.
  * Enums: labels, order and descriptions are editable; seed values stay active (code depends on them); new values only
  * for enums marked extensible (Enums.gs). ENUMS is a system table, so it is written here, under the script lock and
@@ -17,8 +19,13 @@ const USER_FIELDS = ['name', 'email', 'role', 'phone'];
 // Users
 // ---------------------------------------------------------------------------------------------------------------
 
+/** A USERS row for the browser: role label and has_password, never the password hash. */
 function userForList_(record) {
-  return Object.assign({}, record, { role_label: enumLabel_('USER_ROLE', record.role) });
+  const user = Object.assign({}, record, {
+    role_label: enumLabel_('USER_ROLE', record.role), has_password: Boolean(record.password_hash)
+  });
+  delete user.password_hash;
+  return user;
 }
 
 function listUsers_(input) {
@@ -41,8 +48,18 @@ function lastAdminError_(field) {
     { errors: [{ field: field, code: 'RULE', message: 'Admin aktif terakhir.' }] });
 }
 
+/** { data, password } — the optional initial password is temporary: the user must replace it at the first sign-in. */
 function createUser_(input, user) {
-  return userForList_(createRecord_('USERS', input, USER_FIELDS, user));
+  const params = objectInput_(input);
+  const data = pickFields_(objectInput_(params.data, 'Data'), USER_FIELDS);
+  if (params.password === undefined || params.password === null || params.password === '') {
+    return userForList_(dbInsert_('USERS', [data], userContext_(user))[0]);
+  }
+  requireValidNewPassword_(params.password, data.email, 'password');
+  const record = Object.assign({}, data, {
+    password_hash: hashPassword_(params.password), password_changed_at: nowIso_(), must_change_password: true
+  });
+  return userForList_(dbInsert_('USERS', [record], userContext_(user, { internal: true }))[0]);
 }
 
 function updateUser_(input, user) {

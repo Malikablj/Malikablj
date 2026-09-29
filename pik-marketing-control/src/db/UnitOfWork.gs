@@ -70,7 +70,7 @@ function dbInsertUnit_(steps, context) {
       if (item.records.length === 0) return;
       appendRowsToSheet_(item.state.sheet, item.table, item.records.map(function (record) { return recordToRow_(item.table, record); }));
       writeAuditEntries_(item.records.map(function (record) {
-        return { action: 'CREATE', entityType: item.table.name, entityId: record.id, changes: compactRecord_(record), note: ctx.auditNote };
+        return { action: 'CREATE', entityType: item.table.name, entityId: record.id, changes: compactRecord_(record, item.table), note: ctx.auditNote };
       }), ctx, now);
     });
     resetDbCache_();

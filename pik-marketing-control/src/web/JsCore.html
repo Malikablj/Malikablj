@@ -250,7 +250,27 @@
       if (bar) bar.classList.toggle('active', pending > 0);
     }
 
-    /** google.script.run.api(action, payload) as a Promise of `data`; rejects with ApiError. */
+    // Session token of an email + password sign-in (server: PasswordAuth.gs). Kept in localStorage so this device stays
+    // signed in until "Keluar" or expiry; kept in memory only when the browser blocks storage.
+    var memoryToken = null;
+    var auth = {
+      token: function () {
+        try { return window.localStorage.getItem('pik.token') || memoryToken; } catch (e) { return memoryToken; }
+      },
+      setToken: function (token) {
+        memoryToken = token || null;
+        try {
+          if (token) window.localStorage.setItem('pik.token', token);
+          else window.localStorage.removeItem('pik.token');
+        } catch (e) { /* storage unavailable: memory only */ }
+      }
+    };
+
+    /**
+     * google.script.run.api(action, payload, token) as a Promise of `data`; rejects with ApiError. Sign-in problems also
+     * reach the shell (JsApp): NOT_REGISTERED / AUTH_REQUIRED drop the token and show the sign-in, PASSWORD_CHANGE_REQUIRED
+     * shows the new-password screen.
+     */
     function api(action, payload) {
       setBusy(1);
       return new Promise(function (resolve, reject) {
@@ -264,7 +284,10 @@
             } else {
               var error = response.error || {};
               var apiError = new ApiError(error.code || 'INTERNAL_ERROR', error.message || 'Terjadi kesalahan.', error.details);
+              if (apiError.code === 'NOT_REGISTERED' || apiError.code === 'AUTH_REQUIRED') auth.setToken(null);
               if (apiError.code === 'NOT_REGISTERED' && PIK.onSignedOut) PIK.onSignedOut(apiError);
+              if (apiError.code === 'AUTH_REQUIRED' && PIK.onAuthRequired) PIK.onAuthRequired(apiError);
+              if (apiError.code === 'PASSWORD_CHANGE_REQUIRED' && PIK.onPasswordChangeRequired) PIK.onPasswordChangeRequired(apiError);
               reject(apiError);
             }
           })
@@ -272,7 +295,7 @@
             setBusy(-1);
             reject(new ApiError('NETWORK', 'Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.', { cause: String(error && error.message || error) }));
           })
-          .api(action, payload || {});
+          .api(action, payload || {}, auth.token());
       });
     }
 
@@ -594,6 +617,7 @@
     PIK.addDays = addDays;
     PIK.daysBetween = daysBetween;
     PIK.api = api;
+    PIK.auth = auth;
     PIK.ApiError = ApiError;
     PIK.debounce = debounce;
     PIK.storage = storage;

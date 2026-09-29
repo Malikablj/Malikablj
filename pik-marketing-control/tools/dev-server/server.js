@@ -14,7 +14,8 @@
  * this machine). --demo-users adds one user per role (invented names) so every role can be tried.
  *
  * Identity: Apps Script identifies the Google account; here the browser picks it with the cookie pik_dev_user
- * (GET /__dev/sign-in?email=...). Without the cookie the script owner is signed in.
+ * (GET /__dev/sign-in?email=...). Without the cookie the script owner is signed in. /__dev/sign-in?anonymous=1 gives
+ * no Google identity at all — a visitor of a web app on a regular Gmail account, who signs in with email + password.
  */
 
 const fs = require('node:fs');
@@ -26,6 +27,8 @@ const { URL } = require('node:url');
 const { loadGasProject } = require('../gas-emulator/load-gas');
 
 const OWNER = 'owner@example.com';
+/** Cookie value for "no Google identity" (Session.getActiveUser() returns an empty email). */
+const ANONYMOUS = '-';
 const DEMO_USERS = [
   { name: 'Mira Marketing', email: 'marketing@example.com', role: 'MARKETING' },
   { name: 'Sandi Sales', email: 'sales@example.com', role: 'SALES' },
@@ -187,7 +190,7 @@ function createServer(options) {
         if (typeof fn !== 'string' || fn.endsWith('_') || typeof backend.context[fn] !== 'function') {
           outcome.error = `Script function not found: ${fn}`;
         } else {
-          backend.env.activeUserEmail = email === undefined ? OWNER : email;
+          backend.env.activeUserEmail = email === undefined ? OWNER : email === ANONYMOUS ? '' : email;
           try {
             const result = backend.context[fn](...(Array.isArray(args) ? args : []));
             const problem = transportProblem(result);
@@ -207,7 +210,7 @@ function createServer(options) {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/__dev/sign-in') {
-        const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
+        const email = url.searchParams.get('anonymous') ? ANONYMOUS : String(url.searchParams.get('email') || '').trim().toLowerCase();
         const cookie = email ? `pik_dev_user=${encodeURIComponent(email)}; Path=/; SameSite=Lax` : 'pik_dev_user=; Path=/; Max-Age=0';
         send(response, 302, '', { Location: url.searchParams.get('next') || '/', 'Set-Cookie': cookie });
         return;
@@ -244,6 +247,7 @@ function start(options) {
       if (!options.quiet) {
         console.log(`PIK Marketing Control (dev) di http://127.0.0.1:${server.address().port}`);
         console.log(`Masuk sebagai user lain: http://127.0.0.1:${server.address().port}/__dev/sign-in?email=sales@example.com`);
+        console.log(`Tanpa akun Google (login email + password): http://127.0.0.1:${server.address().port}/__dev/sign-in?anonymous=1`);
       }
       resolve(server);
     });
@@ -257,4 +261,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { DEMO_USERS, OWNER, createServer, parseArgs, start };
+module.exports = { ANONYMOUS, DEMO_USERS, OWNER, createServer, parseArgs, start };

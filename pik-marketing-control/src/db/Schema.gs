@@ -19,13 +19,14 @@
  *   ref / enumName        foreign-key target table / enum in ENUMS
  *   min, minExclusive, max, maxLength, pattern, defaultValue, derive, note
  *   preserveWhitespace    keep text exactly as supplied (original legacy values); other text is trimmed
+ *   sensitive             secret value (password hash): masked in AUDIT_LOG and never sent to the browser
  *   since                 schema version that introduced the column (1 = initial layout)
  * Numeric ranges and table rules apply to new data; legacy rows are only checked structurally (types, enums,
  * references, uniqueness) so migration never rewrites source values. Problems in legacy data are recorded in
  * MIGRATION_ISSUES by the migration engine.
  */
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const COLUMN_TYPES = Object.freeze({
   id: 'ID record, format PREFIX-XXXXXXXXXX (hex huruf besar)',
@@ -140,13 +141,26 @@ function defineTables_() {
     },
     {
       name: 'USERS', label: 'User', group: 'Master', idPrefix: 'USR', softDelete: true, audit: true,
-      description: 'Pengguna aplikasi dan role-nya. Login memakai akun Google; tidak ada password yang disimpan.',
+      description: 'Pengguna aplikasi dan role-nya. Login memakai akun Google (Workspace) atau email + password; ' +
+        'password hanya disimpan sebagai hash.',
       columns: [
         col_('name', 'string', 'Nama', { required: true, maxLength: 150 }),
         col_('email', 'email', 'Email', { required: true }),
         col_('role', 'enum', 'Role', { required: true, enumName: 'USER_ROLE' }),
         col_('phone', 'phone', 'Telepon'),
         col_('last_login_at', 'datetime', 'Login terakhir', { writable: WRITABLE.INTERNAL })
+      ],
+      appendedColumns: [
+        col_('password_hash', 'string', 'Hash password', {
+          writable: WRITABLE.INTERNAL, maxLength: 200, sensitive: true, since: 3,
+          note: 'PBKDF2-SHA256 dengan salt, bukan password. Diisi server; tidak pernah dikirim ke browser atau audit log.'
+        }),
+        col_('password_changed_at', 'datetime', 'Password diubah', {
+          writable: WRITABLE.INTERNAL, since: 3, note: 'Sesi login yang dibuat sebelum waktu ini tidak berlaku lagi.'
+        }),
+        col_('must_change_password', 'boolean', 'Wajib ganti password', {
+          writable: WRITABLE.INTERNAL, since: 3, note: 'TRUE setelah Admin mengatur password sementara.'
+        })
       ],
       unique: [{
         columns: ['email'], normalize: 'lower', description: 'email unik (tanpa membedakan huruf besar/kecil).',

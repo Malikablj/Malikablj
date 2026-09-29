@@ -19,9 +19,10 @@ test('login: akun tak terdaftar ditolak; pemilik skrip menjadi Admin pertama han
   assert.match(stranger.message, /belum terdaftar/);
   assert.equal(app.rows('USERS').length, 0, 'tamu tidak didaftarkan otomatis');
 
+  // No Google identity (regular Gmail deployment): the browser must show the email + password form.
   app.env.activeUserEmail = '';
   const anonymous = app.context.api('session.get', {});
-  assert.equal(anonymous.error.code, 'NOT_REGISTERED');
+  assert.equal(anonymous.error.code, 'AUTH_REQUIRED');
 
   const session = app.ok(OWNER, 'session.login', {});
   assert.equal(session.user.role, 'ADMIN');

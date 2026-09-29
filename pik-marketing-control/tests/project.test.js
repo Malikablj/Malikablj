@@ -92,7 +92,7 @@ test('nama fungsi dan variabel global tidak duplikat antar-file', () => {
 test('fungsi publik (dapat dipanggil google.script.run) hanya yang terdaftar', () => {
   const allowed = [
     'doGet', 'getAppHealth', 'api',
-    'setInitialProperties', 'setupDatabase', 'initializeDatabase', 'verifyDatabase', 'runDatabaseSelfTest',
+    'setInitialProperties', 'setupDatabase', 'initializeDatabase', 'verifyDatabase', 'runDatabaseSelfTest', 'setupAdminAccount',
     'profileSourceWorkbook', 'validateMigrationMapping', 'dryRunMigration', 'runMigration', 'verifyMigration',
   ].sort();
   const publicFunctions = [];

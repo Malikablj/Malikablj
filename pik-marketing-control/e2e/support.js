@@ -13,10 +13,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { chromium } = require('playwright');
-const { DEMO_USERS, OWNER, start } = require('../tools/dev-server/server');
+const { ANONYMOUS, DEMO_USERS, OWNER, start } = require('../tools/dev-server/server');
 
 const ARTIFACTS = path.join(__dirname, 'artifacts');
-const USERS = { admin: OWNER };
+// 'anonymous' = no Google identity: a visitor of a web app on a regular Gmail account (email + password sign-in).
+const USERS = { admin: OWNER, anonymous: ANONYMOUS };
 DEMO_USERS.forEach((user) => { USERS[user.role.toLowerCase()] = user.email; });
 const VIEWPORTS = { desktop: { width: 1440, height: 900 }, tablet: { width: 820, height: 1180 }, phone: { width: 390, height: 844 } };
 
@@ -60,10 +61,11 @@ async function startApp(options = {}) {
   return app;
 }
 
-/** Calls the server API from the page (same google.script.run path as the UI) and returns the envelope. */
+/** Calls the server API from the page (same google.script.run path and session token as the UI) and returns the envelope. */
 function apiCall(page, action, payload) {
   return page.evaluate(({ action: a, payload: p }) => new Promise((resolve) => {
-    google.script.run.withSuccessHandler(resolve).withFailureHandler((error) => resolve({ success: false, error: { code: 'NETWORK', message: String(error) } })).api(a, p || {});
+    google.script.run.withSuccessHandler(resolve).withFailureHandler((error) => resolve({ success: false, error: { code: 'NETWORK', message: String(error) } }))
+      .api(a, p || {}, window.PIK && PIK.auth ? PIK.auth.token() : null);
   }), { action, payload });
 }
 

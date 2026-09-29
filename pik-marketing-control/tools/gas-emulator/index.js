@@ -2,7 +2,7 @@
 
 /**
  * Apps Script service emulator for running src/*.gs under Node: SpreadsheetApp, PropertiesService, LockService,
- * Session, Utilities, DriveApp, HtmlService and Logger. It is a test double, not a full implementation: unknown
+ * CacheService, Session, Utilities, DriveApp, HtmlService and Logger. It is a test double, not a full implementation: unknown
  * API calls fail loudly instead of pretending to work.
  *
  * Every mutating spreadsheet call is recorded in env.calls with the sheet name and whether the script lock was
@@ -124,6 +124,32 @@ function createGasEnvironment(options = {}) {
     },
   };
 
+  // Script cache: string values with an expiry (at most 6 hours, as in Apps Script). env.cache lets tests inspect or
+  // clear it; entries expire on the real clock.
+  env.cache = new Map();
+  const CacheService = {
+    getScriptCache() {
+      return {
+        get(key) {
+          const entry = env.cache.get(String(key));
+          if (!entry) return null;
+          if (entry.expiresAt <= Date.now()) {
+            env.cache.delete(String(key));
+            return null;
+          }
+          return entry.value;
+        },
+        put(key, value, expirationInSeconds) {
+          if (typeof value !== 'string') throw new Error('Emulator: CacheService stores strings only');
+          if (String(key).length > 250) throw new Error('Emulator: cache key too long');
+          const seconds = expirationInSeconds === undefined ? 600 : Math.min(Number(expirationInSeconds), 21600);
+          env.cache.set(String(key), { value, expiresAt: Date.now() + seconds * 1000 });
+        },
+        remove(key) { env.cache.delete(String(key)); },
+      };
+    },
+  };
+
   const Session = {
     getActiveUser: () => ({ getEmail: () => env.activeUserEmail }),
     getEffectiveUser: () => ({ getEmail: () => env.effectiveUserEmail }),
@@ -214,7 +240,7 @@ function createGasEnvironment(options = {}) {
     },
   };
 
-  env.globals = { SpreadsheetApp, PropertiesService, LockService, Session, Utilities, DriveApp, Logger, HtmlService };
+  env.globals = { SpreadsheetApp, PropertiesService, LockService, CacheService, Session, Utilities, DriveApp, Logger, HtmlService };
   return env;
 }
 

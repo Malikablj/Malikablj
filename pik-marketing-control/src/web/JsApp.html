@@ -47,15 +47,22 @@
     }
 
     // ------------------------------------------------------------------------------------------ Boot & sign-in
+    // Two ways in (server: Auth.gs, PasswordAuth.gs): a session token from an email + password sign-in, or the Google
+    // account when the server can see it (Google Workspace, the script owner). Without either, the server answers
+    // AUTH_REQUIRED and the email + password form is shown.
     function boot() {
       var root = document.getElementById('app');
       PIK.mount(root, h('div.boot', h('div.boot-mark', h('div.brand-mark', 'PIK'), h('span.spinner'), h('span', 'Memuat PIK Marketing Control…'))));
       PIK.api('session.get', {}).then(function (session) {
         PIK.session = session;
-        if (PIK.storage.get('signedIn', false)) startApp();
+        if (session.user.signInMethod === 'password') {
+          if (session.user.mustChangePassword) showChangePassword(null);
+          else startApp();
+        } else if (PIK.storage.get('signedIn', false)) startApp();
         else showLogin(null);
       }).catch(function (error) {
-        if (error.code === 'NOT_REGISTERED') showNotRegistered(error);
+        if (error.code === 'AUTH_REQUIRED') showPasswordLogin(error.details && error.details.reason === 'SESSION_ENDED' ? error.message : null);
+        else if (error.code === 'NOT_REGISTERED') showNotRegistered(error);
         else showFatal(error);
       });
     }
@@ -65,7 +72,112 @@
       return h('main.login', h('div.login-card',
         h('div.row', h('div.brand-mark', 'PIK'), h('div', h('div', { style: { fontWeight: '650' } }, 'PIK Marketing Control'), h('div.muted', { style: { fontSize: '13px' } }, company || 'Sistem kendali marketing'))),
         children,
-        h('p.login-foot', 'Masuk memakai akun Google Workspace. Akses mengikuti role yang ditetapkan Admin.')));
+        h('p.login-foot', 'Akses mengikuti role yang ditetapkan Admin.')));
+    }
+
+    /** Submit button that shows a spinner while `run()` (a Promise) is pending. */
+    function busySubmit(label) {
+      var button = h('button.btn.btn-primary.btn-lg.btn-block', { type: 'submit' }, label);
+      return {
+        element: button,
+        start: function () { button.disabled = true; button.insertBefore(h('span.spinner'), button.firstChild); },
+        stop: function () { button.disabled = false; var spinner = button.querySelector('.spinner'); if (spinner) spinner.remove(); }
+      };
+    }
+
+    /** Email + password sign-in (accounts on a regular Gmail deployment, or anyone given a password by the Admin). */
+    function showPasswordLogin(message) {
+      var rememberedEmail = PIK.storage.get('lastEmail', '') || '';
+      var busy = false;
+      var submit = busySubmit('Masuk');
+      var f = ui.form({
+        fields: [
+          { name: 'email', label: 'Email', type: 'email', required: true, autocomplete: 'username', span: true },
+          { name: 'password', label: 'Password', type: 'password', required: true, autocomplete: 'current-password', maxLength: 128, span: true }
+        ],
+        values: { email: rememberedEmail },
+        onSubmit: send
+      });
+      f.element.classList.add('login-form');
+      f.element.appendChild(submit.element);
+      function send() {
+        if (busy || !f.validate()) return;
+        busy = true;
+        submit.start();
+        f.alert(null);
+        var values = f.values();
+        PIK.api('auth.login', { email: values.email, password: values.password }).then(function (result) {
+          PIK.auth.setToken(result.token);
+          PIK.storage.set('lastEmail', values.email);
+          PIK.session = result.session;
+          if (result.session.user.mustChangePassword) showChangePassword(values.password);
+          else startApp();
+        }).catch(function (error) {
+          busy = false;
+          submit.stop();
+          if (error.code === 'NOT_REGISTERED') return;   // the not-registered screen is already shown (JsCore)
+          f.setErrors(error);
+          if (error.code === 'TOO_MANY_ATTEMPTS') f.alert(error.message, 'warn');
+          var input = f.field('password') && f.field('password').input;
+          if (input && error.code !== 'TOO_MANY_ATTEMPTS') { input.value = ''; input.focus(); }
+        });
+      }
+      PIK.mount(document.getElementById('app'), loginFrame([
+        h('div', h('h1', 'Masuk'), h('p.muted', { style: { marginTop: '6px' } }, message || 'Masuk dengan email dan password akun Anda.')),
+        f.element,
+        h('p.muted', { style: { fontSize: '13px', margin: '0' } }, 'Lupa password? Minta Admin mengatur ulang password Anda.'),
+        h('button.btn.btn-quiet.btn-block', { type: 'button', onClick: boot }, 'Masuk dengan akun Google')
+      ]));
+      var first = f.field(rememberedEmail ? 'password' : 'email');
+      if (first && first.input) first.input.focus();
+    }
+
+    /**
+     * New password in place of a temporary one (set by the Admin or by setupAdminAccount). `currentPassword`: the password
+     * just used to sign in, so the user only types the new one; without it the form asks for it.
+     */
+    function showChangePassword(currentPassword) {
+      var busy = false;
+      var submit = busySubmit('Simpan dan lanjutkan');
+      var fields = [];
+      if (!currentPassword) fields.push({ name: 'currentPassword', label: 'Password sementara', type: 'password', required: true, autocomplete: 'current-password', maxLength: 128, span: true });
+      fields.push({ name: 'newPassword', label: 'Password baru', type: 'password', required: true, autocomplete: 'new-password', maxLength: 128, span: true,
+        validate: PIK.forms.passwordRule, hint: 'Minimal 8 karakter, berisi huruf dan angka.' });
+      fields.push({ name: 'confirmPassword', label: 'Ulangi password baru', type: 'password', required: true, autocomplete: 'new-password', maxLength: 128, span: true,
+        validate: function (value, all) { return value === all.newPassword ? null : 'Tidak sama dengan password baru.'; } });
+      var f = ui.form({ fields: fields, values: {}, onSubmit: send });
+      f.element.classList.add('login-form');
+      f.element.appendChild(submit.element);
+      function send() {
+        if (busy || !f.validate()) return;
+        busy = true;
+        submit.start();
+        f.alert(null);
+        var values = f.values();
+        PIK.api('auth.changePassword', { currentPassword: currentPassword || values.currentPassword, newPassword: values.newPassword }).then(function (result) {
+          PIK.auth.setToken(result.token);
+          PIK.session.user = result.user;
+          PIK.toast.success('Password baru tersimpan.');
+          startApp();
+        }).catch(function (error) {
+          busy = false;
+          submit.stop();
+          if (error.code === 'NOT_REGISTERED') return;   // the not-registered screen is already shown (JsCore)
+          if (error.code === 'AUTH_REQUIRED') { showPasswordLogin(error.message); return; }
+          f.setErrors(error);
+        });
+      }
+      var user = PIK.session && PIK.session.user;
+      PIK.mount(document.getElementById('app'), loginFrame([
+        h('div', h('h1', 'Buat password baru'), h('p.muted', { style: { marginTop: '6px' } },
+          'Anda masuk dengan password sementara. Buat password baru yang hanya Anda ketahui untuk melanjutkan.')),
+        user ? h('div.login-identity', h('div.avatar.avatar-lg', fmt.initials(user.name)), h('div', { style: { minWidth: '0' } },
+          h('div.truncate', { style: { fontWeight: '600' } }, user.name), h('div.muted.truncate', { style: { fontSize: '13px' } }, user.email))) : null,
+        f.element,
+        h('button.btn.btn-quiet.btn-block', { type: 'button', onClick: signOut }, 'Keluar')
+      ]));
+      var first = f.field(currentPassword ? 'newPassword' : 'currentPassword');
+      if (first && first.input) first.input.focus();
     }
 
     function showLogin(message) {
@@ -92,6 +204,7 @@
           h('div', { style: { minWidth: '0' } }, h('div.truncate', { style: { fontWeight: '600' } }, user.name), h('div.muted.truncate', { style: { fontSize: '13px' } }, user.email),
             h('div', { style: { marginTop: '4px' } }, ui.statusBadge('USER_ROLE', user.role)))),
         button,
+        h('button.btn.btn-quiet.btn-block', { type: 'button', onClick: function () { showPasswordLogin(null); } }, 'Masuk dengan email dan password'),
         h('a.btn.btn-quiet.btn-block', { href: 'https://accounts.google.com/AccountChooser', target: '_top' }, 'Gunakan akun Google lain')
       ]));
     }
@@ -103,6 +216,7 @@
         email ? h('div.login-identity', h('div.avatar.avatar-lg', fmt.initials(email)), h('div.truncate', email)) : null,
         h('div.form-alert.info', icon('info', 'icon-sm'), h('span', 'Minta Admin menambahkan email ini di Pengaturan › User, lalu coba lagi.')),
         h('button.btn.btn-primary.btn-lg.btn-block', { type: 'button', onClick: boot }, 'Coba lagi'),
+        h('button.btn.btn-quiet.btn-block', { type: 'button', onClick: function () { showPasswordLogin(null); } }, 'Masuk dengan email dan password'),
         h('a.btn.btn-quiet.btn-block', { href: 'https://accounts.google.com/AccountChooser', target: '_top' }, 'Gunakan akun Google lain')
       ]));
     }
@@ -117,14 +231,33 @@
     PIK.onSignedOut = function (error) {
       PIK.storage.remove('signedIn');
       closeAllLayers();
+      shell = null;
       showNotRegistered(error);
     };
 
+    /** A password session that ended while the app was open (expired, password reset by the Admin). */
+    PIK.onAuthRequired = function (error) {
+      if (!shell) return;
+      closeAllLayers();
+      shell = null;
+      showPasswordLogin(error.message);
+    };
+
+    PIK.onPasswordChangeRequired = function () {
+      if (!shell) return;
+      closeAllLayers();
+      shell = null;
+      showChangePassword(null);
+    };
+
     function signOut() {
+      var withPassword = Boolean(PIK.auth.token()) || (PIK.session && PIK.session.user && PIK.session.user.signInMethod === 'password');
+      PIK.auth.setToken(null);
       PIK.storage.remove('signedIn');
       closeAllLayers();
       shell = null;
-      showLogin('Anda telah keluar. Masuk kembali untuk melanjutkan.');
+      if (withPassword || !PIK.session || !PIK.session.user) showPasswordLogin('Anda telah keluar. Masuk kembali untuk melanjutkan.');
+      else showLogin('Anda telah keluar. Masuk kembali untuk melanjutkan.');
     }
 
     var closePalette = null;

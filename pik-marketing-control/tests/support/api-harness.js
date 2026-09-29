@@ -59,7 +59,9 @@ function createApp(options = {}) {
     context,
     env,
     users: {},
+    /** Google identity of `who`: role key or email; 'anonymous' = none (regular Gmail deployment, not the owner). */
     emailOf(who) {
+      if (who === 'anonymous') return '';
       return emails[who] || who;
     },
     /** Moves the pinned clock (ISO timestamp); later calls continue from there. */
@@ -78,6 +80,26 @@ function createApp(options = {}) {
       const response = context.api(action, payload === undefined ? {} : payload);
       assertTransportSafe(response, action);
       return plain(response);
+    },
+    /** Raw envelope of api(action, payload, token) from a browser without a Google identity (password sign-in). */
+    callWithToken(token, action, payload) {
+      clockMs += 1000;
+      context.setClockForTesting_(new Date(clockMs).toISOString());
+      env.activeUserEmail = '';
+      const response = context.api(action, payload === undefined ? {} : payload, token);
+      assertTransportSafe(response, action);
+      return plain(response);
+    },
+    okWithToken(token, action, payload) {
+      const response = app.callWithToken(token, action, payload);
+      assert.equal(response.success, true, `${action} dengan token gagal: ${JSON.stringify(response.error)}`);
+      return response.data;
+    },
+    failWithToken(token, action, payload, code) {
+      const response = app.callWithToken(token, action, payload);
+      assert.equal(response.success, false, `${action} dengan token seharusnya gagal (${code})`);
+      if (code) assert.equal(response.error.code, code, `${action}: ${JSON.stringify(response.error)}`);
+      return response.error;
     },
     ok(who, action, payload) {
       const response = app.call(who, action, payload);

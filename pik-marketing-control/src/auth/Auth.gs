@@ -1,10 +1,15 @@
 /**
  * Authentication and authorization for the web app.
  *
- * Identity is the caller's Google account (Session.getActiveUser, web app deployed "execute as me" for the PIK
- * domain), matched case-insensitively with USERS.email. Only active users can call the API, and the role always comes
- * from USERS, never from the client. First run: while USERS has no active ADMIN, the account the web app runs as (the
- * script owner) is registered as ADMIN when it signs in, so the application can be set up without editing sheets.
+ * Identity, in this order:
+ *   1. a session token from an email + password sign-in (PasswordAuth.gs) — needed when the web app runs on a regular
+ *      Gmail account, where Google does not reveal the visitor to the app;
+ *   2. otherwise the caller's Google account (Session.getActiveUser: web app "execute as me" in the same Google
+ *      Workspace domain, or the script owner), matched case-insensitively with USERS.email;
+ *   3. neither → AUTH_REQUIRED: the browser shows the email + password form.
+ * Only active users can call the API, and the role always comes from USERS, never from the client. First run: while
+ * USERS has no active ADMIN, the script owner is registered as ADMIN when they open the app with their Google account;
+ * setupAdminAccount() (editor) does the same with a temporary password where that identity is not available.
  *
  * MODULE_PERMISSIONS is the authorization matrix of the Technical Specification (§9). Modules the matrix does not
  * cover follow the recommended default of decision D5 (docs/DECISIONS.md): finance Admin RW / Management R / others
@@ -79,19 +84,32 @@ function permissionsFor_(role) {
   return result;
 }
 
-function toSessionUser_(record) {
-  return { id: record.id, name: record.name, email: record.email, role: record.role, lastLoginAt: record.last_login_at || null };
+/**
+ * The signed-in user as the browser sees it. `method`: 'password' (session token) or 'google'. A temporary password
+ * set by an Admin must be changed first, but only matters for password sessions.
+ */
+function toSessionUser_(record, method) {
+  const signInMethod = method === 'password' ? 'password' : 'google';
+  return {
+    id: record.id, name: record.name, email: record.email, role: record.role, lastLoginAt: record.last_login_at || null,
+    signInMethod: signInMethod, hasPassword: Boolean(record.password_hash),
+    mustChangePassword: signInMethod === 'password' && record.must_change_password === true
+  };
 }
 
-/** The signed-in user (cached per execution). Throws NOT_REGISTERED for unknown, archived or unidentified accounts. */
-function requireUser_() {
+/**
+ * The signed-in user (cached per execution). `token`: the session token of a password sign-in, if any.
+ * Throws AUTH_REQUIRED when nobody is signed in, NOT_REGISTERED for unknown or archived accounts.
+ */
+function requireUser_(token) {
   if (CURRENT_USER_) return CURRENT_USER_;
-  const email = getActiveUserEmail_();
-  if (!email) {
-    throw appError_(ERROR_CODE.NOT_REGISTERED,
-      'Akun Google Anda tidak dapat dikenali. Buka aplikasi dengan akun Google Workspace PIK.', { email: null });
-  }
   const users = loadTable_('USERS').records;
+  if (token) {
+    CURRENT_USER_ = toSessionUser_(userFromSessionToken_(token, users), 'password');
+    return CURRENT_USER_;
+  }
+  const email = getActiveUserEmail_();
+  if (!email) throw appError_(ERROR_CODE.AUTH_REQUIRED, 'Silakan masuk dengan email dan password Anda.', { reason: 'SIGN_IN' });
   let record = findUserByEmail_(users, email);
   if (!record && isScriptOwner_(email) && !hasActiveAdmin_(users)) record = registerFirstAdmin_(email);
   if (!record) {
@@ -101,7 +119,7 @@ function requireUser_() {
   if (record.is_active === false) {
     throw appError_(ERROR_CODE.NOT_REGISTERED, 'Akun ' + email + ' sudah dinonaktifkan. Hubungi Admin.', { email: email });
   }
-  CURRENT_USER_ = toSessionUser_(record);
+  CURRENT_USER_ = toSessionUser_(record, 'google');
   return CURRENT_USER_;
 }
 

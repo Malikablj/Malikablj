@@ -10,10 +10,11 @@ Frontend hanya memanggil satu fungsi server:
 google.script.run
   .withSuccessHandler(function (envelope) { /* { success, data } atau { success: false, error } */ })
   .withFailureHandler(function (error) { /* jaringan / eksekusi gagal */ })
-  .api('customers.list', { search: 'kemasan', page: 1 });
+  .api('customers.list', { search: 'kemasan', page: 1 }, token);
 ```
 
-Di klien dibungkus `PIK.api(action, payload)` (Promise; `src/web/JsCore.html`). Nilai yang dikirim dan diterima hanya JSON
+`token` = token sesi dari `auth.login` (login email + password); `null` untuk sesi akun Google. Di klien dibungkus
+`PIK.api(action, payload)` (Promise; `src/web/JsCore.html`), yang menyertakan token tersimpan secara otomatis. Nilai yang dikirim dan diterima hanya JSON
 (string, angka, boolean, null, objek, array). Server tidak pernah mengembalikan `Date`: tanggal = teks `yyyy-MM-dd`, waktu = teks
 ISO 8601 UTC. Test memeriksa setiap respons API terhadap aturan ini.
 
@@ -30,7 +31,10 @@ ISO 8601 UTC. Test memeriksa setiap respons API terhadap aturan ini.
 | `NOT_FOUND` | Record atau aksi tidak ada | — |
 | `CONFLICT` | Record sudah diubah orang lain sejak dibaca | `updatedAt` terbaru |
 | `FORBIDDEN` | Role tidak berhak | `module`, `access` |
-| `NOT_REGISTERED` | Akun Google tidak terdaftar / dinonaktifkan | `email` |
+| `NOT_REGISTERED` | Akun tidak terdaftar / dinonaktifkan | `email` |
+| `AUTH_REQUIRED` | Belum masuk (tidak ada token dan Google tidak mengenali pengunjung), atau sesi berakhir | `reason`: `SIGN_IN` / `SESSION_ENDED` |
+| `PASSWORD_CHANGE_REQUIRED` | Masuk dengan password sementara: ganti password dulu | — |
+| `TOO_MANY_ATTEMPTS` | Terlalu banyak login gagal untuk email ini | `retryAfterMinutes` |
 | `LOCK_TIMEOUT` | Penulisan lain sedang berjalan; coba lagi | — |
 | `SCHEMA_MISMATCH`, `CONFIG_MISSING`, `READ_ONLY` | Masalah database/konfigurasi | — |
 | `INTERNAL_ERROR` | Error tak terduga (detail hanya di log server) | — |
@@ -42,10 +46,17 @@ menampilkan dialog konfirmasi lalu mengirim ulang dengan `confirmOverQuantity: t
 
 ## 3. Identitas dan otorisasi
 
-- Identitas = akun Google pemanggil (`Session.getActiveUser()`), dicocokkan dengan `USERS.email` (tanpa beda huruf besar/kecil).
-  Role selalu dari `USERS`, tidak pernah dari payload.
-- Pertama kali: selama `USERS` belum punya ADMIN aktif, pemilik skrip (akun deployer) otomatis didaftarkan sebagai ADMIN saat
-  membuka aplikasi (tercatat di AUDIT_LOG).
+- Identitas, berurutan (`src/auth/Auth.gs`, `src/auth/PasswordAuth.gs`):
+  1. token sesi dari `auth.login` (email + password) — dipakai bila web app dipasang di akun Gmail biasa;
+  2. akun Google pemanggil (`Session.getActiveUser()`: web app di Google Workspace yang sama, atau pemilik skrip);
+  3. tidak ada keduanya → `AUTH_REQUIRED` (browser menampilkan form email + password).
+  Keduanya dicocokkan dengan `USERS` (email tanpa beda huruf besar/kecil). Role selalu dari `USERS`, tidak pernah dari payload
+  atau token.
+- Token: `v1.<id user>.<dibuat ms>.<berakhir ms>.<nonce>.<tanda tangan HMAC-SHA256>`, berlaku 30 hari; ditolak bila dibuat
+  sebelum password terakhir diganti/di-reset atau user nonaktif.
+- Pertama kali: selama `USERS` belum punya ADMIN aktif, pemilik skrip otomatis didaftarkan sebagai ADMIN saat membuka aplikasi
+  dengan akun Google-nya (tercatat di AUDIT_LOG). Pada akun Gmail biasa, jalankan `setupAdminAccount()` dari editor: akun pemilik
+  menjadi ADMIN dengan password sementara di log eksekusi.
 - Setiap route punya izin `[modul, 'R' | 'RW']` yang dicek di server sebelum handler berjalan (matriks: `src/auth/Auth.gs`,
   `MODULE_PERMISSIONS`; keputusan D5). Data keuangan di layar bersama (detail customer/PO, dashboard) hanya dikirim ke role yang
   boleh membaca modul `finance`.
@@ -88,7 +99,9 @@ Kolom **Izin** = modul dan akses yang dibutuhkan. `data` = kolom yang boleh diis
 
 | Aksi | Izin | Input | Output |
 |---|---|---|---|
-| `session.get` | terdaftar | — | `{ user, permissions, enums, settings, schema, app: { name, schemaVersion, timeZone, today, now } }` |
+| `auth.login` | **publik** | `{ email, password }` | `{ token, expiresAt, session }`. Gagal: `VALIDATION_ERROR` "Email atau password salah." (sama untuk email tak terdaftar), `NOT_REGISTERED` (nonaktif, hanya bila password benar), `TOO_MANY_ATTEMPTS` (5× gagal → 15 menit) |
+| `auth.changePassword` | terdaftar (juga saat wajib ganti) | `{ currentPassword, newPassword }` | `{ token, expiresAt, user }`; sesi lain berakhir. User Google tanpa password boleh membuat tanpa `currentPassword`. Kebijakan: ≥ 8 karakter, huruf dan angka, bukan email |
+| `session.get` | terdaftar (juga saat wajib ganti) | — | `{ user, permissions, enums, settings, schema, app: { name, schemaVersion, timeZone, today, now } }`; `user` memuat `signInMethod` (`google`/`password`), `hasPassword`, `mustChangePassword` |
 | `session.login` | terdaftar | — | Sama dengan `session.get`; mencatat `last_login_at` (paling sering tiap 10 menit) |
 | `users.options` | terdaftar | picker | User aktif untuk pilihan PIC |
 | `search.global` | terdaftar | `{ query }` (≥ 2 huruf) | `{ groups: [{ key, label, total, items: [{ id, title, subtitle }] }] }` — hanya modul yang boleh dibaca |
@@ -148,7 +161,8 @@ Kolom **Izin** = modul dan akses yang dibutuhkan. `data` = kolom yang boleh diis
 
 | Aksi | Izin | Catatan |
 |---|---|---|
-| `users.list` / `create` / `update` / `archive` / `restore` | users R / RW | Email unik tanpa beda huruf. Admin tidak dapat menonaktifkan akun sendiri atau mengubah email sendiri; Admin aktif terakhir tidak dapat dinonaktifkan atau diganti role-nya |
+| `users.list` / `create` / `update` / `archive` / `restore` | users R / RW | Email unik tanpa beda huruf. Admin tidak dapat menonaktifkan akun sendiri atau mengubah email sendiri; Admin aktif terakhir tidak dapat dinonaktifkan atau diganti role-nya. Baris user memuat `has_password`, `must_change_password` (hash tidak pernah dikirim). `create` = `{ data, password? }`: password awal bersifat sementara |
+| `users.setPassword` | users RW | `{ id, password, mustChange (default true) }`: password baru untuk user lain (bukan akun sendiri); sesi user itu berakhir, kunci login dibuka |
 | `settings.list` / `settings.update` | settings R / RW | `{ key, value }`; setting sistem ditolak (`FORBIDDEN`); nilai dicek per tipe dan batas (mis. `MAX_PAGE_SIZE` ≥ `DEFAULT_PAGE_SIZE`) |
 | `enums.list` / `create` / `update` | settings R / RW | Nilai baru hanya untuk enum yang dapat diperluas (`ACTIVITY_TYPE`); nilai sistem tidak dapat dinonaktifkan; dropdown sheet ikut diperbarui; audit `SETTING_UPDATE` |
 | `migrationIssues.list` / `resolve` | migrationIssues R / RW | `list` + `counts` (terbuka per tingkat/jenis). `resolve` = `{ id, resolution_status, resolution_note, expectedUpdatedAt }`; catatan wajib kecuali membuka kembali; `resolved_by`/`resolved_at` diisi server |

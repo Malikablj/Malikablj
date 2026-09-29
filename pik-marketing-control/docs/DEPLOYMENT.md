@@ -6,7 +6,8 @@ pemasangan pertama: §1–§3 (kode + database) → §7 (migrasi, setelah D3/D4 
 ## Prasyarat
 
 - Node.js 20 atau lebih baru.
-- Akun Google Workspace PIK yang boleh membuat Apps Script project dan spreadsheet.
+- Akun Google yang akan menjadi pemilik aplikasi: akun Google Workspace PIK (email perusahaan), **atau** akun Gmail biasa (§6.2).
+  Aplikasi berjalan atas nama akun ini dan database tersimpan di Drive-nya, jadi pilih akun yang akan tetap ada.
 - Google Apps Script API aktif untuk akun tersebut: <https://script.google.com/home/usersettings>.
 
 ## 1. Hubungkan kode ke project Apps Script
@@ -38,6 +39,7 @@ npx clasp login
 | `ADMIN_EMAILS` | tidak | Email lain (dipisah koma) yang boleh menjalankan fungsi pemeliharaan selain pemilik skrip. |
 | `MIGRATION_PACKAGE_FILE_ID` | untuk migrasi | ID file `migration-package.json` di Drive (§7). |
 | `MIGRATION_DRY_RUN` | — | Diisi otomatis oleh `dryRunMigration()` (hash paket + hasil). Jangan diubah manual. |
+| `AUTH_TOKEN_SECRET` | — | Diisi otomatis saat login password pertama (kunci tanda tangan token sesi). Jangan dibagikan. Menghapus atau mengubahnya mengakhiri semua sesi login password. |
 
 Jangan menyimpan rahasia di kode atau di spreadsheet.
 
@@ -75,7 +77,7 @@ Kirim ringkasan log langkah 1–3 ke tim pengembang. Hasil ini menjadi verifikas
 **Sebelum mulai:** konfirmasi keputusan D5 (hak akses, `docs/DECISIONS.md` §1.1). Default yang dipasang dapat langsung dipakai;
 perubahan dilakukan di `MODULE_PERMISSIONS` (`src/auth/Auth.gs`) lalu `npm test`.
 
-### 6.1 Deploy pertama
+### 6.1 Deploy pertama — Google Workspace (email perusahaan)
 
 1. Pastikan hijau, lalu kirim kode:
 
@@ -87,20 +89,40 @@ perubahan dilakukan di `MODULE_PERMISSIONS` (`src/auth/Auth.gs`) lalu `npm test`
 2. Editor Apps Script → **Deploy → New deployment** → jenis **Web app**:
    - *Execute as*: **Me** (akun deployer; `appsscript.json`: `USER_DEPLOYING`). Aplikasi membaca dan menulis database dengan akun ini,
      jadi pengguna tidak perlu akses ke spreadsheet.
-   - *Who has access*: **Anyone within** domain PIK (`DOMAIN`). Identitas pengguna (`Session.getActiveUser`) hanya tersedia untuk akun
-     di domain Google Workspace yang sama dengan pemilik skrip. Akun di luar domain ditolak dengan pesan "Akun Google Anda tidak dapat
-     dikenali".
+   - *Who has access*: **Anyone within** domain PIK (`DOMAIN`). Google memberi tahu aplikasi siapa penggunanya hanya untuk akun di
+     domain Workspace yang sama dengan pemilik skrip; mereka masuk dengan akun Google tanpa password.
    - **Deploy**, setujui izin (Spreadsheet, Drive, email pengguna), lalu salin **Web app URL** (berakhiran `/exec`).
 3. **Admin pertama:** pemilik skrip membuka URL tersebut. Layar Masuk menampilkan emailnya → **Masuk**. Karena `USERS` belum punya
    Admin aktif, akun ini otomatis didaftarkan sebagai ADMIN (tercatat di AUDIT_LOG). Ubah nama tampilannya di
    **Pengaturan › User**.
 4. **Tambahkan pengguna** di **Pengaturan › User → User baru**: nama, email Google Workspace, dan role (Admin, Marketing, Sales,
-   Management, Viewer). Pengguna membuka URL yang sama. Akun yang belum terdaftar melihat layar "belum terdaftar" beserta emailnya
-   untuk dikirim ke Admin. Menonaktifkan user langsung mencabut aksesnya.
+   Management, Viewer); kosongkan *Password awal*. Pengguna membuka URL yang sama. Akun yang belum terdaftar melihat layar "belum
+   terdaftar" beserta emailnya untuk dikirim ke Admin. Menonaktifkan user langsung mencabut aksesnya.
 5. Periksa **Pengaturan › Pengaturan** (nama perusahaan, mata uang, ukuran halaman) dan **Nilai pilihan** (label enum, jenis
    aktivitas tambahan).
 
-### 6.2 Memperbarui aplikasi
+### 6.2 Deploy pertama — akun Gmail biasa (login email + password)
+
+Pada akun Gmail biasa, Google tidak memberi tahu aplikasi siapa pengunjungnya (kecuali pemiliknya sendiri). Karena itu tim masuk
+dengan **email + password** yang dibuat Admin (keputusan D15). Password hanya disimpan sebagai hash; database tetap hanya dapat dibuka
+pemilik.
+
+1. Kirim kode seperti §6.1 langkah 1, lalu jalankan §3 (`setupDatabase`, `runDatabaseSelfTest`, `verifyDatabase`).
+2. **Admin pertama:** di editor pilih fungsi `setupAdminAccount` → **Run**. Buka **Execution log**: tercatat `Email` (akun pemilik) dan
+   `Password sementara` (mis. `k7mq-2hxa-9rtd`). Password ini hanya muncul di log eksekusi Anda.
+3. **Deploy → New deployment** → **Web app**: *Execute as* **Me**; *Who has access* **Anyone** ("Siapa saja"). Semua data tetap
+   dilindungi login aplikasi; pengunjung tanpa akun hanya melihat layar Masuk. Pilih **Anyone with Google account** bila semua anggota
+   tim memakai akun Google. **Deploy** → setujui izin → salin **Web app URL** (`…/exec`).
+4. Buka URL → form **Masuk** → email pemilik + password sementara → layar **Buat password baru** → isi password baru (≥ 8 karakter,
+   huruf dan angka) → Dashboard. Anda Admin.
+5. **Tambahkan tim** di **Pengaturan › User → User baru**: nama, email (Gmail atau email lain), role, lalu **Password awal** → **Buat
+   otomatis** (atau ketik sendiri) → **Simpan**. Sampaikan email + password awal kepada orangnya secara langsung. Saat pertama masuk ia
+   wajib membuat password sendiri. Perangkatnya tetap masuk selama 30 hari atau sampai **Keluar**.
+6. **Lupa password:** Admin membuka menu ⋯ user tersebut → **Atur password** → **Buat otomatis** → **Simpan password** (sesi lamanya
+   berakhir, ia wajib membuat password baru). Bila Admin sendiri lupa, pemilik skrip menjalankan `setupAdminAccount` lagi.
+7. Periksa **Pengaturan** seperti §6.1 langkah 5.
+
+### 6.3 Memperbarui aplikasi
 
 - `npm run push` hanya memperbarui kode *HEAD* (URL uji `/dev`, hanya untuk editor skrip). URL `/exec` tetap menjalankan versi yang
   di-deploy sampai: **Deploy → Manage deployments** → deployment yang ada → ✏️ → *Version*: **New version** → **Deploy**. URL tidak
@@ -108,13 +130,14 @@ perubahan dilakukan di `MODULE_PERMISSIONS` (`src/auth/Auth.gs`) lalu `npm test`
 - Uji dulu di URL `/dev` dengan akun Admin. Bila ada perubahan skema, jalankan §5 sebelum membuat versi baru.
 - Rollback: **Manage deployments** → ✏️ → pilih versi sebelumnya → **Deploy**.
 
-### 6.3 Daftar periksa pertama di Apps Script sungguhan
+### 6.4 Daftar periksa pertama di Apps Script sungguhan
 
 Semua alur ini lulus di emulator (`npm run test:e2e`), tetapi belum pernah dijalankan di Google Apps Script. Jalankan sekali dengan
 pemilik skrip dan minimal satu akun uji per role (browser/profil terpisah):
 
-1. Pemilik membuka `/exec` → layar Masuk menampilkan email yang benar → Dashboard tampil. KPI = 0 untuk database kosong, atau cocok
-   dengan `docs/MIGRATION_REPORT.md` setelah migrasi (jumlah customer, PO terbuka, outstanding).
+1. Pemilik membuka `/exec` → masuk (Workspace: layar Masuk menampilkan email yang benar; Gmail: email + password dari §6.2) →
+   Dashboard tampil. KPI = 0 untuk database kosong, atau cocok dengan `docs/MIGRATION_REPORT.md` setelah migrasi (jumlah customer,
+   PO terbuka, outstanding).
 2. Tambahkan akun Sales dan Viewer. Sales dapat membuat customer, lead, dan aktivitas, tetapi tidak dapat mencatat delivery. Viewer
    tidak melihat tombol tambah dan menu Invoice. Akun yang tidak terdaftar melihat layar "belum terdaftar".
 3. Alur lengkap sekali: customer → contact → lead → aktivitas + follow-up → PO + item → delivery → retur. Outstanding PO dan dashboard
@@ -123,11 +146,14 @@ pemilik skrip dan minimal satu akun uji per role (browser/profil terpisah):
 5. Dua pengguna mengubah record yang sama: penyimpanan kedua mendapat pesan bahwa data sudah diubah orang lain.
 6. Buka URL di ponsel: navigasi bawah, kartu, dan form sebagai bottom sheet.
 7. Catat waktu respons daftar dengan data hasil migrasi. Laporkan bila halaman daftar butuh lebih dari beberapa detik.
-8. Jalankan `verifyDatabase` → `ok: true`. Arsipkan record uji, atau pulihkan salinan database (§6.4).
+8. Login password (Gmail): masuk dengan password sementara → wajib buat password baru → muat ulang halaman tetap masuk → **Keluar**
+   → masuk lagi. Catat lama proses Masuk (hash password sengaja berat; wajar 1–3 detik). Admin **Atur password** → sesi user itu
+   berakhir di perangkatnya. 5 kali password salah → email terkunci 15 menit.
+9. Jalankan `verifyDatabase` → `ok: true`. Arsipkan record uji, atau pulihkan salinan database (§6.5).
 
 Kirim hasilnya (lulus/gagal per langkah, tanpa data bisnis) ke tim pengembang.
 
-### 6.4 Backup
+### 6.5 Backup
 
 - Sebelum migrasi, sebelum setiap versi baru, dan secara berkala: **File → Make a copy** spreadsheet database ke folder yang hanya
   dapat diakses Admin. Riwayat versi spreadsheet (**File → Version history**) adalah lapisan kedua.

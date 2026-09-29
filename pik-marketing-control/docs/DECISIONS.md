@@ -22,6 +22,7 @@ Default yang sudah dipasang di kode selalu dapat dibalik. Rincian opsi dan dampa
 | D12 | ID dan prefiks | Default | `PREFIX-XXXXXXXXXX` (10 hex); ID workbook dipakai apa adanya; `PAY-` untuk invoice |
 | D13 | Status customer hasil default | Default | `status` customer opsional; migrasi mengisi `ACTIVE` |
 | D14 | Follow-up today/overdue | Default | `OVERDUE` bukan status tersimpan; dihitung dari tanggal dan status selain `DONE`/`CANCELLED` |
+| D15 | Login bila aplikasi dipasang di akun Gmail biasa (bukan Google Workspace) | **Diputuskan: login email + password di aplikasi** (pilihan pengguna, 2026-09-29) | Login akun Google tetap berlaku bila Google mengenali pengunjung (Workspace, pemilik skrip). Selain itu pengguna masuk dengan email + password yang dibuat Admin. Rincian teknis: §7 |
 
 ### 1.1 D5 — DECISION REQUIRED: hak akses
 
@@ -49,7 +50,7 @@ Keputusan teknis yang dapat dibalik, diambil sendiri sesuai aturan kerja proyek.
 | P2-03 | Initializer dua tahap: rencana dulu, lalu eksekusi. Header yang berbeda, data tanpa header, atau versi skema database yang lebih baru membatalkan run tanpa perubahan apa pun. | Starter menimpa header tanpa pemeriksaan; database tidak boleh rusak diam-diam. |
 | P2-04 | Soft delete (`is_active`) di semua tabel bisnis; tidak ada API hapus permanen. Nilai unik tetap "dipakai" oleh record arsip. | PRD: tidak ada penghapusan destruktif transaksi. Record arsip dapat dipulihkan tanpa bentrok. |
 | P2-05 | `created_by`, `updated_by`, dan `AUDIT_LOG.actor_email` berisi email, bukan ID user. | Pelaku bisa proses sistem/migrasi yang tidak ada di `USERS`. |
-| P2-06 | `USERS` tanpa `password_hash`. | Login memakai akun Google (Apps Script `Session`); tidak ada password yang disimpan. |
+| P2-06 | `USERS` tanpa `password_hash`. **Diganti oleh D15/P7-01:** sejak skema v3 `USERS` menyimpan hash password (bukan password). | Semula login hanya memakai akun Google (Apps Script `Session`). |
 | P2-07 | `products.status` dari spesifikasi tidak dibuat; `is_active` mewakili kolom `Active` workbook. | Nilai status produk tidak didefinisikan di mana pun; kolom dapat ditambahkan di akhir tabel bila dibutuhkan. |
 | P2-08 | `STOCK.status` (enum `STOCK_STATUS`: `READY`, `RESERVED`). | Di ENUMS workbook, Ready/Reserved tercatat sebagai StockType, padahal di data dipakai sebagai status. |
 | P2-09 | Kolom tambahan di luar spesifikasi: kunci pencarian `*_key`, `variant`, `payment_term`, `sj_number`, `destination`, lampiran, kolom `*_legacy`, dan lineage (`is_legacy`, `source_file`, `source_sheet`, `legacy_row`, `import_ref`, `migrated_at`, `migration_hash`). | Berasal dari profil data Phase 01; menjaga jejak sumber dan idempotensi migrasi. |
@@ -85,7 +86,7 @@ Keputusan teknis yang dapat dibalik, diambil sendiri sesuai aturan kerja proyek.
 | ID | Keputusan | Alasan |
 |---|---|---|
 | P4-01 | Satu fungsi server `api(action, payload)` dengan tabel route tertutup. Setiap route membawa izin `[modul, R\|RW]` yang dicek sebelum handler berjalan. | Satu pintu masuk: izin tidak dapat terlewat per fungsi. Test mencocokkan setiap route × role dengan matriks. |
-| P4-02 | Login = akun Google (web app *execute as* deployer, akses domain) dicocokkan dengan `USERS.email`; role selalu dari `USERS`. Admin pertama = pemilik skrip saat `USERS` belum punya Admin aktif (di bawah lock, diaudit). | Tanpa password tersimpan (P2-06); aplikasi dapat disiapkan tanpa mengedit sheet. |
+| P4-02 | Login = akun Google (web app *execute as* deployer, akses domain) dicocokkan dengan `USERS.email`; role selalu dari `USERS`. Admin pertama = pemilik skrip saat `USERS` belum punya Admin aktif (di bawah lock, diaudit). Ditambah login email + password (P7-01). | Aplikasi dapat disiapkan tanpa mengedit sheet. |
 | P4-03 | Izin ditegakkan di server; UI hanya menyembunyikan tombol. Data keuangan di layar bersama hanya dikirim ke role dengan akses `finance`. | UI dapat dilewati; data sensitif tidak boleh sampai ke browser role yang tidak berhak. |
 | P4-04 | Nilai turunan dihitung saat dibaca, tidak disimpan. Terkirim = delivery `DELIVERED` atau tanpa status (legacy); `SCHEDULED`/`ON_DELIVERY`/`DELAYED` = terjadwal; retur dihitung kecuali `CANCELLED`; outstanding = MAX(0, order − terkirim + retur); status bayar invoice dari nilai. | Angka tidak dapat basi atau diketik tangan (Technical Spec §7). |
 | P4-05 | Qty di atas batas (delivery > sisa, retur > terkirim bersih, qty order < terkirim bersih) ditolak `OVER_QUANTITY` + `confirmable`. Qty itu hanya disimpan bila klien mengirim ulang dengan `confirmOverQuantity: true`. | Kelebihan kirim memang terjadi (terlihat di data legacy), tetapi tidak boleh terjadi tanpa sengaja. |
@@ -108,7 +109,7 @@ Keputusan teknis yang dapat dibalik, diambil sendiri sesuai aturan kerja proyek.
 | P5-01 | Vanilla JS tanpa library dan tanpa build step, dipecah per berkas (`JsCore`, `JsComponents`, `JsForms`, `JsViews*`, `JsApp`) yang digabung `include_`. | Stack D1; HtmlService tidak punya bundler; berkas kecil lebih mudah ditinjau. |
 | P5-02 | DOM hanya dibuat lewat `PIK.h()` (teks lewat `textContent`); ikon SVG dengan `createElementNS`. | Mencegah XSS dari data (nama, catatan) tanpa escaping manual. Diuji otomatis. |
 | P5-03 | Router hash lewat `google.script.history` (fallback `location.hash`). Filter, urutan, halaman, tab, dan tampilan disimpan di query URL. | Back/Forward browser berfungsi di dalam iframe Apps Script; state bertahan saat muat ulang dan dapat dibagikan. |
-| P5-04 | Layar Masuk menampilkan akun Google yang terdeteksi dan tombol Masuk; tidak ada form password. Keluar menutup sesi aplikasi, bukan akun Google. | Autentikasi dilakukan Google (P4-02); layar ini memperjelas akun yang dipakai. |
+| P5-04 | Bila Google mengenali pengunjung, layar Masuk menampilkan akun itu dan tombol Masuk; bila tidak, form email + password (P7-01). Keluar menutup sesi aplikasi (dan menghapus token), bukan akun Google. | Layar ini memperjelas akun yang dipakai. |
 | P5-05 | Design tokens: latar #F5F5F7, permukaan putih, teks #111, muted #6E6E73, border #D2D2D7, radius 8/12/18, bayangan halus, satu warna aksen #0A5BC4. | Gaya minimalis Apple-inspired sesuai instruksi. Warna brand PIK belum diketahui; aksen diganti di satu token. |
 | P5-06 | Grafik batang dengan CSS (tanpa library): satu seri = warna aksen, label langsung, tooltip saat hover/fokus, nilai nol tanpa batang. | Ringan, dapat diakses keyboard, konsisten dengan design system. |
 | P5-07 | Input angka menerima format Indonesia (`1.500.000`, `2,5`) dan dikirim sebagai number. Server tetap menolak teks angka (P2-13). | Mengikuti kebiasaan pengguna; konversi eksplisit di klien, bukan tebakan di server. |
@@ -125,3 +126,18 @@ Keputusan teknis yang dapat dibalik, diambil sendiri sesuai aturan kerja proyek.
 | P6-02 | Data E2E = workbook sintetis yang dimigrasikan lewat pipeline Phase 03, ditambah akun uji per role. | Tidak ada data rahasia di repo; migrasi, backend, dan UI teruji bersama. |
 | P6-03 | Playwright 1.56.1 sebagai devDependency; `npm run test:e2e` terpisah dari `npm test`. | `npm test` tetap tanpa dependency dan cepat; E2E butuh Chromium. |
 | P6-04 | Setelah aksi di UI, test E2E memeriksa hasilnya lewat API, bukan hanya teks di layar. | Membuktikan data benar-benar tersimpan dan dihitung di server. |
+
+## 7. Keputusan teknis login email + password (D15)
+
+| ID | Keputusan | Alasan |
+|---|---|---|
+| P7-01 | Login hibrida, urutan: token sesi dari login password → akun Google yang terlihat oleh Apps Script → `AUTH_REQUIRED` (browser menampilkan form email + password). Keduanya berujung pada record `USERS` yang sama; role selalu dibaca dari `USERS`. | Pada web app "Execute as: Me" di akun Gmail biasa, Google tidak memberi tahu aplikasi siapa pengunjungnya (hanya pemiliknya). Deployment Workspace tetap bekerja seperti sebelumnya. |
+| P7-02 | Password disimpan sebagai PBKDF2-HMAC-SHA256, 100.000 iterasi, salt acak 16 byte, format `pbkdf2_sha256$iterasi$salt$hash` (jumlah iterasi ikut tersimpan). SHA-256/HMAC/PBKDF2 ditulis dalam JavaScript murni (`src/core/Crypto.gs`) dan diuji terhadap modul `crypto` Node. | Apps Script tidak punya PBKDF2; memanggil `Utilities` ribuan kali lambat. Iterasi dapat diubah kelak tanpa membatalkan password lama. |
+| P7-03 | Sesi = token tanpa state yang ditandatangani HMAC-SHA256 dengan rahasia acak di Script Property `AUTH_TOKEN_SECRET`; berlaku 30 hari. Token ditolak bila tanda tangan salah, kedaluwarsa, user nonaktif, atau dibuat sebelum password terakhir diganti/di-reset. | Tidak perlu tabel sesi (tidak ada penulisan per permintaan); ganti/reset password mengakhiri semua sesi lain. |
+| P7-04 | Password dari Admin (dan dari `setupAdminAccount`) adalah password sementara: sampai diganti, server hanya mengizinkan `session.get` dan `auth.changePassword` (`PASSWORD_CHANGE_REQUIRED`). | Password yang diketahui Admin tidak dipakai terus. |
+| P7-05 | Login gagal 5 kali → email dikunci 15 menit (hitungan di `CacheService`). Pesan gagal sama untuk email tidak terdaftar dan password salah; waktu pemeriksaan disamakan dengan hash tiruan. Reset oleh Admin membuka kunci. | Menahan tebak-tebakan password tanpa membuka informasi email mana yang terdaftar. |
+| P7-06 | `password_hash` adalah kolom sensitif: disamarkan (`[disembunyikan]`) di AUDIT_LOG, tidak pernah dikirim ke browser (daftar user memuat `has_password`), tidak ada di metadata form. | Hash tetap rahasia walau audit log dan layar Admin dapat dibaca. |
+| P7-07 | `setupAdminAccount()` (dijalankan pemilik dari editor): menjadikan akun pemilik Admin aktif dengan password sementara yang hanya ditulis ke log eksekusi. Juga untuk pemulihan bila password lupa. | Admin pertama dapat dibuat pada deployment Gmail tanpa bergantung pada identitas Google di web app. |
+| P7-08 | Browser menyimpan token di `localStorage` (tetap masuk sampai Keluar atau 30 hari), cadangan di memori bila penyimpanan diblokir. Keluar menghapus token. | Tim lapangan tidak perlu login setiap membuka aplikasi di ponsel. |
+| P7-09 | Skema v3: `password_hash`, `password_changed_at`, `must_change_password` ditambahkan di akhir sheet `USERS` (`initializeDatabase` menambahkannya pada database v2 tanpa menyentuh data). | Aturan evolusi skema P2-02. |
+

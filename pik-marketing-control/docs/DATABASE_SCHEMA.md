@@ -3,7 +3,7 @@
 > Dibuat otomatis dari `src/db/Schema.gs`, `src/db/Enums.gs`, dan `src/db/Settings.gs` dengan
 > `npm run docs:schema`. Jangan diedit manual; `npm test` gagal bila dokumen ini tidak sesuai kode.
 
-**Versi skema:** 2 · **Jumlah sheet:** 21
+**Versi skema:** 3 · **Jumlah sheet:** 21
 
 ## 1. Konvensi
 
@@ -52,7 +52,7 @@
 | # | Sheet | Kelompok | Prefiks ID | Kolom | Keterangan |
 |---:|---|---|---|---:|---|
 | 1 | `README` | Dokumentasi | — | 2 | Panduan singkat struktur database. Dibuat ulang oleh initializeDatabase(). |
-| 2 | `USERS` | Master | `USR-` | 11 | Pengguna aplikasi dan role-nya. Login memakai akun Google; tidak ada password yang disimpan. |
+| 2 | `USERS` | Master | `USR-` | 14 | Pengguna aplikasi dan role-nya. Login memakai akun Google (Workspace) atau email + password; password hanya disimpan sebagai hash. |
 | 3 | `CUSTOMERS` | Master | `CUS-` | 23 | Master customer. |
 | 4 | `CONTACTS` | Master | `CON-` | 14 | Contact person per customer. Maksimal satu contact utama aktif per customer. |
 | 5 | `PRODUCTS` | Master | `PRD-` | 22 | Master produk. Kode produk boleh sama di beberapa produk (duplikat legacy tidak digabung, D8). |
@@ -173,7 +173,7 @@ dikelola sistem (bukan lewat repository umum)
 
 ### 4.2 `USERS` — User
 
-Pengguna aplikasi dan role-nya. Login memakai akun Google; tidak ada password yang disimpan.
+Pengguna aplikasi dan role-nya. Login memakai akun Google (Workspace) atau email + password; password hanya disimpan sebagai hash.
 
 ID: `USR-` · soft delete
 
@@ -190,6 +190,9 @@ ID: `USR-` · soft delete
 | 9 | `created_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Dibuat oleh. |
 | 10 | `updated_at` | datetime | wajib |  |  | sistem (otomatis) | Diubah pada. |
 | 11 | `updated_by` | string | wajib | maks 255 karakter |  | sistem (otomatis) | Diubah oleh. |
+| 12 | `password_hash` | string |  | maks 200 karakter |  | layanan server | Hash password. PBKDF2-SHA256 dengan salt, bukan password. Diisi server; tidak pernah dikirim ke browser atau audit log. Ditambahkan di skema v3. |
+| 13 | `password_changed_at` | datetime |  |  |  | layanan server | Password diubah. Sesi login yang dibuat sebelum waktu ini tidak berlaku lagi. Ditambahkan di skema v3. |
+| 14 | `must_change_password` | boolean |  |  |  | layanan server | Wajib ganti password. TRUE setelah Admin mengatur password sementara. Ditambahkan di skema v3. |
 
 - **Unik:** email unik (tanpa membedakan huruf besar/kecil).
 
@@ -993,7 +996,7 @@ Tipe nilai SETTINGS
 | `CURRENCY` | STRING | `IDR` | tidak | Kode mata uang nilai transaksi. |
 | `DEFAULT_PAGE_SIZE` | INTEGER | `25` | tidak | Jumlah baris per halaman bawaan. |
 | `MAX_PAGE_SIZE` | INTEGER | `100` | tidak | Batas jumlah baris per halaman. |
-| `SCHEMA_VERSION` | INTEGER | `2` | ya | Versi skema database. Dikelola initializeDatabase(). |
+| `SCHEMA_VERSION` | INTEGER | `3` | ya | Versi skema database. Dikelola initializeDatabase(). |
 | `DB_INITIALIZED_AT` | DATETIME | (waktu inisialisasi) | ya | Waktu database pertama kali diinisialisasi. |
 
 Konfigurasi deployment dan rahasia tidak disimpan di sheet ini, melainkan di Script Properties

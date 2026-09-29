@@ -276,8 +276,12 @@
       host.appendChild(h('div.detail-grid',
         ui.card('Akun saya', h('div.stack',
           h('div.row', h('div.avatar.avatar-lg', fmt.initials(s.user.name)), h('div', h('div', { style: { fontWeight: '600', fontSize: '16px' } }, s.user.name), h('div.muted', s.user.email))),
-          ui.kv([['Role', ui.statusBadge('USER_ROLE', s.user.role)], ['Login terakhir', s.user.lastLoginAt ? fmt.dateTime(s.user.lastLoginAt) : null]]),
-          h('p.muted', { style: { fontSize: '13px' } }, 'Nama, email, dan role dikelola Admin di tab User.'))),
+          ui.kv([['Role', ui.statusBadge('USER_ROLE', s.user.role)], ['Login terakhir', s.user.lastLoginAt ? fmt.dateTime(s.user.lastLoginAt) : null],
+            ['Masuk dengan', s.user.signInMethod === 'password' ? 'Email dan password' : 'Akun Google']]),
+          h('p.muted', { style: { fontSize: '13px' } }, 'Nama, email, dan role dikelola Admin di tab User.'),
+          h('div.row', h('div.spacer'), ui.button(s.user.hasPassword ? 'Ganti password' : 'Buat password', {
+            icon: 'lock', onClick: function () { forms.changePassword(function () { PIK.refresh(); }); }
+          })))),
         ui.card('Hak akses role ' + PIK.enumLabel('USER_ROLE', s.user.role), ui.dataTable({
           compact: true,
           rows: Object.keys(MODULE_NAMES).map(function (key) { return { key: key, access: s.permissions[key] || null }; }),
@@ -287,6 +291,12 @@
           ]
         }))));
       host.appendChild(h('p.subtle', { style: { fontSize: '12px', marginTop: '16px' } }, s.app.name + ' · skema database v' + s.app.schemaVersion + ' · zona waktu ' + s.app.timeZone));
+    }
+
+    /** How a user signs in: 'Password' (with 'Sementara' until replaced) or the Google account only. */
+    function signInBadges(r) {
+      if (!r.has_password) return ui.badge('Akun Google', 'muted');
+      return [ui.badge('Password', 'accent'), r.must_change_password ? [' ', ui.badge('Sementara', 'warning')] : null];
     }
 
     function usersTab(host, query) {
@@ -303,10 +313,19 @@
           { key: 'name', label: 'Nama', sortable: true, render: function (r) { return [h('span.primary', r.name), r.id === PIK.session.user.id ? [' ', ui.badge('Anda', 'accent', true)] : null, h('span.secondary', r.email)]; } },
           { key: 'role', label: 'Role', sortable: true, render: function (r) { return ui.statusBadge('USER_ROLE', r.role); } },
           { key: 'phone', label: 'Telepon' },
+          { key: 'has_password', label: 'Masuk dengan', render: signInBadges },
           { key: 'last_login_at', label: 'Login terakhir', sortable: true, render: function (r) { return r.last_login_at ? fmt.dateTime(r.last_login_at) : h('span.subtle', 'Belum pernah'); } },
-          { key: 'actions', label: '', render: function (r) { return r.id === PIK.session.user.id ? null : PIK.rowActions('users', r, { edit: function () { forms.user(r, reload); }, archive: 'users', reload: reload }); } }
+          { key: 'actions', label: '', render: function (r) {
+            return r.id === PIK.session.user.id ? null : PIK.rowActions('users', r, {
+              edit: function () { forms.user(r, reload); }, archive: 'users', reload: reload,
+              extra: r.is_active === false ? null : { label: 'Atur password', icon: 'lock', onClick: function () { forms.setPassword(r, reload); } }
+            });
+          } }
         ],
-        card: function (r) { return ui.listCard({ title: r.name, badge: ui.statusBadge('USER_ROLE', r.role), lines: [r.email, r.last_login_at ? 'Login ' + fmt.dateTime(r.last_login_at) : 'Belum pernah login'] }); },
+        card: function (r) {
+          return ui.listCard({ title: r.name, badge: ui.statusBadge('USER_ROLE', r.role),
+            lines: [r.email, r.has_password ? 'Password' + (r.must_change_password ? ' (sementara)' : '') : 'Akun Google', r.last_login_at ? 'Login ' + fmt.dateTime(r.last_login_at) : 'Belum pernah login'] });
+        },
         onRowClick: canWrite('users') ? function (r) { forms.user(r, reload); } : null,
         empty: { icon: 'user', title: 'Belum ada user' }
       });

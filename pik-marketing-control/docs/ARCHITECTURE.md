@@ -26,7 +26,8 @@ Lokal:    tools/dev-server (kode .gs asli di emulator + shim google.script.run) 
 |---|---|---|
 | Entry point | `src/Code.gs` | `doGet` (web app), `getAppHealth`, `include_`. |
 | API | `src/api/Api.gs` | `api(action, payload)`: tabel route tertutup (aksi tak dikenal = `NOT_FOUND`), identitas, izin per route, amplop respons. Kontrak lengkap: `docs/API.md`. |
-| Auth | `src/auth/Auth.gs` | Akun Google → `USERS` → role. `MODULE_PERMISSIONS` (matriks akses + default D5), `can_`, `requirePermission_`. Admin pertama = pemilik skrip selama belum ada Admin aktif. |
+| Auth | `src/auth/Auth.gs` | Identitas → `USERS` → role: token sesi, lalu akun Google, lalu `AUTH_REQUIRED`. `MODULE_PERMISSIONS` (matriks akses + default D5), `can_`, `requirePermission_`. Admin pertama = pemilik skrip selama belum ada Admin aktif. |
+| | `src/auth/PasswordAuth.gs` | Login email + password (D15): hash PBKDF2, kebijakan password, token sesi bertanda tangan, batas percobaan, `auth.login`, `auth.changePassword`, `users.setPassword`, fungsi editor `setupAdminAccount`. |
 | Service | `src/services/ServiceKit.gs` | Mesin daftar di server (filter → cari → urut → halaman; filter/urutan tak dikenal ditolak), whitelist kolom input, nama tampilan, opsi picker, cek `expectedUpdatedAt`. |
 | | `SessionService.gs` | Sesi (user, izin, enum, setting, metadata form dari skema), pilihan user, pencarian global. |
 | | `CustomerService.gs` | Customer (workspace detail) dan contact (satu contact utama). |
@@ -43,6 +44,7 @@ Lokal:    tools/dev-server (kode .gs asli di emulator + shim google.script.run) 
 | | `src/core/Lock.gs` | Script lock re-entrant untuk setiap penulisan; cache dibaca ulang saat lock didapat; `flush` sebelum lock dilepas. |
 | | `src/core/Access.gs` | Siapa yang boleh menjalankan fungsi pemeliharaan; email pelaku. |
 | | `src/core/Text.gs`, `Time.gs` | Normalisasi teks/kunci dokumen, tanggal & waktu, tanggal kalender zona aplikasi. |
+| | `src/core/Crypto.gs` | SHA-256, HMAC-SHA256, PBKDF2 dalam JavaScript murni (diuji terhadap `crypto` Node), UTF-8, base64url, perbandingan waktu-konstan, byte acak. |
 | Database | `src/db/Schema.gs` | Definisi 21 sheet: kolom, tipe, relasi, keunikan, aturan, konsistensi. Sumber `docs/DATABASE_SCHEMA.md`. |
 | | `src/db/Enums.gs`, `Settings.gs` | Seed dan pembacaan ENUMS/SETTINGS. |
 | | `src/db/SheetFormat.gs` | Format angka/teks, dropdown & checkbox, catatan header, proteksi, kapasitas baris. |
@@ -86,7 +88,9 @@ Lokal:    tools/dev-server (kode .gs asli di emulator + shim google.script.run) 
 - UI hanya memanggil `api(action, payload)`. Fungsi publik lain (`doGet`, `getAppHealth`, fungsi pemeliharaan & migrasi) dikunci oleh
   daftar tertutup yang diuji otomatis; fungsi pemeliharaan hanya untuk pemilik skrip atau `ADMIN_EMAILS`.
 - Setiap route punya izin `[modul, R|RW]` yang dicek di server sebelum handler berjalan. Role selalu dibaca dari `USERS`, tidak pernah
-  dari payload. UI menyembunyikan tombol sesuai izin, tetapi penegaknya tetap server.
+  dari payload atau token. UI menyembunyikan tombol sesuai izin, tetapi penegaknya tetap server.
+- Satu-satunya route publik adalah `auth.login`. Selama password sementara belum diganti, hanya `session.get` dan
+  `auth.changePassword` yang dilayani. Hash password tidak pernah keluar dari server dan disamarkan di AUDIT_LOG.
 - Data keuangan di layar bersama (detail customer/PO, dashboard) hanya dikirim ke role yang boleh membaca modul `finance`.
 - Input form di-whitelist per modul; kolom sistem, migrasi, dan kolom turunan tidak dapat diisi klien.
 - Penulisan multi-record memvalidasi semuanya sebelum penulisan pertama (`dbValidateInsert_`, `dbUpdateMany_`, `dbInsertUnit_`):

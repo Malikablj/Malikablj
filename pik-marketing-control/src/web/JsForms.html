@@ -448,18 +448,89 @@
     };
 
     // ------------------------------------------------------------------------------------------ Users
+    /** Same policy as the server (PasswordAuth.gs): at least 8 characters, letters and digits. */
+    function passwordRule(value) {
+      if (typeof value !== 'string' || value === '') return null;
+      if (value.length < 8) return 'Minimal 8 karakter.';
+      if (!/[A-Za-z]/.test(value) || !/[0-9]/.test(value)) return 'Harus berisi huruf dan angka.';
+      return null;
+    }
+    var PASSWORD_HINT = 'Minimal 8 karakter, berisi huruf dan angka.';
+
     forms.user = function (record, onSaved) {
       var editing = Boolean(record && record.id);
       var values = editing ? record : { role: 'SALES' };
+      var fields = [{ name: 'name', span: true }, { name: 'email', hint: 'Email untuk masuk: akun Google Workspace, atau email apa saja (mis. Gmail) bila masuk dengan password.' }, 'role', 'phone'];
+      if (!editing) {
+        fields.push({
+          name: 'password', label: 'Password awal', type: 'password', autocomplete: 'new-password', maxLength: 128, span: true, generate: true,
+          validate: passwordRule, hint: 'Isi bila user masuk dengan email + password (mis. akun Gmail); user wajib menggantinya saat pertama masuk. ' +
+            'Kosongkan bila user masuk dengan akun Google Workspace.'
+        });
+      }
       return ui.openForm({
         title: editing ? 'Ubah user' : 'User baru', table: 'USERS', values: values,
-        intro: h('div.form-alert.info', PIK.icon('info', 'icon-sm'), h('span', 'User masuk dengan akun Google Workspace-nya. Tidak ada password yang disimpan aplikasi.')),
-        fields: [{ name: 'name', span: true }, { name: 'email', hint: 'Email akun Google yang dipakai untuk masuk.' }, 'role', 'phone'],
-        submit: function (v) { return PIK.api(editing ? 'users.update' : 'users.create', editing ? updatePayload(record, v) : { data: v }); },
+        intro: h('div.form-alert.info', PIK.icon('info', 'icon-sm'), h('span', editing
+          ? 'Password diatur lewat menu "Atur password" di daftar user.'
+          : 'User masuk dengan akun Google Workspace-nya, atau dengan email dan password awal dari Anda. Password hanya disimpan sebagai hash.')),
+        fields: fields,
+        submit: function (v) {
+          if (editing) return PIK.api('users.update', updatePayload(record, v));
+          var data = Object.assign({}, v);
+          var password = data.password;
+          delete data.password;
+          return PIK.api('users.create', password ? { data: data, password: password } : { data: data });
+        },
         successMessage: editing ? 'User diperbarui.' : 'User ditambahkan.',
         onSaved: onSaved
       });
     };
+
+    /** Admin: new (temporary) password for another user; ends that user's sessions. */
+    forms.setPassword = function (record, onSaved) {
+      return ui.openForm({
+        title: 'Atur password', subtitle: record.name + ' · ' + record.email, values: { mustChange: true },
+        intro: h('div.form-alert.info', PIK.icon('info', 'icon-sm'), h('span', 'Sesi login ' + record.name + ' di semua perangkat akan berakhir. ' +
+          'Sampaikan password ini langsung kepadanya, bukan lewat grup chat.')),
+        fields: [
+          { name: 'password', label: 'Password baru', type: 'password', required: true, autocomplete: 'new-password', maxLength: 128, span: true,
+            generate: true, validate: passwordRule, hint: PASSWORD_HINT },
+          { name: 'mustChange', label: 'Wajib ganti password', type: 'boolean', checkLabel: 'Wajib ganti password saat masuk berikutnya', span: true }
+        ],
+        submit: function (v) { return PIK.api('users.setPassword', { id: record.id, password: v.password, mustChange: v.mustChange === true }); },
+        submitLabel: 'Simpan password',
+        successMessage: 'Password ' + record.name + ' diatur.',
+        onSaved: onSaved
+      });
+    };
+
+    /** The signed-in user's own password (a Google-identity user without one may create it). Ends other sessions. */
+    forms.changePassword = function (onSaved) {
+      var hasPassword = PIK.session.user.hasPassword;
+      var fields = [];
+      if (hasPassword) fields.push({ name: 'currentPassword', label: 'Password saat ini', type: 'password', required: true, autocomplete: 'current-password', maxLength: 128, span: true });
+      fields.push({ name: 'newPassword', label: 'Password baru', type: 'password', required: true, autocomplete: 'new-password', maxLength: 128, span: true, validate: passwordRule, hint: PASSWORD_HINT });
+      fields.push({ name: 'confirmPassword', label: 'Ulangi password baru', type: 'password', required: true, autocomplete: 'new-password', maxLength: 128, span: true,
+        validate: function (value, all) { return value === all.newPassword ? null : 'Tidak sama dengan password baru.'; } });
+      return ui.openForm({
+        title: hasPassword ? 'Ganti password' : 'Buat password', values: {},
+        intro: h('div.form-alert.info', PIK.icon('info', 'icon-sm'), h('span', hasPassword
+          ? 'Setelah diganti, sesi login di perangkat lain berakhir.'
+          : 'Dengan password, Anda juga dapat masuk memakai email ini tanpa akun Google.')),
+        fields: fields,
+        submit: function (v) {
+          return PIK.api('auth.changePassword', { currentPassword: v.currentPassword || '', newPassword: v.newPassword }).then(function (result) {
+            PIK.auth.setToken(result.token);
+            PIK.session.user = result.user;
+            return result;
+          });
+        },
+        submitLabel: 'Simpan password',
+        successMessage: hasPassword ? 'Password diganti. Sesi di perangkat lain sudah berakhir.' : 'Password dibuat.',
+        onSaved: onSaved
+      });
+    };
+    forms.passwordRule = passwordRule;
 
     PIK.forms = forms;
   })(PIK);

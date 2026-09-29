@@ -9,7 +9,7 @@
 | `npm run emulate:init` | tidak | Menjalankan `setupDatabase` → `verifyDatabase` → `initializeDatabase` ulang → `runDatabaseSelfTest` di emulator dan mencetak hasilnya |
 | `npm run docs:schema` | tidak | Membuat ulang `docs/DATABASE_SCHEMA.md` dari skema di kode |
 | `npm run migrate -- migrate` | tidak | Gladi migrasi lengkap dengan workbook asli (lokal, di `migration/source/`) di emulator; laporan rahasia di `docs/MIGRATION_REPORT.md` |
-| `npm run dev` | tidak | Aplikasi lengkap di <http://127.0.0.1:8080>: kode `.gs` dan HTML asli di emulator, data sintetis hasil migrasi, satu akun uji per role. Ganti akun: `/__dev/sign-in?email=sales@example.com` (juga `marketing@`, `management@`, `viewer@`; tanpa cookie = pemilik skrip `owner@example.com`). Opsi: `--seed none\|synthetic\|workbook=<file.xlsx>`, `--port`, `--latency <ms>`, `--now <ISO>` |
+| `npm run dev` | tidak | Aplikasi lengkap di <http://127.0.0.1:8080>: kode `.gs` dan HTML asli di emulator, data sintetis hasil migrasi, satu akun uji per role. Ganti akun: `/__dev/sign-in?email=sales@example.com` (juga `marketing@`, `management@`, `viewer@`; tanpa cookie = pemilik skrip `owner@example.com`); `/__dev/sign-in?anonymous=1` = tanpa identitas Google, seperti web app di akun Gmail biasa (login email + password). Opsi: `--seed none\|synthetic\|workbook=<file.xlsx>`, `--port`, `--latency <ms>`, `--now <ISO>` |
 | `npm run test:e2e` | ya, plus `npx playwright install chromium` (sekali) | Test browser (Playwright) terhadap dev server: alur bisnis, role, daftar, state UI, ponsel/tablet. Screenshot di `e2e/artifacts/` (di-ignore git) |
 | `runDatabaseSelfTest()` | — (di Apps Script) | Kasus uji database yang sama, dijalankan di Google Sheets sungguhan |
 
@@ -27,6 +27,7 @@
 | `tests/api-crm.test.js` | 6 | Customer CRUD + arsip/pulihkan + riwayat; workspace customer; contact utama (pertukaran atomik, input gagal tidak mengubah contact utama lama); lead (default, relasi, board, pindah status); aktivitas + follow-up berikutnya dalam satu unit; follow-up (bucket Today/Overdue/Upcoming dari tanggal hari ini, complete + berikutnya atomik, reschedule, cancel) |
 | `tests/api-operations.test.js` | 8 | PO + item dalam satu unit; delivery wajib item PO, outstanding, konfirmasi kelebihan qty; retur (menambah outstanding, konfirmasi, `CANCELLED` tidak dihitung); outstanding tidak negatif + kelebihan kirim; item PO (produk terkunci setelah transaksi, qty order < terkirim perlu konfirmasi, arsip dijaga); daftar PO (filter, urut, cari); produk & stok terbaru; lead time dan inbound |
 | `tests/api-admin.test.js` | 8 | Invoice (jenis dari nomor, status bayar dari nilai, pembayaran bertahap, jatuh tempo); dashboard (KPI dari data, scope "mine"); laporan (filter, grup, baris ringkas, CSV aman untuk Excel); audit log & riwayat; user (email unik, pengaman Admin); setting (tipe & batas, audit); enum (hanya enum yang dapat diperluas, dropdown sheet); isu migrasi (hitungan, catatan wajib, dibuka ulang) |
+| `tests/api-auth.test.js` | 7 | Login email + password (D15): SHA-256/HMAC/PBKDF2/UTF-8/base64url sama dengan `crypto` Node (vektor RFC + acak); hash PBKDF2 bergaram dan tidak pernah ada di respons, metadata form, maupun AUDIT_LOG (disamarkan); `AUTH_REQUIRED` tanpa identitas; pesan gagal sama untuk email tak terdaftar/password salah; password sementara wajib diganti (`PASSWORD_CHANGE_REQUIRED`); kebijakan password; token dipalsukan/diperpanjang/kedaluwarsa/rahasia diganti ditolak; ganti/reset password mengakhiri sesi lain; role dari `USERS`; user nonaktif ditolak; kunci 15 menit setelah 5 gagal; reset Admin (bukan akun sendiri, hanya Admin); `setupAdminAccount` (Admin pertama, pemulihan, hanya pemilik) |
 | `tests/api-migrated.test.js` | 4 | Workbook sintetis dimigrasikan lalu dipakai lewat API: semua daftar/detail/laporan berjalan pada record legacy; outstanding PO dari API = rekonsiliasi migrasi; lineage & riwayat `MIGRATION_RUN`; Admin menautkan delivery legacy ke item PO yang benar (D3) |
 
 Test browser (`npm run test:e2e`, Playwright, Chromium headless, dev server dengan workbook sintetis yang dimigrasikan):
@@ -37,6 +38,7 @@ Test browser (`npm run test:e2e`, Playwright, Chromium headless, dev server deng
 | `e2e/roles.e2e.js` | 5 | Akun belum terdaftar → didaftarkan Admin lewat Pengaturan › User → dapat masuk; Viewer hanya baca (tombol tersembunyi, URL langsung ditolak, server menolak); Sales (CRM ya, PO/delivery baca, keuangan tidak); Marketing (PO ya, delivery baca) dan Management (keuangan baca); keluar; user dinonaktifkan langsung kehilangan akses |
 | `e2e/lists.e2e.js` | 9 | Pagination server (halaman di URL, bertahan saat muat ulang); urutan kolom (angka: terbesar dulu); pencarian debounce (≤ 2 panggilan server); filter dan kombinasinya; arsip opt-in; pencarian global Ctrl+K; palet yang ditutup tombol Back tidak meninggalkan listener; pipeline "Pindah ke" (tanpa seret); laporan (filter, grafik, CSV terunduh) |
 | `e2e/ui-states.e2e.js` | 9 | Loading (skeleton + bar muat); error jaringan + Coba lagi; simpan gagal tanpa kehilangan isian; empty state dengan langkah berikutnya; dialog konfirmasi (Batal tidak mengubah apa pun); keyboard ("/", Escape, fokus kembali); fokus awal drawer tidak merebut kolom yang sudah dipilih; ponsel 390 px (navigasi bawah, menu, kartu, filter di balik tombol, header detail tidak terjepit, bottom sheet, tanpa scroll ke samping); tablet 820 px (rel ikon) |
+| `e2e/password.e2e.js` | 4 | Tanpa identitas Google (akun Gmail): Admin membuat user dengan password awal (Buat otomatis); user masuk, salah password, wajib membuat password baru (validasi), role Sales, tetap masuk setelah muat ulang, Keluar dan masuk lagi; reset Admin mengakhiri sesi yang sedang terbuka; ganti password di Profil; 5 kali salah → terkunci; layar masuk ponsel |
 | `e2e/admin-data.e2e.js` | 7 | Data migrasi (tanda Legacy, transaksi belum tertaut, pembanding outstanding workbook, isu migrasi di detail, sumber legacy, riwayat); Admin menautkan delivery legacy (D3) dan outstanding dihitung ulang; isu migrasi diselesaikan; jenis aktivitas baru langsung dipakai; setting; invoice + pembayaran sebagian; stok & lead time |
 
 Setiap berkas E2E juga memeriksa bahwa sesi browsernya tidak mencatat error JavaScript atau error console (kecuali test yang sengaja
@@ -118,10 +120,22 @@ memutus koneksi ke server).
   bar terlihat; (2) setelah user dinonaktifkan, helper navigasi menunggu tampilan halaman yang justru diganti layar "belum terdaftar"
   bila respons server datang lebih dulu → test menunggu layar itu langsung.
 
+## Hasil login email + password — D15 (2026-09-29)
+
+- `npm test`: **128/128 lulus** (7 test baru di `tests/api-auth.test.js`). `npm run typecheck`: **37 berkas `.gs`, 0 masalah tipe**.
+- `npm run test:e2e`: **49/49 lulus** (4 test baru di `e2e/password.e2e.js`; 45 test lama tetap lulus).
+- Uji mutasi keamanan (sekali jalan, skrip tidak disimpan di repo): 28 cacat disisipkan satu per satu, antara lain tanda tangan token
+  tidak diperiksa, kedaluwarsa diabaikan, ganti/reset password tidak mengakhiri sesi, password salah atau user nonaktif diterima,
+  batas percobaan mati, wajib ganti tidak ditegakkan, hash terkirim ke browser atau tidak disamarkan di audit, Admin mengatur password
+  sendiri, cek password lama dilewati, kebijakan password dilemahkan, iterasi PBKDF2 diabaikan, salt tetap, satu rotasi SHA-256 salah,
+  `setupAdminAccount` tanpa cek pemilik. **28/28 tertangkap**.
+- Kinerja: PBKDF2 100.000 iterasi ±0,3 detik per login di Node; di Apps Script diperkirakan 1–3 detik (diperiksa di daftar periksa
+  `docs/DEPLOYMENT.md` §6.4).
+
 ## Emulator (`tools/gas-emulator/`)
 
-Emulator adalah test double untuk `SpreadsheetApp`, `PropertiesService`, `LockService`, `Session`, `Utilities`, `DriveApp`,
-`HtmlService`, dan `Logger`. Pemanggilan API yang tidak dikenal langsung gagal. Berkas `.gs` dimuat ke satu konteks `vm` sebagai
+Emulator adalah test double untuk `SpreadsheetApp`, `PropertiesService`, `LockService`, `CacheService`, `Session`, `Utilities`,
+`DriveApp`, `HtmlService`, dan `Logger`. Pemanggilan API yang tidak dikenal langsung gagal. Berkas `.gs` dimuat ke satu konteks `vm` sebagai
 skrip terpisah dengan satu scope global, seperti di Apps Script. Emulator juga mencatat setiap penulisan beserta status lock-nya, sehingga
 batching dan locking dapat diuji.
 
@@ -149,7 +163,7 @@ di iframe HtmlService, kuota, dan waktu respons Sheets). Setelah `npm run push`,
 3. `verifyDatabase` → `ok: true`.
 4. Migrasi: langkah di `docs/DEPLOYMENT.md` §7. Hasil `dryRunMigration`, `runMigration`, dan `verifyMigration` harus sama dengan
    `docs/MIGRATION_REPORT.md` (jumlah per tabel, total, dan pemeriksaan).
-5. Web app: deploy dan jalankan daftar periksa di `docs/DEPLOYMENT.md` §6.3 dengan akun per role.
+5. Web app: deploy dan jalankan daftar periksa di `docs/DEPLOYMENT.md` §6.4 dengan akun per role.
 
 Bila self-test melewati batas waktu eksekusi, kasus yang tersisa ditandai `SKIPPED`. Jalankan per kelompok dengan memanggil
 `runDatabaseSelfTest('init')`, `('relasi')`, `('validasi')`, dan seterusnya dari fungsi pembungkus sementara.
