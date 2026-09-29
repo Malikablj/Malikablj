@@ -2,11 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Controllers\ActivityController;
 use App\Controllers\AuditLogController;
 use App\Controllers\AuthController;
 use App\Controllers\ContactController;
 use App\Controllers\CustomerController;
 use App\Controllers\DashboardController;
+use App\Controllers\FollowUpController;
+use App\Controllers\LeadController;
 use App\Controllers\NotificationController;
 use App\Controllers\ProfileController;
 use App\Controllers\SearchController;
@@ -56,6 +59,32 @@ return static function (Router $r): void {
     $r->get('/contacts/{id}/edit', [ContactController::class, 'edit'], 'contacts.edit');
     $r->post('/contacts/{id}', [ContactController::class, 'update'], 'contacts.edit');
     $r->post('/contacts/{id}/delete', [ContactController::class, 'destroy'], 'contacts.delete');
+
+    // CRM: leads, activities, follow up
+    $r->get('/leads', [LeadController::class, 'index'], 'leads.view');
+    $r->get('/leads/list', [LeadController::class, 'list'], 'leads.view');
+    $r->get('/leads/create', [LeadController::class, 'create'], 'leads.create');
+    $r->post('/leads', [LeadController::class, 'store'], 'leads.create');
+    $r->get('/leads/{id}', [LeadController::class, 'show'], 'leads.view');
+    $r->get('/leads/{id}/edit', [LeadController::class, 'edit'], 'leads.edit');
+    $r->post('/leads/{id}', [LeadController::class, 'update'], 'leads.edit');
+    $r->post('/leads/{id}/status', [LeadController::class, 'status'], 'leads.edit');
+    $r->post('/leads/{id}/convert', [LeadController::class, 'convert'], 'leads.edit');
+    $r->post('/leads/{id}/delete', [LeadController::class, 'destroy'], 'leads.delete');
+    $r->get('/activities', [ActivityController::class, 'index'], 'activities.view');
+    $r->get('/activities/create', [ActivityController::class, 'create'], 'activities.create');
+    $r->post('/activities', [ActivityController::class, 'store'], 'activities.create');
+    $r->get('/activities/{id}/edit', [ActivityController::class, 'edit'], 'activities.edit');
+    $r->post('/activities/{id}', [ActivityController::class, 'update'], 'activities.edit');
+    $r->post('/activities/{id}/delete', [ActivityController::class, 'destroy'], 'activities.delete');
+    $r->get('/follow-ups', [FollowUpController::class, 'index'], 'followups.view');
+    $r->get('/follow-ups/create', [FollowUpController::class, 'create'], 'followups.create');
+    $r->post('/follow-ups', [FollowUpController::class, 'store'], 'followups.create');
+    $r->get('/follow-ups/{id}/edit', [FollowUpController::class, 'edit'], 'followups.view');
+    $r->post('/follow-ups/{id}', [FollowUpController::class, 'update'], 'followups.edit');
+    $r->post('/follow-ups/{id}/done', [FollowUpController::class, 'done'], 'followups.edit');
+    $r->post('/follow-ups/{id}/reschedule', [FollowUpController::class, 'reschedule'], 'followups.edit');
+    $r->post('/follow-ups/{id}/delete', [FollowUpController::class, 'destroy'], 'followups.delete');
 
     // Settings (Admin)
     $r->get('/users', [UserController::class, 'index'], 'users.view');

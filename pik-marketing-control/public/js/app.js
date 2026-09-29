@@ -129,4 +129,65 @@
   document.querySelectorAll('[data-autosubmit]').forEach(function (el) {
     el.addEventListener('change', function () { if (el.form) { el.form.submit(); } });
   });
+  /* Kanban leads: drag & drop antar kolom (fallback: pilihan status di kartu) */
+  var board = document.querySelector('[data-kanban]');
+  if (board) {
+    var dragged = null;
+    var refreshColumn = function (col, deltaCount, deltaValue) {
+      var countEl = col.querySelector('[data-col-count]');
+      var valueEl = col.querySelector('[data-col-value]');
+      if (countEl) { countEl.textContent = String(Math.max(0, parseInt(countEl.textContent || '0', 10) + deltaCount)); }
+      if (valueEl) {
+        var v = Math.max(0, parseFloat(valueEl.getAttribute('data-value') || '0') + deltaValue);
+        valueEl.setAttribute('data-value', String(v));
+        valueEl.textContent = v > 0 ? 'Rp ' + new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 2 }).format(v) : '';
+      }
+      var cards = col.querySelector('.kanban-cards');
+      var empty = cards.querySelector('[data-empty]');
+      var hasCards = cards.querySelector('.kanban-card') !== null;
+      if (empty) { empty.hidden = hasCards; }
+    };
+    var moveCard = function (card, toCol, fromCol) {
+      var value = parseFloat(card.getAttribute('data-value') || '0');
+      toCol.querySelector('.kanban-cards').insertBefore(card, toCol.querySelector('.kanban-card'));
+      refreshColumn(toCol, 1, value);
+      refreshColumn(fromCol, -1, -value);
+    };
+    board.querySelectorAll('.kanban-card[draggable="true"]').forEach(function (card) {
+      card.addEventListener('dragstart', function (e) {
+        dragged = card;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.getAttribute('data-id'));
+      });
+      card.addEventListener('dragend', function () { card.classList.remove('dragging'); dragged = null; });
+    });
+    board.querySelectorAll('.kanban-col').forEach(function (col) {
+      col.addEventListener('dragover', function (e) { if (dragged) { e.preventDefault(); col.classList.add('drag-over'); } });
+      col.addEventListener('dragleave', function (e) { if (!col.contains(e.relatedTarget)) { col.classList.remove('drag-over'); } });
+      col.addEventListener('drop', function (e) {
+        e.preventDefault();
+        col.classList.remove('drag-over');
+        if (!dragged) { return; }
+        var card = dragged;
+        var fromCol = card.closest('.kanban-col');
+        if (fromCol === col) { return; }
+        var status = col.getAttribute('data-status');
+        moveCard(card, col, fromCol);
+        window.PIK.post(card.getAttribute('data-status-url'), { status: status }).then(function (res) {
+          if (!res.ok) {
+            moveCard(card, fromCol, col);
+            window.PIK.toast(res.message || 'Status gagal diubah.', 'danger');
+            return;
+          }
+          var select = card.querySelector('[data-kanban-select]');
+          if (select) { select.value = status; }
+          window.PIK.toast(res.message, 'success');
+        }).catch(function () {
+          moveCard(card, fromCol, col);
+          window.PIK.toast('Koneksi terputus. Status tidak diubah.', 'danger');
+        });
+      });
+    });
+  }
 })();
