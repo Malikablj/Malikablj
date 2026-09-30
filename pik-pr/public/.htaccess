@@ -1,0 +1,18 @@
+# Apache: arahkan semua request ke front controller (public/index.php).
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+Options -Indexes
+
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>
+
+# Jangan layani file tersembunyi (.env, .git, dll.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

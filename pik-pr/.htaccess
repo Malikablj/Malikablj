@@ -1,0 +1,8 @@
+# Pengaman bila document root salah diarahkan ke folder project.
+# Document root yang benar adalah folder public/ (lihat README).
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Deny from all
+</IfModule>

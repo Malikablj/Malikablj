@@ -1,5 +1,9 @@
 # NPD Project Control (Python)
 
+> **Repositori ini berisi dua aplikasi terpisah:**
+> - **NPD Project Control** (Python/Flask) — dokumentasi di bawah ini.
+> - **PR PIK — Aplikasi Purchase Requisition** (PHP 8.2+ & MySQL 8.0+) — lihat folder [`pik-pr/`](pik-pr/README.md).
+
 Aplikasi web internal untuk memantau project **New Product Development** — tipe **New Mold** dan **Subcont** —
 dari request sampai project selesai (PRD v2.1). Semua kode ditulis dengan **Python** (Flask) dan
 halaman HTML dirender di server, jadi tidak ada JavaScript yang perlu dipelajari.
