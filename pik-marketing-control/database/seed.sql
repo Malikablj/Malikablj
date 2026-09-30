@@ -18,6 +18,7 @@ INSERT INTO settings (setting_key, setting_value) VALUES
   ('company_name',              'PT Permata Indo Kemas'),
   ('app_name',                  'PIK Marketing Control'),
   ('invoice_default_due_days',  '30'),
+  ('ppn_rate',                  '11'),
   ('delivery_reminder_days',    '2'),
   ('automation_interval_minutes', '60'),
   ('automation_last_run',       NULL)

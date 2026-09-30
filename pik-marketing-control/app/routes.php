@@ -11,9 +11,11 @@ use App\Controllers\DashboardController;
 use App\Controllers\DeliveryController;
 use App\Controllers\FollowUpController;
 use App\Controllers\InboundController;
+use App\Controllers\InvoiceController;
 use App\Controllers\LeadController;
 use App\Controllers\LeadTimeController;
 use App\Controllers\NotificationController;
+use App\Controllers\PoFinancialController;
 use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Controllers\PurchaseOrderController;
@@ -147,6 +149,23 @@ return static function (Router $r): void {
     $r->get('/inbound/{id}/edit', [InboundController::class, 'edit'], 'inbound.edit');
     $r->post('/inbound/{id}', [InboundController::class, 'update'], 'inbound.edit');
     $r->post('/inbound/{id}/delete', [InboundController::class, 'destroy'], 'inbound.delete');
+
+    // Finance: invoice & payment, PO financials
+    $r->get('/invoices', [InvoiceController::class, 'index'], 'finance.view');
+    $r->get('/invoices/create', [InvoiceController::class, 'create'], 'finance.create');
+    $r->post('/invoices', [InvoiceController::class, 'store'], 'finance.create');
+    $r->get('/invoices/{id}', [InvoiceController::class, 'show'], 'finance.view');
+    $r->get('/invoices/{id}/edit', [InvoiceController::class, 'edit'], 'finance.edit');
+    $r->post('/invoices/{id}', [InvoiceController::class, 'update'], 'finance.edit');
+    $r->post('/invoices/{id}/payments', [InvoiceController::class, 'pay'], 'finance.edit');
+    $r->post('/invoices/{id}/delete', [InvoiceController::class, 'destroy'], 'finance.delete');
+    $r->get('/po-financials', [PoFinancialController::class, 'index'], 'finance.view');
+    $r->get('/po-financials/create', [PoFinancialController::class, 'create'], 'finance.create');
+    $r->post('/po-financials', [PoFinancialController::class, 'store'], 'finance.create');
+    $r->get('/po-financials/{id}', [PoFinancialController::class, 'show'], 'finance.view');
+    $r->get('/po-financials/{id}/edit', [PoFinancialController::class, 'edit'], 'finance.edit');
+    $r->post('/po-financials/{id}', [PoFinancialController::class, 'update'], 'finance.edit');
+    $r->post('/po-financials/{id}/delete', [PoFinancialController::class, 'destroy'], 'finance.delete');
 
     // Settings (Admin)
     $r->get('/users', [UserController::class, 'index'], 'users.view');

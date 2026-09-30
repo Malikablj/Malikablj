@@ -27,16 +27,21 @@ final class Number
      * presisi DECIMAL tidak hilang oleh float.
      *
      * Urutan pengenalan:
-     *   1. "1250000.5"        (format mesin / input type=number)
-     *   2. "1.250.000,50"     (format Indonesia: titik ribuan, koma desimal)
-     *   3. "1250000,5"        (koma desimal)
-     *   4. "1,250,000.50"     (format Inggris)
+     *   1. "500.000", "1.250.000" (titik ribuan format Indonesia — titik diikuti
+     *      tepat 3 digit TIDAK dibaca sebagai desimal, sehingga "500.000" = 500 ribu)
+     *   2. "1250000.5"        (format mesin / input type=number)
+     *   3. "1.250.000,50"     (format Indonesia: titik ribuan, koma desimal)
+     *   4. "1250000,5"        (koma desimal)
+     *   5. "1,250,000.50"     (format Inggris)
      */
     public static function parseDecimal(string $value): ?string
     {
         $value = str_replace([' ', "\u{00A0}"], '', trim($value));
         if ($value === '') {
             return null;
+        }
+        if (preg_match('/^-?[1-9]\d{0,2}(\.\d{3})+$/', $value)) {
+            return self::normalizeDecimalString(str_replace('.', '', $value));
         }
         if (preg_match('/^-?\d+(\.\d+)?$/', $value)) {
             return self::normalizeDecimalString($value);
@@ -118,6 +123,34 @@ final class Number
             $formatted = rtrim(rtrim($formatted, '0'), ',');
         }
         return $formatted;
+    }
+
+    /**
+     * Nilai uang → sen (integer) tanpa pembulatan float.
+     * "1250000.505" => 125000051 (dibulatkan setengah ke atas pada 2 desimal).
+     */
+    public static function toCents(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        $s = is_float($value) ? number_format($value, 6, '.', '') : trim((string) $value);
+        if (!preg_match('/^(-?)(\d+)(?:\.(\d+))?$/', $s, $m)) {
+            return null;
+        }
+        $frac = str_pad($m[3] ?? '', 3, '0');
+        $cents = (int) $m[2] * 100 + (int) substr($frac, 0, 2);
+        if ((int) $frac[2] >= 5) {
+            $cents++;
+        }
+        return $m[1] === '-' ? -$cents : $cents;
+    }
+
+    /** Sen (integer) → string desimal untuk kolom DECIMAL, mis. 125000051 => "1250000.51". */
+    public static function fromCents(int $cents): string
+    {
+        $abs = abs($cents);
+        return ($cents < 0 ? '-' : '') . intdiv($abs, 100) . '.' . str_pad((string) ($abs % 100), 2, '0', STR_PAD_LEFT);
     }
 
     /** Ringkas: 1250000 => "1,25 jt", 3500000000 => "3,5 M" */

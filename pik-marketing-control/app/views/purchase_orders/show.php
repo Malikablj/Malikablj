@@ -201,18 +201,22 @@ $canProduct = can('products.view');
     </section>
 <?php endif; ?>
 
-<?php if ($invoices || $financials): ?>
+<?php if (can('finance.view')): ?>
     <section class="surface section-gap">
-        <div class="surface-header"><h2 class="surface-title">Finance</h2></div>
+        <div class="surface-header"><h2 class="surface-title">Finance</h2>
+            <?php if (can('finance.create')): ?><div class="d-flex gap-2 flex-wrap">
+                <a class="btn btn-light btn-sm" href="<?= e(url('/invoices/create', ['po_id' => $id])) ?>"><i class="bi bi-plus-lg"></i> Invoice</a>
+                <a class="btn btn-light btn-sm" href="<?= e(url('/po-financials/create', ['po_id' => $id])) ?>"><i class="bi bi-plus-lg"></i> Nilai PO</a></div><?php endif; ?></div>
+        <?php if (!$invoices && !$financials): ?><div class="empty-inline">Belum ada invoice atau nilai PO untuk PO ini.</div><?php endif; ?>
         <?php if ($financials): ?>
             <div class="table-wrap">
                 <table class="table-pik table-compact">
-                    <thead><tr><th>Ringkasan PO (legacy)</th><th class="num d-none d-md-table-cell">Qty</th><th class="num d-none d-md-table-cell">Harga satuan</th><th class="num">Total + PPN</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Ringkasan PO (legacy)</th><th class="num d-none d-md-table-cell">Qty</th><th class="num d-none d-md-table-cell">Harga satuan</th><th class="num">Total + PPN</th><th class="d-none d-sm-table-cell">Status</th></tr></thead>
                     <tbody>
                     <?php foreach ($financials as $f): ?>
-                        <tr><td><?= e($f['product_legacy'] ?? '—') ?><div class="cell-sub"><?= e($f['brand'] ?? '') ?></div></td>
+                        <tr><td><a class="cell-title" href="<?= e(url('/po-financials/' . $f['id'])) ?>"><?= e($f['product_legacy'] ?? '—') ?></a><div class="cell-sub"><?= e($f['brand'] ?? '') ?></div><div class="cell-sub d-sm-none"><?= status_badge($f['payment_status']) ?></div></td>
                             <td class="num d-none d-md-table-cell"><?= e(fmt_qty($f['order_qty'])) ?></td><td class="num d-none d-md-table-cell"><?= e(App\Helpers\Number::decimal($f['unit_price'])) ?></td>
-                            <td class="num"><?= e(fmt_money($f['total_incl_ppn'])) ?></td><td><?= status_badge($f['payment_status']) ?></td></tr>
+                            <td class="num"><?= e(fmt_money($f['total_incl_ppn'])) ?></td><td class="d-none d-sm-table-cell"><?= status_badge($f['payment_status']) ?></td></tr>
                     <?php endforeach; ?>
                     </tbody>
                 </table>

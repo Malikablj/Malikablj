@@ -58,6 +58,10 @@ test('angka: parseDecimal mendukung format mesin & Indonesia', function () {
     assert_same('1250000.5', Number::parseDecimal('1250000.50'));
     assert_same('1250000.5', Number::parseDecimal('1.250.000,50'));
     assert_same('1250000', Number::parseDecimal('1.250.000'));
+    assert_same('500000', Number::parseDecimal('500.000'), 'titik + 3 digit = ribuan (format Indonesia)');
+    assert_same('0.5', Number::parseDecimal('0.500'));
+    assert_same('1846.85', Number::parseDecimal('1846.85'));
+    assert_same('12.5', Number::parseDecimal('12,5'));
     assert_same('270.27', Number::parseDecimal('270,27'));
     assert_same('1250000.5', Number::parseDecimal('1,250,000.50'));
     assert_same(null, Number::parseDecimal('12a'));

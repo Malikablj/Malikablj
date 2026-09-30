@@ -565,6 +565,7 @@ textarea.form-control { min-height: 96px; }
 .callout { border-radius: 14px; padding: 14px 16px; background: var(--pik-surface-2); border: 1px solid var(--pik-border); font-size: .875rem; }
 .callout-warning { background: rgba(255, 159, 10, .08); border-color: rgba(255, 159, 10, .3); }
 .callout-info { background: rgba(0, 113, 227, .05); border-color: rgba(0, 113, 227, .2); }
+.callout-success { background: rgba(52, 199, 89, .08); border-color: rgba(52, 199, 89, .3); }
 .bar-row { display: grid; grid-template-columns: 120px 1fr 90px; gap: 12px; align-items: center; font-size: .8125rem; padding: 6px 0; }
 .bar-track { height: 10px; background: #EDEDF0; border-radius: 999px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 999px; background: var(--pik-accent); }
