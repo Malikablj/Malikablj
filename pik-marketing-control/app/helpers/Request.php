@@ -50,13 +50,30 @@ final class Request
             $configured = trim($configured, '/');
             return self::$basePath = $configured === '' ? '' : '/' . $configured;
         }
-        $script = (string) ($_SERVER['SCRIPT_NAME'] ?? '');
-        $dir = str_replace('\\', '/', dirname($script));
-        $dir = rtrim($dir, '/');
+        return self::$basePath = self::detectBasePath((string) ($_SERVER['SCRIPT_NAME'] ?? ''), (string) ($_SERVER['REQUEST_URI'] ?? '/'));
+    }
+
+    /**
+     * Deteksi base path dari SCRIPT_NAME & REQUEST_URI (fungsi murni, diuji otomatis):
+     *   DocumentRoot = public/                 → ""
+     *   Proyek utuh di document root (.htaccess root → public/) → ""
+     *   Proyek di subfolder /pik (.htaccess root → public/)       → "/pik"
+     */
+    public static function detectBasePath(string $scriptName, string $requestUri): string
+    {
+        $dir = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
         if ($dir === '.' || $dir === '/') {
             $dir = '';
         }
-        return self::$basePath = $dir;
+        // .htaccess di root meneruskan request ke public/: SCRIPT_NAME memuat "/public"
+        // padahal URL yang dibuka pengguna tidak.
+        if (str_ends_with($dir, '/public')) {
+            $uriPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '/');
+            if ($uriPath !== $dir && !str_starts_with($uriPath, $dir . '/')) {
+                $dir = substr($dir, 0, -strlen('/public'));
+            }
+        }
+        return $dir;
     }
 
     public static function setBasePath(?string $basePath): void

@@ -106,6 +106,15 @@ test('business rule: outstanding = order - delivered + return', function () {
     assert_same(-1488, PoLine::outstanding(250000, 261181, 9693));
 });
 
+test('deteksi base path untuk berbagai cara deploy Apache', function () {
+    assert_same('', App\Helpers\Request::detectBasePath('/index.php', '/login'), 'DocumentRoot = public/');
+    assert_same('', App\Helpers\Request::detectBasePath('/public/index.php', '/customers?page=2'), 'proyek utuh di document root');
+    assert_same('/pik', App\Helpers\Request::detectBasePath('/pik/public/index.php', '/pik/customers'), 'proyek di subfolder');
+    assert_same('/pik', App\Helpers\Request::detectBasePath('/pik/public/index.php', '/pik/'), 'subfolder, halaman awal');
+    assert_same('/pik/public', App\Helpers\Request::detectBasePath('/pik/public/index.php', '/pik/public/login'), 'URL memuat /public secara eksplisit');
+    assert_same('/pik', App\Helpers\Request::detectBasePath('/pik/index.php', '/pik/login'), 'alias langsung ke public/');
+});
+
 test('SqlFile memecah statement dengan benar (komentar & string)', function () {
     $s = SqlFile::statements("-- komentar; tidak dieksekusi\nINSERT INTO t VALUES ('a;b');\n/* blok ; */ SELECT 1;");
     assert_same(["INSERT INTO t VALUES ('a;b')", 'SELECT 1'], $s);

@@ -9,7 +9,8 @@ declare(strict_types=1);
  *   management@pik.test, viewer@pik.test
  *
  * Password semua user = nilai variabel DEV_PASSWORD, atau default
- * "PikDev2026!" bila tidak diset. Script menolak berjalan bila APP_ENV=production.
+ * "PikDev2026!" bila tidak diset. Script hanya berjalan bila APP_ENV = development,
+ * local, atau testing (ditolak di production maupun bila APP_ENV tidak diset).
  *
  *   php database/seed_dev_users.php
  */
@@ -23,8 +24,8 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 use App\Helpers\Database;
 use App\Models\User;
 
-if (config('app.env') === 'production') {
-    fwrite(STDERR, "Ditolak: APP_ENV=production. User development tidak boleh dibuat di server produksi.\n");
+if (!in_array(config('app.env'), ['development', 'local', 'testing'], true)) {
+    fwrite(STDERR, "Ditolak: APP_ENV harus development/local/testing. User development tidak boleh dibuat di server produksi.\n");
     exit(1);
 }
 
