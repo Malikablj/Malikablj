@@ -10,13 +10,17 @@ use App\Controllers\CustomerController;
 use App\Controllers\DashboardController;
 use App\Controllers\DeliveryController;
 use App\Controllers\FollowUpController;
+use App\Controllers\InboundController;
 use App\Controllers\LeadController;
+use App\Controllers\LeadTimeController;
 use App\Controllers\NotificationController;
+use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Controllers\PurchaseOrderController;
 use App\Controllers\ReturnController;
 use App\Controllers\SearchController;
 use App\Controllers\SetupController;
+use App\Controllers\StockController;
 use App\Controllers\UserController;
 use App\Helpers\Router;
 
@@ -115,6 +119,34 @@ return static function (Router $r): void {
     $r->get('/returns/{id}/edit', [ReturnController::class, 'edit'], 'returns.edit');
     $r->post('/returns/{id}', [ReturnController::class, 'update'], 'returns.edit');
     $r->post('/returns/{id}/delete', [ReturnController::class, 'destroy'], 'returns.delete');
+
+    // Inventory: products, stock, lead time, inbound maklon
+    $r->get('/products', [ProductController::class, 'index'], 'products.view');
+    $r->get('/products/create', [ProductController::class, 'create'], 'products.create');
+    $r->post('/products', [ProductController::class, 'store'], 'products.create');
+    $r->get('/products/{id}', [ProductController::class, 'show'], 'products.view');
+    $r->get('/products/{id}/edit', [ProductController::class, 'edit'], 'products.edit');
+    $r->post('/products/{id}', [ProductController::class, 'update'], 'products.edit');
+    $r->post('/products/{id}/delete', [ProductController::class, 'destroy'], 'products.delete');
+    $r->get('/stock', [StockController::class, 'index'], 'stock.view');
+    $r->get('/stock/create', [StockController::class, 'create'], 'stock.create');
+    $r->post('/stock', [StockController::class, 'store'], 'stock.create');
+    $r->get('/stock/{id}/edit', [StockController::class, 'edit'], 'stock.edit');
+    $r->post('/stock/{id}', [StockController::class, 'update'], 'stock.edit');
+    $r->post('/stock/{id}/delete', [StockController::class, 'destroy'], 'stock.delete');
+    $r->get('/lead-times', [LeadTimeController::class, 'index'], 'leadtime.view');
+    $r->get('/lead-times/create', [LeadTimeController::class, 'create'], 'leadtime.create');
+    $r->post('/lead-times', [LeadTimeController::class, 'store'], 'leadtime.create');
+    $r->get('/lead-times/{id}/edit', [LeadTimeController::class, 'edit'], 'leadtime.edit');
+    $r->post('/lead-times/{id}', [LeadTimeController::class, 'update'], 'leadtime.edit');
+    $r->post('/lead-times/{id}/delete', [LeadTimeController::class, 'destroy'], 'leadtime.delete');
+    $r->get('/inbound', [InboundController::class, 'index'], 'inbound.view');
+    $r->get('/inbound/create', [InboundController::class, 'create'], 'inbound.create');
+    $r->post('/inbound', [InboundController::class, 'store'], 'inbound.create');
+    $r->get('/inbound/{id}', [InboundController::class, 'show'], 'inbound.view');
+    $r->get('/inbound/{id}/edit', [InboundController::class, 'edit'], 'inbound.edit');
+    $r->post('/inbound/{id}', [InboundController::class, 'update'], 'inbound.edit');
+    $r->post('/inbound/{id}/delete', [InboundController::class, 'destroy'], 'inbound.delete');
 
     // Settings (Admin)
     $r->get('/users', [UserController::class, 'index'], 'users.view');

@@ -18,6 +18,10 @@ declare(strict_types=1);
  *            reports.po, reports.delivery, reports.financial, reports.export),
  *   users, audit, migration, import (khusus Admin)
  *
+ * Interpretasi PRD untuk modul yang tidak disebut per role:
+ *   - Lead Time mengikuti akses PO/Delivery (Marketing & Management).
+ *   - Inbound Maklon mengikuti akses Stock (Management).
+ *
  * Permission ini dicek di BACKEND pada setiap route (lihat app/routes.php)
  * dan juga dipakai untuk menyembunyikan menu/tombol di tampilan.
  * Ubah file ini bila kebijakan akses perusahaan berubah.
@@ -29,7 +33,7 @@ return [
         'dashboard.view',
         'customers.*', 'contacts.*',
         'leads.*', 'activities.*', 'followups.*',
-        'purchase_orders.*', 'deliveries.*', 'returns.*',
+        'purchase_orders.*', 'deliveries.*', 'returns.*', 'leadtime.*',
         'products.*',
     ],
 
@@ -43,8 +47,8 @@ return [
         'dashboard.view',
         'reports.*',
         'customers.*', 'contacts.*',
-        'purchase_orders.*', 'deliveries.*', 'returns.*',
-        'stock.*',
+        'purchase_orders.*', 'deliveries.*', 'returns.*', 'leadtime.*',
+        'stock.*', 'inbound.*',
     ],
 
     // Read-only untuk seluruh modul operasional (tanpa Finance & area Admin)

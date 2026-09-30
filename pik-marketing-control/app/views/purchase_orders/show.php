@@ -179,15 +179,25 @@ $canProduct = can('products.view');
     </section>
 <?php endif; ?>
 
-<?php if ($leadtimes): ?>
+<?php if (can('leadtime.view') && ($leadtimes || (can('leadtime.create') && $lines && in_array($po['status'], App\Models\PurchaseOrder::OPEN_STATUSES, true)))): ?>
     <section class="surface section-gap">
-        <div class="surface-header"><h2 class="surface-title">Estimasi lead time delivery</h2></div>
-        <ul class="list-lite">
-            <?php foreach ($leadtimes as $lt): ?>
-                <li><div class="li-main"><span class="li-title"><?= e($lt['product_legacy'] ?? '—') ?></span><div class="li-sub"><?= e(fmt_qty($lt['quantity'])) ?> pcs</div></div>
-                    <div class="li-end"><div><?= e(fmt_date($lt['delivery_date'])) ?></div><?= status_badge($lt['status']) ?></div></li>
-            <?php endforeach; ?>
-        </ul>
+        <div class="surface-header"><div><h2 class="surface-title">Estimasi lead time delivery <span class="tab-count"><?= count($leadtimes) ?></span></h2></div>
+            <?php if (can('leadtime.create') && $lines && in_array($po['status'], App\Models\PurchaseOrder::OPEN_STATUSES, true)): ?>
+                <a class="btn btn-light btn-sm" href="<?= e(url('/lead-times/create', ['po_id' => $id, 'return' => $base])) ?>"><i class="bi bi-plus-lg"></i> Estimasi</a>
+            <?php endif; ?></div>
+        <?php if (!$leadtimes): ?>
+            <div class="empty-inline">Belum ada estimasi tanggal delivery untuk PO ini.</div>
+        <?php else: ?>
+            <ul class="list-lite">
+                <?php foreach ($leadtimes as $lt): $late = App\Models\LeadTime::isLate($lt, today()); ?>
+                    <li><div class="li-main"><span class="li-title"><?= e($lt['product_name'] ?? ($lt['product_legacy'] ?? '—')) ?></span>
+                        <div class="li-sub"><?= e(fmt_qty($lt['quantity'])) ?> pcs<?= $lt['notes'] ? ' · ' . e(excerpt($lt['notes'], 60)) : '' ?></div></div>
+                        <div class="li-end"><div class="<?= $late ? 'text-danger fw-semibold' : '' ?>"><?= e(fmt_date($lt['delivery_date'], 'Belum ada')) ?></div>
+                            <?= $late ? status_badge('Overdue', 'Terlambat') : status_badge($lt['status']) ?>
+                            <?php if (can('leadtime.edit')): ?><a class="x-small ms-1" href="<?= e(url('/lead-times/' . $lt['id'] . '/edit', ['return' => $base])) ?>">Edit</a><?php endif; ?></div></li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
     </section>
 <?php endif; ?>
 

@@ -215,4 +215,20 @@
       }
     });
   }
+
+  /* Form stok: tampilkan hasil Box × Qty per box sebagai petunjuk di kolom Qty.
+     Perhitungan final tetap dilakukan server bila Qty dikosongkan. */
+  var boxInput = document.getElementById('f_box');
+  var perBoxInput = document.getElementById('f_qty_per_box');
+  var qtyInput = document.getElementById('f_quantity');
+  if (boxInput && perBoxInput && qtyInput) {
+    var updateQtyHint = function () {
+      var box = parseInt(boxInput.value, 10);
+      var perBox = parseInt(perBoxInput.value, 10);
+      qtyInput.placeholder = (box >= 0 && perBox > 0) ? '= ' + (box * perBox).toLocaleString('id-ID') + ' (otomatis)' : '';
+    };
+    boxInput.addEventListener('input', updateQtyHint);
+    perBoxInput.addEventListener('input', updateQtyHint);
+    updateQtyHint();
+  }
 })();

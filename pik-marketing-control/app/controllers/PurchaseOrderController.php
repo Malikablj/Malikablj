@@ -10,6 +10,7 @@ use App\Helpers\Request;
 use App\Helpers\Validator;
 use App\Models\Customer;
 use App\Models\Delivery;
+use App\Models\LeadTime;
 use App\Models\MigrationIssue;
 use App\Models\PoLine;
 use App\Models\Product;
@@ -89,7 +90,7 @@ final class PurchaseOrderController extends Controller
             'returns'    => ProductReturn::forPo($id),
             'invoices'   => $finance ? Database::fetchAll('SELECT *, (invoice_amount - paid_amount) AS outstanding_amount FROM invoices_payments WHERE po_id = :id ORDER BY invoice_date DESC', ['id' => $id]) : [],
             'financials' => $finance ? Database::fetchAll('SELECT * FROM po_financials WHERE po_id = :id ORDER BY id', ['id' => $id]) : [],
-            'leadtimes'  => Database::fetchAll('SELECT * FROM leadtime WHERE po_id = :id ORDER BY delivery_date', ['id' => $id]),
+            'leadtimes'  => Auth::can('leadtime.view') ? LeadTime::forPo($id) : [],
             'issues'     => Auth::can('migration.view') ? MigrationIssue::openForRecord('PURCHASE_ORDERS', $id) : [],
             'products'   => Auth::can('purchase_orders.edit') ? Product::selectOptions() : [],
             'errors'     => [],

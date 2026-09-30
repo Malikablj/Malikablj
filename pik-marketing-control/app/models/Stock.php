@@ -94,7 +94,8 @@ final class Stock extends Model
                     SUM(CASE WHEN s.stock_type = 'WIP' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS wip,
                     SUM(CASE WHEN s.stock_type = 'Ready' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS ready,
                     SUM(CASE WHEN s.stock_type = 'Reserved' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS reserved,
-                    COUNT(*) AS entries, MAX(COALESCE(s.updated_at, s.created_at)) AS last_update
+                    COUNT(*) AS entries, COALESCE(SUM(s.quantity IS NULL), 0) AS qty_missing,
+                    MAX(COALESCE(s.updated_at, s.created_at)) AS last_update
              FROM stock s JOIN products pr ON pr.id = s.product_id
              WHERE " . $where . '
              GROUP BY s.product_id, pr.code, pr.name, pr.variant, pr.product_code, pr.unit',

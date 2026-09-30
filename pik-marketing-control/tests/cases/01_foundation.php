@@ -123,6 +123,21 @@ test('database kosong: /login diarahkan ke /setup, dashboard tidak crash setelah
     assert_status(404, (new HttpClient(TEST_BASE_URL))->get('/setup'), 'setup harus tertutup setelah ada user');
 });
 
+test('database kosong: semua halaman daftar & form terbuka tanpa error (Admin)', function () {
+    $router = new App\Helpers\Router();
+    (require APP_ROOT . '/app/routes.php')($router);
+    $c = client_as('Admin');
+    $checked = 0;
+    foreach ($router->all() as $route) {
+        if ($route['method'] !== 'GET' || str_contains($route['pattern'], '{') || in_array($route['permission'], ['guest'], true)) {
+            continue;
+        }
+        assert_status(200, $c->get($route['pattern']), 'GET ' . $route['pattern']);
+        $checked++;
+    }
+    assert_true($checked >= 25, "halaman yang dicek: {$checked}");
+});
+
 test('password disimpan sebagai hash (bukan plaintext)', function () {
     $hash = (string) Database::fetchValue("SELECT password_hash FROM users WHERE email = 'admin.qa@pik.test'");
     assert_true(str_starts_with($hash, '$2y$') || str_starts_with($hash, '$argon2'), 'harus hash bcrypt/argon');
