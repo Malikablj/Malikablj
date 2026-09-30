@@ -931,6 +931,22 @@ final class WorkbookImporter
         return $out;
     }
 
+    /**
+     * Catat ringkasan import terakhir di tabel settings (dipakai CLI & halaman Import).
+     * @param list<string> $legacyNames
+     * @param array<string,int> $counts
+     */
+    public static function recordLastImport(string $masterName, array $legacyNames, array $counts, int $autoCorrected): void
+    {
+        Database::query(
+            'INSERT INTO settings (setting_key, setting_value) VALUES (:k, :v) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
+            ['k' => 'last_import', 'v' => json_encode([
+                'at' => date('Y-m-d H:i:s'), 'file' => $masterName, 'counts' => $counts,
+                'legacy_files' => array_values($legacyNames), 'auto_corrected' => $autoCorrected,
+            ], JSON_UNESCAPED_UNICODE)]
+        );
+    }
+
     /** Hapus seluruh data bisnis (users, settings, audit log tidak disentuh). */
     public static function wipeBusinessData(): void
     {

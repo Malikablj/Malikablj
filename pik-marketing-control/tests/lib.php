@@ -195,6 +195,25 @@ final class HttpClient
         return $res;
     }
 
+    /**
+     * Upload multipart (file: field => path lokal).
+     * @param array<string,mixed> $fields
+     * @param array<string,string> $files
+     */
+    public function upload(string $path, array $fields, array $files): HttpResponse
+    {
+        if ($this->token === null) {
+            $this->get('/login');
+        }
+        $fields['_token'] = $this->token;
+        foreach ($files as $field => $file) {
+            $fields[$field] = new CURLFile($file, 'application/octet-stream', basename($file));
+        }
+        $res = $this->request('POST', $this->base . $path, $fields, []);
+        $this->captureToken($res->body);
+        return $res;
+    }
+
     public function login(string $email, string $password): HttpResponse
     {
         $this->get('/login');
@@ -208,7 +227,8 @@ final class HttpClient
         }
     }
 
-    private function request(string $method, string $url, ?string $body, array $headers): HttpResponse
+    /** @param string|array<string,mixed>|null $body */
+    private function request(string $method, string $url, string|array|null $body, array $headers): HttpResponse
     {
         $ch = curl_init($url);
         $responseHeaders = [];

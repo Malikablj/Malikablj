@@ -97,6 +97,12 @@ final class PoLine extends Model
         );
     }
 
+    /** @return list<array<string,mixed>> semua baris sebuah PO */
+    public static function linesOfPo(int $poId): array
+    {
+        return Database::fetchAll('SELECT * FROM po_lines WHERE po_id = :p ORDER BY id', ['p' => $poId]);
+    }
+
     /** Hitung outstanding (fungsi murni, dipakai juga oleh test). */
     public static function outstanding(int $orderQty, int $deliveredQty, int $returnQty): int
     {

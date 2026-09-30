@@ -112,10 +112,7 @@ try {
     }
     $counts = $importer->execute(null);
     Audit::log('import', 'import', null, basename((string) $opts['master']), array_map(static fn ($c) => ['old' => null, 'new' => $c], $counts));
-    Database::query(
-        'INSERT INTO settings (setting_key, setting_value) VALUES (:k, :v) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
-        ['k' => 'last_import', 'v' => json_encode(['at' => date('Y-m-d H:i:s'), 'file' => basename((string) $opts['master']), 'counts' => $counts, 'legacy_files' => array_map('basename', $legacy), 'auto_corrected' => $r['auto_corrected']], JSON_UNESCAPED_UNICODE)]
-    );
+    WorkbookImporter::recordLastImport(basename((string) $opts['master']), array_map('basename', $legacy), $counts, (int) $r['auto_corrected']);
     printf("\nImport selesai dalam %.1f detik. Tinjau hasilnya di menu Settings › Migration Issues.\n", microtime(true) - $start);
 } catch (Throwable $e) {
     fwrite(STDERR, "\nGAGAL: " . $e->getMessage() . "\nTidak ada data yang tersimpan (transaksi dibatalkan).\n");

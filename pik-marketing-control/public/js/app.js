@@ -57,14 +57,15 @@
     });
   });
 
-  /* Konfirmasi sebelum aksi berbahaya: <form data-confirm="Yakin?"> */
+  /* Konfirmasi sebelum aksi berbahaya: <form data-confirm="Yakin?"> atau <button data-confirm="..."> */
   document.addEventListener('submit', function (e) {
     var form = e.target;
-    if (form.matches && form.matches('form[data-confirm]')) {
-      if (!window.confirm(form.getAttribute('data-confirm'))) {
-        e.preventDefault();
-        return;
-      }
+    var submitter = e.submitter;
+    var message = (submitter && submitter.getAttribute && submitter.getAttribute('data-confirm'))
+      || (form.matches && form.matches('form[data-confirm]') ? form.getAttribute('data-confirm') : null);
+    if (message && !window.confirm(message)) {
+      e.preventDefault();
+      return;
     }
     // cegah double submit
     if (form.matches && form.matches('form') && !form.hasAttribute('data-allow-resubmit')) {
@@ -72,6 +73,17 @@
       form.dataset.submitting = '1';
       setTimeout(function () { form.dataset.submitting = '0'; }, 4000);
     }
+  });
+
+  /* Centang semua: <input type="checkbox" data-check-all="ids[]"> (dalam form yang sama) */
+  document.querySelectorAll('[data-check-all]').forEach(function (box) {
+    box.addEventListener('change', function () {
+      var scope = box.closest('form') || document;
+      var name = box.getAttribute('data-check-all');
+      scope.querySelectorAll('input[type="checkbox"]').forEach(function (c) {
+        if (c.name === name) { c.checked = box.checked; }
+      });
+    });
   });
 
   document.querySelectorAll('[data-history-back]').forEach(function (btn) {
