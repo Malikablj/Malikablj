@@ -19,6 +19,7 @@ use App\Controllers\PoFinancialController;
 use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Controllers\PurchaseOrderController;
+use App\Controllers\ReportController;
 use App\Controllers\ReturnController;
 use App\Controllers\SearchController;
 use App\Controllers\SetupController;
@@ -166,6 +167,11 @@ return static function (Router $r): void {
     $r->get('/po-financials/{id}/edit', [PoFinancialController::class, 'edit'], 'finance.edit');
     $r->post('/po-financials/{id}', [PoFinancialController::class, 'update'], 'finance.edit');
     $r->post('/po-financials/{id}/delete', [PoFinancialController::class, 'destroy'], 'finance.delete');
+
+    // Reports (akses per jenis laporan dicek di controller: reports.customer, reports.po, ...)
+    $r->get('/reports', [ReportController::class, 'index'], 'reports.view');
+    $r->get('/reports/{type}', [ReportController::class, 'show'], 'reports.view');
+    $r->get('/reports/{type}/export', [ReportController::class, 'export'], 'reports.export');
 
     // Settings (Admin)
     $r->get('/users', [UserController::class, 'index'], 'users.view');

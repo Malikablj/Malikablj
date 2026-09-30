@@ -47,4 +47,47 @@ final class DashboardService
             'outstanding_qty'    => (int) ($po['outstanding'] ?? 0),
         ];
     }
+    /**
+     * Follow up terbuka hari ini ("today") atau yang terlewat ("overdue").
+     * Milik user yang login ditampilkan lebih dulu.
+     * @return list<array<string,mixed>>
+     */
+    public static function followUps(string $bucket, string $today, ?int $meId, int $limit = 6): array
+    {
+        $cond = $bucket === 'today' ? 'f.follow_up_date = :d' : 'f.follow_up_date < :d';
+        return Database::fetchAll(
+            "SELECT f.id, f.follow_up_date, f.follow_up_time, f.follow_up_type, f.purpose, f.status, f.customer_id, f.lead_id, f.pic_user_id,
+                    c.name AS customer_name, l.lead_name, u.name AS pic_name
+             FROM follow_up f LEFT JOIN customers c ON c.id = f.customer_id LEFT JOIN leads l ON l.id = f.lead_id
+             LEFT JOIN users u ON u.id = f.pic_user_id
+             WHERE {$cond} AND f.status NOT IN ('Done','Cancelled')
+             ORDER BY (f.pic_user_id = :me) DESC, f.follow_up_date ASC, f.follow_up_time IS NULL, f.follow_up_time ASC, f.id ASC
+             LIMIT " . max(1, $limit),
+            ['d' => $today, 'me' => $meId ?? 0]
+        );
+    }
+
+    /** @return list<array<string,mixed>> */
+    public static function recentActivities(int $limit = 6): array
+    {
+        return Database::fetchAll(
+            'SELECT a.id, a.activity_date, a.activity_type, a.subject, a.customer_id, a.lead_id,
+                    COALESCE(c.name, l.company_name, l.lead_name) AS related, u.name AS pic_name
+             FROM activities a LEFT JOIN customers c ON c.id = a.customer_id LEFT JOIN leads l ON l.id = a.lead_id
+             LEFT JOIN users u ON u.id = a.pic_user_id
+             ORDER BY a.activity_date DESC, a.id DESC LIMIT ' . max(1, $limit)
+        );
+    }
+
+    /** @return list<array<string,mixed>> PO terbaru */
+    public static function recentOrders(int $limit = 6): array
+    {
+        return Database::fetchAll(
+            'SELECT p.id, p.code, p.po_number, p.po_date, p.status, c.name AS customer_name,
+                    COALESCE(t.total_qty, 0) AS total_qty, COALESCE(t.outstanding_qty, 0) AS outstanding_qty
+             FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
+             LEFT JOIN (' . PoLine::poTotalsSql() . ') t ON t.po_id = p.id
+             ORDER BY p.po_date IS NULL, p.po_date DESC, p.id DESC LIMIT ' . max(1, $limit)
+        );
+    }
 }

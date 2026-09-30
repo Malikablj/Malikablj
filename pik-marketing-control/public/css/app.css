@@ -566,12 +566,36 @@ textarea.form-control { min-height: 96px; }
 .callout-warning { background: rgba(255, 159, 10, .08); border-color: rgba(255, 159, 10, .3); }
 .callout-info { background: rgba(0, 113, 227, .05); border-color: rgba(0, 113, 227, .2); }
 .callout-success { background: rgba(52, 199, 89, .08); border-color: rgba(52, 199, 89, .3); }
-.bar-row { display: grid; grid-template-columns: 120px 1fr 90px; gap: 12px; align-items: center; font-size: .8125rem; padding: 6px 0; }
-.bar-track { height: 10px; background: #EDEDF0; border-radius: 999px; overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 999px; background: var(--pik-accent); }
+/* Bar list (rincian laporan): satu seri, satu warna aksen, tumbuh dari satu baseline.
+   Ujung data membulat 4px, sisi baseline persegi; nilai ditulis dengan warna teks. */
+.bar-list { padding: 8px 22px 14px; }
+.bar-row { display: grid; grid-template-columns: minmax(96px, 34%) 1fr auto; gap: 12px; align-items: center; font-size: .8125rem; padding: 4px 0; }
+.bar-label { color: var(--pik-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { height: 12px; border-left: 1px solid var(--pik-border-strong); }
+.bar-fill { height: 100%; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--pik-accent); transition: background-color .12s ease; }
+.bar-row:hover .bar-fill { background: var(--pik-accent-hover); }
+.bar-value { color: var(--pik-muted); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; min-width: 56px; }
 @media (max-width: 575.98px) {
-  .bar-row { grid-template-columns: 96px 1fr 70px; gap: 8px; }
+  .bar-list { padding: 6px 16px 12px; }
+  .bar-row { grid-template-columns: minmax(80px, 38%) 1fr auto; gap: 8px; }
 }
+
+/* Kolom laporan: disembunyikan menurut lebar area tabel (container query, bukan lebar layar,
+   karena sidebar ikut memakan tempat). Saat dicetak semua kolom tampil. */
+.report-cq { container-type: inline-size; }
+@container (max-width: 1399.98px) { .rc-hide-xxl { display: none; } }
+@container (max-width: 1149.98px) { .rc-hide-xl { display: none; } }
+@container (max-width: 919.98px) { .rc-hide-lg { display: none; } }
+@container (max-width: 699.98px) { .rc-hide-md { display: none; } }
+@container (max-width: 519.98px) { .rc-hide-sm { display: none; } }
+.report-presets { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 22px 0; }
+.report-presets a { font-size: .8125rem; font-weight: 550; padding: 5px 12px; border-radius: 999px; background: #EBEBEF; color: #3A3A3C; }
+.report-presets a:hover { background: #E0E0E5; color: var(--pik-text); }
+.report-presets a.active { background: var(--pik-text); color: #fff; }
+.report-card { display: flex; gap: 14px; align-items: flex-start; padding: 18px; height: 100%; color: inherit; }
+.report-card:hover { color: inherit; box-shadow: 0 4px 18px rgba(0, 0, 0, .06); }
+.report-card .avatar { flex-shrink: 0; }
+.print-header { margin-bottom: 12px; }
 
 /* Print (Save as PDF) */
 @media print {
@@ -584,5 +608,13 @@ textarea.form-control { min-height: 96px; }
   .kpi { box-shadow: none; }
   a { color: inherit; }
   .print-only { display: block !important; }
+  .report-table .rc-hide-sm, .report-table .rc-hide-md, .report-table .rc-hide-lg, .report-table .rc-hide-xl, .report-table .rc-hide-xxl { display: table-cell !important; }
+  .report-table .cell-sub.screen-only, .report-presets, .no-print-table-note { display: none !important; }
+  .report-table { font-size: 9pt; }
+  .report-table thead th, .report-table tbody td, .report-table tfoot td { padding: 4px 6px; }
+  .table-wrap { overflow: visible !important; }
 }
 .print-only { display: none; }
+.finance-card { color: inherit; transition: box-shadow .15s ease; }
+.finance-card:hover { color: inherit; box-shadow: 0 4px 18px rgba(0, 0, 0, .06); }
+.report-table td:first-child { overflow-wrap: anywhere; }
