@@ -22,6 +22,7 @@ final class App
 
         try {
             Session::start();
+            self::runAutomation();
             $router = new Router();
             (require APP_ROOT . '/app/routes.php')($router);
             $router->dispatch(Request::method(), Request::path());
@@ -33,6 +34,22 @@ final class App
         } catch (Throwable $e) {
             Logger::error(get_class($e) . ': ' . $e->getMessage(), ['file' => $e->getFile() . ':' . $e->getLine(), 'path' => Request::path()]);
             self::renderError(500, 'Terjadi kesalahan pada server. Kejadian ini sudah dicatat di log.', $e);
+        }
+    }
+
+    /**
+     * Otomasi (notifikasi & status overdue) ikut berjalan saat aplikasi dipakai,
+     * maksimal sekali per interval. Kegagalan otomasi tidak boleh mengganggu halaman.
+     */
+    private static function runAutomation(): void
+    {
+        if (!Auth::check()) {
+            return;
+        }
+        try {
+            \App\Services\Automation::runIfDue();
+        } catch (Throwable $e) {
+            Logger::error('Automation: ' . $e->getMessage());
         }
     }
 

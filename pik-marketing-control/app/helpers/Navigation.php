@@ -42,6 +42,7 @@ final class Navigation
             ]],
             ['label' => 'Settings', 'items' => [
                 ['label' => 'Users', 'icon' => 'bi-people', 'path' => '/users', 'permission' => 'users.view'],
+                ['label' => 'Pengaturan', 'icon' => 'bi-gear', 'path' => '/settings', 'permission' => 'settings.view'],
                 ['label' => 'Migration Issues', 'icon' => 'bi-exclamation-diamond', 'path' => '/migration-issues', 'permission' => 'migration.view'],
                 ['label' => 'Import Data', 'icon' => 'bi-cloud-arrow-up', 'path' => '/import', 'permission' => 'import.view'],
                 ['label' => 'Audit Log', 'icon' => 'bi-shield-check', 'path' => '/audit-log', 'permission' => 'audit.view'],

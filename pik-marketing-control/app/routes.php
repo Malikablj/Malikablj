@@ -22,6 +22,7 @@ use App\Controllers\PurchaseOrderController;
 use App\Controllers\ReportController;
 use App\Controllers\ReturnController;
 use App\Controllers\SearchController;
+use App\Controllers\SettingsController;
 use App\Controllers\SetupController;
 use App\Controllers\StockController;
 use App\Controllers\UserController;
@@ -180,6 +181,9 @@ return static function (Router $r): void {
     $r->get('/users/{id}/edit', [UserController::class, 'edit'], 'users.edit');
     $r->post('/users/{id}', [UserController::class, 'update'], 'users.edit');
     $r->post('/users/{id}/password', [UserController::class, 'resetPassword'], 'users.edit');
+    $r->get('/settings', [SettingsController::class, 'show'], 'settings.view');
+    $r->post('/settings', [SettingsController::class, 'update'], 'settings.edit');
+    $r->post('/settings/automation/run', [SettingsController::class, 'runAutomation'], 'settings.edit');
     $r->get('/audit-log', [AuditLogController::class, 'index'], 'audit.view');
     $r->get('/audit-log/{id}', [AuditLogController::class, 'show'], 'audit.view');
 };
