@@ -69,7 +69,7 @@ final class Router
             $params = [];
             foreach ($matches as $key => $value) {
                 if (is_string($key)) {
-                    $params[$key] = ctype_digit($value) ? (int) $value : $value;
+                    $params[$key] = preg_match('/^\d+$/D', $value) === 1 ? (int) $value : $value;
                 }
             }
             $this->run($route, $params);

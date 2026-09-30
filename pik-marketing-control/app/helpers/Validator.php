@@ -268,7 +268,8 @@ final class Validator
         return ['value' => $value];
     }
 
-    private function fail(string $field, string $message): false
+    /** Selalu mengembalikan false (tipe `bool` agar tetap kompatibel dengan PHP 8.1). */
+    private function fail(string $field, string $message): bool
     {
         $this->addError($field, $message);
         return false;

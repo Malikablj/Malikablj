@@ -16,7 +16,7 @@ declare(strict_types=1);
  *   products, stock, leadtime, inbound, finance,
  *   reports (sub: reports.customer, reports.lead, reports.activity,
  *            reports.po, reports.delivery, reports.financial, reports.export),
- *   users, audit, migration, import (khusus Admin)
+ *   users, settings, audit, migration, import (khusus Admin)
  *
  * Interpretasi PRD untuk modul yang tidak disebut per role:
  *   - Lead Time mengikuti akses PO/Delivery (Marketing & Management).

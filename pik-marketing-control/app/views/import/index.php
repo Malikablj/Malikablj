@@ -76,7 +76,7 @@ $hasData = $existing !== [];
 
     <div class="col-xl-5 min-w-0">
         <?php if ($lastImport): ?>
-            <section class="surface surface-pad section-gap small">
+            <section class="surface surface-pad section-gap small text-break">
                 <div class="fw-semibold mb-1">Import terakhir</div>
                 <div class="text-secondary"><?= e(fmt_datetime($lastImport['at'] ?? null)) ?> · <?= e((string) ($lastImport['file'] ?? '')) ?></div>
                 <?php if (!empty($lastImport['legacy_files'])): ?><div class="text-secondary">Legacy: <?= e(implode(', ', (array) $lastImport['legacy_files'])) ?></div><?php endif; ?>

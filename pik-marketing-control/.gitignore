@@ -16,6 +16,11 @@ storage/exports/*
 *.csv
 database/*.local.sql
 database/generated/
+# Dump/backup database berisi data bisnis; hanya schema & seed yang boleh masuk
+*.sql
+*.sql.gz
+!database/schema.sql
+!database/seed.sql
 
 # Test / tooling
 tests/output/

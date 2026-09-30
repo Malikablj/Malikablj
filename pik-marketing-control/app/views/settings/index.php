@@ -75,7 +75,7 @@ $labels = [
                 <div class="code-chip mt-1 d-inline-block text-wrap">*/15 * * * * php cron/automation.php</div></div>
         </section>
         <?php if ($lastImport): ?>
-            <section class="surface surface-pad small">
+            <section class="surface surface-pad small text-break">
                 <div class="fw-semibold mb-1">Import data terakhir</div>
                 <div class="text-secondary"><?= e(fmt_datetime($lastImport['at'] ?? null)) ?> · <?= e((string) ($lastImport['file'] ?? '')) ?></div>
                 <?php if (!empty($lastImport['counts']) && is_array($lastImport['counts'])): ?>
