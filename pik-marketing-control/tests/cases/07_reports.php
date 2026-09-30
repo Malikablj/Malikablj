@@ -49,9 +49,11 @@ test('dashboard menampilkan daftar sesuai role (data aktual, otorisasi backend)'
     Database::insert('activities', ['code' => 'ACT-REP0000001', 'customer_id' => $ids['customer'], 'activity_date' => today() . ' 09:00:00', 'activity_type' => 'Visit', 'subject' => 'Kunjungan laporan uji']);
     Database::insert('deliveries', ['code' => 'DEL-REP000003', 'po_id' => $ids['po1'], 'delivery_date' => date('Y-m-d', strtotime(today() . ' +2 days')), 'sj_number' => 'SJ-REP-NEXT', 'delivered_qty' => 10, 'status' => 'Scheduled']);
 
+    // "Order terbaru" = 6 PO dengan tanggal terbaru (bergantung data test lain, jadi dibaca dari database)
+    $latestPo = (string) Database::fetchValue('SELECT COALESCE(po_number, code) FROM purchase_orders ORDER BY po_date IS NULL, po_date DESC, id DESC LIMIT 1');
     $admin = client_as('Admin')->get('/');
     assert_status(200, $admin);
-    foreach (['Telepon konfirmasi laporan', 'Kirim katalog terlewat', 'Kunjungan laporan uji', 'PO/REP/001', 'SJ-REP-NEXT', 'Piutang belum dibayar'] as $text) {
+    foreach (['Telepon konfirmasi laporan', 'Kirim katalog terlewat', 'Kunjungan laporan uji', $latestPo, 'SJ-REP-NEXT', 'Piutang belum dibayar'] as $text) {
         assert_contains($text, $admin->body, 'Admin: ' . $text);
     }
     $sales = client_as('Sales')->get('/');
