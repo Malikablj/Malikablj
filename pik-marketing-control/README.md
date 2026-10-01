@@ -61,7 +61,7 @@ SQL
 cp .env.example .env
 nano .env                      # isi DB_PASSWORD, APP_ENV=production, dll.
 
-# 4) Buat tabel + pengaturan awal
+# 4) Cek ekstensi PHP, lalu buat tabel + pengaturan awal
 php database/install.php
 
 # 5) Folder storage harus bisa ditulis web server
@@ -340,6 +340,7 @@ pik-marketing-control/
 
 | Gejala | Penyebab & solusi |
 |---|---|
+| Pesan "membutuhkan ekstensi PHP zip/xmlreader/..." | Ekstensi belum aktif. Buka `php.ini` (lokasinya tampil saat `php database/install.php`), hapus tanda `;` di depan `extension=zip` (atau ekstensi yang disebut), simpan, restart Apache. |
 | Halaman 503 "Tidak dapat terhubung ke database" | Cek `DB_*` di `.env`, pastikan MySQL berjalan dan `schema.sql` sudah diimpor (`php database/install.php`). |
 | Semua halaman 404 kecuali beranda | `mod_rewrite` belum aktif atau `AllowOverride All` belum diset. Alternatif: `APP_PRETTY_URLS=false`. |
 | Tampilan tanpa CSS / link salah di subfolder | Isi `APP_BASE_PATH=/nama-subfolder` di `.env`. |

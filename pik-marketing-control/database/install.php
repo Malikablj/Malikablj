@@ -15,10 +15,28 @@ if (PHP_SAPI !== 'cli') {
     exit("Jalankan dari command line.\n");
 }
 
-require dirname(__DIR__) . '/app/bootstrap.php';
-
 use App\Helpers\Database;
+use App\Helpers\Requirements;
 use App\Helpers\SqlFile;
+
+// Cek server dulu (sebelum bootstrap) agar ekstensi yang belum aktif terlihat jelas.
+require dirname(__DIR__) . '/app/helpers/Requirements.php';
+echo "Cek server\n";
+printf("  %-12s %s\n", 'PHP', PHP_VERSION . (PHP_VERSION_ID >= 80100 ? '  OK' : '  TERLALU LAMA — butuh PHP 8.1 atau lebih baru'));
+$missing = Requirements::missing();
+foreach (Requirements::EXTENSIONS as $ext => [$required, $usage]) {
+    printf("  %-12s %s\n", $ext, in_array($ext, $missing, true) ? "BELUM AKTIF — dibutuhkan untuk {$usage}" : 'OK');
+}
+echo '  php.ini      ' . (php_ini_loaded_file() ?: '(tidak ada)') . "\n\n";
+if ($missing !== []) {
+    echo Requirements::message($missing, 'Aplikasi') . "\n\n";
+}
+if (PHP_VERSION_ID < 80100 || array_intersect($missing, Requirements::required()) !== []) {
+    fwrite(STDERR, "Instalasi dihentikan: perbaiki dulu yang BELUM AKTIF / TERLALU LAMA di atas.\n");
+    exit(1);
+}
+
+require dirname(__DIR__) . '/app/bootstrap.php';
 
 try {
     $db = (string) Database::fetchValue('SELECT DATABASE()');

@@ -65,7 +65,9 @@ foreach ($cols as $col) {
     </div>
     <div class="page-actions">
         <?php if (can('reports.export')): ?>
-            <a class="btn btn-light" href="<?= e(url('/reports/' . $type . '/export', $query + ['format' => 'xlsx'])) ?>"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+            <?php if (\App\Helpers\Requirements::missing(['zip']) === []): ?>
+                <a class="btn btn-light" href="<?= e(url('/reports/' . $type . '/export', $query + ['format' => 'xlsx'])) ?>"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+            <?php endif; ?>
             <a class="btn btn-light" href="<?= e(url('/reports/' . $type . '/export', $query + ['format' => 'csv'])) ?>"><i class="bi bi-filetype-csv"></i> CSV</a>
         <?php endif; ?>
         <button type="button" class="btn btn-light" data-print><i class="bi bi-printer"></i> Cetak / PDF</button>

@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Helpers\Audit;
 use App\Helpers\Auth;
 use App\Helpers\Logger;
+use App\Helpers\Requirements;
 use App\Models\Setting;
 use App\Services\Migration\WorkbookImporter;
 use DomainException;
@@ -29,6 +30,12 @@ final class ImportController extends Controller
 
     public function run(): void
     {
+        $base = $this->baseData();
+        if ($base['excelProblem'] !== null) {
+            // ekstensi zip/xmlreader belum aktif: jangan proses upload, tampilkan cara memperbaikinya
+            $this->view('import/index', $base, 422);
+            return;
+        }
         @set_time_limit(300);
         $mode = ($_POST['mode'] ?? '') === 'import' ? 'import' : 'dry';
         $applyCorrections = ($_POST['apply_corrections'] ?? '0') === '1';
@@ -75,6 +82,7 @@ final class ImportController extends Controller
     private function baseData(): array
     {
         $last = Setting::get('last_import');
+        $missing = Requirements::excelMissing();
         return [
             'title'       => 'Import Data',
             'existing'    => WorkbookImporter::nonEmptyTables(),
@@ -85,6 +93,7 @@ final class ImportController extends Controller
             'files'       => [],
             'uploadError' => null,
             'maxUpload'   => ini_get('upload_max_filesize') ?: '2M',
+            'excelProblem' => $missing !== [] ? Requirements::message($missing, 'Import Excel') : null,
         ];
     }
 

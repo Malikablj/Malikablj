@@ -8,6 +8,7 @@ use App\Helpers\Audit;
 use App\Helpers\Auth;
 use App\Helpers\HttpException;
 use App\Helpers\Request;
+use App\Helpers\Requirements;
 use App\Helpers\Validator;
 use App\Helpers\XlsxWriter;
 use App\Models\Customer;
@@ -51,6 +52,10 @@ final class ReportController extends Controller
             throw new HttpException(400, 'Format export tidak dikenal.');
         }
         $filters = $this->filters();
+        if ($format === 'xlsx' && ($missing = Requirements::missing(['zip'])) !== []) {
+            $this->failure(Requirements::message($missing, 'Export Excel') . ' Sementara itu gunakan tombol CSV.',
+                '/reports/' . $type . '?' . http_build_query(array_filter($filters)));
+        }
         $result = ReportService::run($type, $filters, today());
         Audit::log('export', 'report', null, $meta['title'] . ' (' . strtoupper($format) . ')', [
             'filters' => ['old' => null, 'new' => json_encode(array_filter($filters), JSON_UNESCAPED_UNICODE)],

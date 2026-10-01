@@ -80,7 +80,8 @@ try {
 
 $elapsed = round(microtime(true) - $start, 1);
 echo "\n" . str_repeat('─', 60) . "\n";
-echo sprintf("\033[1m%d passed\033[0m, %s%d failed\033[0m  (%ss)\n", TestState::$passed, TestState::$failed ? "\033[31m" : '', TestState::$failed, $elapsed);
+echo sprintf("\033[1m%d passed\033[0m, %s%d failed\033[0m%s  (%ss)\n", TestState::$passed, TestState::$failed ? "\033[31m" : '', TestState::$failed,
+    TestState::$skipped ? sprintf(', %d skipped', TestState::$skipped) : '', $elapsed);
 if (TestState::$failures) {
     echo "\nGagal:\n";
     foreach (TestState::$failures as $f) {

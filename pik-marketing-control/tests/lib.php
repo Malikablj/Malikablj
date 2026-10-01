@@ -14,10 +14,16 @@ final class AssertionFailed extends RuntimeException
 {
 }
 
+/** Test dilewati karena lingkungan tidak mendukung (alasan ditampilkan, bukan dianggap lulus). */
+final class TestSkipped extends RuntimeException
+{
+}
+
 final class TestState
 {
     public static int $passed = 0;
     public static int $failed = 0;
+    public static int $skipped = 0;
     /** @var list<string> */
     public static array $failures = [];
     public static string $group = '';
@@ -41,6 +47,9 @@ function test(string $name, callable $fn): void
         $fn();
         TestState::$passed++;
         echo "  \033[32m✓\033[0m {$name}\n";
+    } catch (TestSkipped $e) {
+        TestState::$skipped++;
+        echo "  \033[33m↷\033[0m {$name} \033[33m(dilewati: {$e->getMessage()})\033[0m\n";
     } catch (Throwable $e) {
         TestState::$failed++;
         $where = $e instanceof AssertionFailed ? '' : ' [' . get_class($e) . ' @ ' . basename($e->getFile()) . ':' . $e->getLine() . ']';
@@ -52,6 +61,11 @@ function test(string $name, callable $fn): void
 function fail(string $message): never
 {
     throw new AssertionFailed($message);
+}
+
+function skip(string $reason): never
+{
+    throw new TestSkipped($reason);
 }
 
 function assert_true(mixed $condition, string $message = 'Expected condition to be true'): void

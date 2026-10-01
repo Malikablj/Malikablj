@@ -36,7 +36,13 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 
 use App\Helpers\Audit;
 use App\Helpers\Database;
+use App\Helpers\Requirements;
 use App\Services\Migration\WorkbookImporter;
+
+if (($missingExt = Requirements::excelMissing()) !== []) {
+    fwrite(STDERR, Requirements::message($missingExt, 'Import Excel') . "\n");
+    exit(1);
+}
 
 $opts = getopt('', ['master:', 'legacy:', 'no-legacy-corrections', 'dry-run', 'sql-out:', 'fresh', 'yes', 'help']);
 if (isset($opts['help']) || empty($opts['master'])) {

@@ -29,6 +29,20 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+// Tanpa ekstensi wajib aplikasi tidak bisa berjalan: tampilkan cara memperbaikinya.
+$missingExtensions = App\Helpers\Requirements::missing(App\Helpers\Requirements::required());
+if ($missingExtensions !== []) {
+    $message = App\Helpers\Requirements::message($missingExtensions, 'PIK Marketing Control');
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, $message . "\n");
+        exit(1);
+    }
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit($message);
+}
+unset($missingExtensions);
+
 require APP_ROOT . '/app/helpers/functions.php';
 
 // .env (atau file lain via variabel environment APP_ENV_FILE, dipakai test)

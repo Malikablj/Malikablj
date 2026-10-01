@@ -8,6 +8,7 @@
  * @var list<string> $files
  * @var string|null $uploadError
  * @var string $maxUpload
+ * @var string|null $excelProblem ekstensi PHP zip/xmlreader belum aktif
  */
 $hasData = $existing !== [];
 ?>
@@ -18,6 +19,10 @@ $hasData = $existing !== [];
         <p class="page-subtitle">Muat data awal dari <span class="code-chip">PIK_Master_Database_AppSheet.xlsx</span>. File spreadsheet asli (legacy) opsional, dipakai untuk memverifikasi tanggal & angka.</p>
     </div>
 </div>
+
+<?php if ($excelProblem): ?>
+    <div class="callout callout-warning section-gap"><i class="bi bi-exclamation-triangle me-1"></i><?= e($excelProblem) ?></div>
+<?php endif; ?>
 
 <?php if ($uploadError): ?>
     <div class="callout callout-warning section-gap"><i class="bi bi-exclamation-triangle me-1"></i><?= e($uploadError) ?></div>
@@ -68,8 +73,8 @@ $hasData = $existing !== [];
                 </div>
             </div>
             <div class="form-actions">
-                <button class="btn btn-light" type="submit" name="mode" value="dry"><i class="bi bi-search"></i> Cek dulu (tanpa menyimpan)</button>
-                <button class="btn btn-primary" type="submit" name="mode" value="import"<?= $hasData ? ' disabled' : '' ?> data-confirm="Import data ke database sekarang?"><i class="bi bi-cloud-arrow-up"></i> Import</button>
+                <button class="btn btn-light" type="submit" name="mode" value="dry"<?= $excelProblem ? ' disabled' : '' ?>><i class="bi bi-search"></i> Cek dulu (tanpa menyimpan)</button>
+                <button class="btn btn-primary" type="submit" name="mode" value="import"<?= $hasData || $excelProblem ? ' disabled' : '' ?> data-confirm="Import data ke database sekarang?"><i class="bi bi-cloud-arrow-up"></i> Import</button>
             </div>
         </form>
     </div>
