@@ -21,6 +21,7 @@ final class HttpException extends RuntimeException
             403 => 'Anda tidak memiliki akses ke halaman atau aksi ini.',
             404 => 'Halaman atau data yang Anda cari tidak ditemukan.',
             405 => 'Metode request tidak diizinkan.',
+            413 => 'Ukuran file yang dikirim terlalu besar untuk server. Kurangi jumlah/ukuran file lalu coba lagi.',
             419 => 'Sesi formulir sudah kedaluwarsa. Muat ulang halaman lalu coba lagi.',
             429 => 'Terlalu banyak percobaan. Coba lagi beberapa saat lagi.',
             default => 'Terjadi kesalahan pada server.',

@@ -20,6 +20,8 @@ return [
     // false = URL memakai /index.php/... (untuk server tanpa mod_rewrite)
     'pretty_urls' => Env::bool('APP_PRETTY_URLS', true),
     'force_https' => Env::bool('FORCE_HTTPS', false),
+    // Alamat lengkap aplikasi untuk link di email, mis. https://marketing.permataindokemas.com
+    'url'         => rtrim((string) Env::get('APP_URL', ''), '/'),
 
     'session' => [
         'name'           => 'PIKSESSID',
@@ -40,5 +42,24 @@ return [
     'upload' => [
         // batas upload workbook untuk import data (MB)
         'max_import_mb' => 20,
+        // bukti retur & komplain (gambar / PDF)
+        'max_evidence_mb'    => 5,
+        'max_evidence_files' => 10,
+    ],
+
+    // Email (mis. hasil komplain ke QC). Isi MAIL_* di .env.
+    //   MAIL_DRIVER=log  : email TIDAK dikirim, hanya ditulis ke storage/logs/mail-*.log
+    //   MAIL_DRIVER=smtp : kirim lewat server SMTP (mis. email hosting perusahaan)
+    //   MAIL_DRIVER=mail : kirim lewat fungsi mail() bawaan PHP/hosting
+    'mail' => [
+        'driver'     => strtolower((string) Env::get('MAIL_DRIVER', 'log')),
+        'host'       => Env::get('MAIL_HOST', ''),
+        'port'       => (int) Env::get('MAIL_PORT', '587'),
+        'encryption' => strtolower((string) Env::get('MAIL_ENCRYPTION', 'tls')),
+        'username'   => Env::get('MAIL_USERNAME', ''),
+        'password'   => Env::get('MAIL_PASSWORD', ''),
+        'from'       => Env::get('MAIL_FROM_ADDRESS', ''),
+        'from_name'  => Env::get('MAIL_FROM_NAME', 'PIK Marketing Control'),
+        'timeout'    => (int) Env::get('MAIL_TIMEOUT', '15'),
     ],
 ];

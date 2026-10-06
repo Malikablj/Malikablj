@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Helpers\Audit;
 use App\Helpers\DbBackup;
 use App\Helpers\Logger;
+use App\Helpers\Mailer;
 use App\Helpers\Migrator;
 use App\Helpers\Validator;
 use App\Models\Setting;
@@ -15,7 +16,7 @@ use Throwable;
 
 final class SettingsController extends Controller
 {
-    private const FIELDS = ['company_name', 'invoice_default_due_days', 'ppn_rate', 'delivery_reminder_days', 'automation_interval_minutes'];
+    private const FIELDS = ['company_name', 'qc_email', 'ppn_rate', 'delivery_reminder_days', 'automation_interval_minutes'];
 
     public function show(): void
     {
@@ -26,14 +27,18 @@ final class SettingsController extends Controller
     {
         $v = Validator::make($_POST, [
             'company_name'                => 'required|string|max:120',
-            'invoice_default_due_days'    => 'required|integer|min:0|max:365',
+            'qc_email'                    => 'nullable|string|max:500',
             'ppn_rate'                    => 'required|numeric|min:0|max:100',
             'delivery_reminder_days'      => 'required|integer|min:0|max:30',
             'automation_interval_minutes' => 'required|integer|min:5|max:1440',
         ], [
-            'company_name' => 'Nama perusahaan', 'invoice_default_due_days' => 'Jatuh tempo default', 'ppn_rate' => 'Tarif PPN',
+            'company_name' => 'Nama perusahaan', 'qc_email' => 'Email QC', 'ppn_rate' => 'Tarif PPN',
             'delivery_reminder_days' => 'Pengingat delivery', 'automation_interval_minutes' => 'Interval otomasi',
         ]);
+        $qc = $v->validated()['qc_email'] ?? null;
+        if ($qc !== null && Mailer::parseList((string) $qc) === null) {
+            $v->addError('qc_email', 'Email QC tidak valid. Pisahkan beberapa email dengan koma (maks. 5).');
+        }
         if ($v->fails()) {
             $old = [];
             foreach (self::FIELDS as $f) {
@@ -43,6 +48,9 @@ final class SettingsController extends Controller
             return;
         }
         foreach ($v->validated() as $key => $value) {
+            if ($key === 'qc_email') {
+                $value = implode(', ', Mailer::parseList((string) $value) ?? []);
+            }
             Setting::set($key, (string) $value);
         }
         $this->success('Pengaturan disimpan.', '/settings');
@@ -56,8 +64,7 @@ final class SettingsController extends Controller
             $this->failure('Otomasi sedang berjalan di proses lain. Coba lagi sebentar.', '/settings');
         }
         $total = array_sum($result['notifications']);
-        $this->success('Otomasi selesai: ' . $total . ' notifikasi baru, ' . $result['followups_overdue'] . ' follow up ditandai Overdue, '
-            . $result['invoices_updated'] . ' status invoice diperbarui.', '/settings');
+        $this->success('Otomasi selesai: ' . $total . ' notifikasi baru, ' . $result['followups_overdue'] . ' follow up ditandai Overdue.', '/settings');
     }
 
     /** Status pembaruan struktur database (migrasi). */
@@ -78,7 +85,7 @@ final class SettingsController extends Controller
         }
         @set_time_limit(300);
         try {
-            $backup = DbBackup::tables(['purchase_orders', 'po_lines', 'customers', 'migration_issues'], 'before-migrate');
+            $backup = DbBackup::tables(['users', 'purchase_orders', 'po_lines', 'deliveries', 'returns', 'customers', 'migration_issues'], 'before-migrate');
             $ran = Migrator::run();
         } catch (Throwable $e) {
             Logger::error('Migrasi gagal: ' . $e->getMessage());

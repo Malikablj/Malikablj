@@ -16,11 +16,58 @@ final class Product extends Model
 
     public const UNITS = ['pcs', 'set', 'box', 'roll', 'lembar', 'kg', 'liter'];
 
+    /**
+     * Kelompok produk OTOMATIS dari kata di nama produk (dicek berurutan, kata utuh,
+     * tidak peka huruf besar/kecil). Kategori yang diisi manual di master produk
+     * selalu didahulukan. Tidak mengubah data: kelompok dihitung saat ditampilkan.
+     */
+    public const GROUPS = [
+        'Botol'          => ['botol', 'bottle', 'btl', 'vial'],
+        'Pot / Jar'      => ['pot', 'jar'],
+        'Tube'           => ['tube'],
+        'Pump & Sprayer' => ['pump', 'pompa', 'sprayer', 'spray', 'mist', 'foamer', 'dispenser'],
+        'Cap / Tutup'    => ['cap', 'tutup', 'lid', 'closure'],
+        'Dropper'        => ['dropper', 'pipet', 'pipette'],
+        'Label & Shrink' => ['label', 'shrink', 'sticker', 'stiker', 'sleeve'],
+        'Printing'       => ['printing', 'print', 'sablon', 'hotstamp'],
+        'Box & Karton'   => ['box', 'dus', 'karton', 'carton', 'kardus'],
+        'Pouch & Sachet' => ['pouch', 'sachet'],
+    ];
+    public const GROUP_OTHER = 'Lainnya';
+
+    /** Ekspresi SQL kelompok produk (lihat GROUPS) untuk alias tabel products. */
+    public static function groupSql(string $alias = 'pr'): string
+    {
+        Database::assertIdentifier($alias);
+        $sql = "CASE WHEN {$alias}.category IS NOT NULL AND TRIM({$alias}.category) <> '' THEN TRIM({$alias}.category)";
+        foreach (self::GROUPS as $group => $words) {
+            $sql .= " WHEN LOWER({$alias}.name) REGEXP '(^|[^a-z0-9])(" . implode('|', $words) . ")([^a-z0-9]|$)' THEN '" . str_replace("'", "''", $group) . "'";
+        }
+        return $sql . " ELSE '" . self::GROUP_OTHER . "' END";
+    }
+
+    /** Kelompok produk di PHP (sama dengan groupSql). */
+    public static function group(array $p): string
+    {
+        $category = trim((string) ($p['category'] ?? ''));
+        if ($category !== '') {
+            return $category;
+        }
+        $name = mb_strtolower((string) ($p['name'] ?? ''));
+        foreach (self::GROUPS as $group => $words) {
+            if (preg_match('/(^|[^a-z0-9])(' . implode('|', $words) . ')([^a-z0-9]|$)/', $name)) {
+                return $group;
+            }
+        }
+        return self::GROUP_OTHER;
+    }
+
     private const SORTS = [
         'name'        => 'pr.name',
         'code'        => 'pr.product_code',
-        'category'    => 'pr.category',
+        'category'    => 'product_group',
         'outstanding' => 'po.open_outstanding',
+        'oef_qty'     => 'po.oef_qty',
         'created'     => 'pr.created_at',
     ];
 
@@ -36,7 +83,7 @@ final class Product extends Model
             }
         }
         if (!empty($f['category'])) {
-            $where[] = 'pr.category = :cat';
+            $where[] = '(' . self::groupSql('pr') . ') = :cat';
             $params['cat'] = (string) $f['category'];
         }
         $status = (string) ($f['status'] ?? '');
@@ -56,7 +103,9 @@ final class Product extends Model
     {
         return "SELECT t.product_id, COUNT(*) AS line_count,
                        SUM(CASE WHEN p.status IN ('Open','On Process','Partial') THEN GREATEST(t.outstanding_qty, 0) ELSE 0 END) AS open_outstanding,
-                       SUM(t.delivered_qty) AS delivered_qty
+                       SUM(t.delivered_qty) AS delivered_qty,
+                       SUM(CASE WHEN p.status <> 'Cancelled' THEN t.order_qty ELSE 0 END) AS oef_qty,
+                       COUNT(DISTINCT CASE WHEN p.status <> 'Cancelled' THEN t.po_id END) AS oef_count
                 FROM (" . PoLine::totalsSql() . ') t JOIN purchase_orders p ON p.id = t.po_id
                 GROUP BY t.product_id';
     }
@@ -66,7 +115,8 @@ final class Product extends Model
         [$where, $params] = self::filters($f);
         $order = (self::SORTS[$sort] ?? 'pr.name') . ($dir === 'desc' ? ' DESC' : ' ASC') . ', pr.id ASC';
         return Paginator::query(
-            'SELECT pr.*, COALESCE(po.line_count, 0) AS line_count, COALESCE(po.open_outstanding, 0) AS open_outstanding,
+            'SELECT pr.*, ' . self::groupSql('pr') . ' AS product_group, COALESCE(po.line_count, 0) AS line_count, COALESCE(po.open_outstanding, 0) AS open_outstanding,
+                    COALESCE(po.oef_qty, 0) AS oef_qty, COALESCE(po.oef_count, 0) AS oef_count,
                     COALESCE(st.fg, 0) AS stock_fg, COALESCE(st.wip, 0) AS stock_wip, COALESCE(st.ready, 0) AS stock_ready,
                     COALESCE(st.reserved, 0) AS stock_reserved, COALESCE(st.entries, 0) AS stock_entries
              FROM products pr
@@ -84,9 +134,10 @@ final class Product extends Model
     {
         [$where, $params] = self::filters($f);
         return Database::fetch(
-            'SELECT COUNT(*) AS n, COALESCE(SUM(pr.is_active = 1), 0) AS active,
-                    COALESCE(SUM(COALESCE(po.open_outstanding, 0) > 0), 0) AS with_open_po
-             FROM products pr LEFT JOIN (' . self::poSql() . ') po ON po.product_id = pr.id WHERE ' . $where,
+            "SELECT COUNT(*) AS n, COALESCE(SUM(pr.is_active = 1), 0) AS active,
+                    COALESCE(SUM(COALESCE(po.open_outstanding, 0) > 0), 0) AS with_open_po,
+                    COALESCE(SUM(pr.source = 'OEF'), 0) AS from_oef, COALESCE(SUM(po.oef_qty), 0) AS oef_qty
+             FROM products pr LEFT JOIN (" . self::poSql() . ') po ON po.product_id = pr.id WHERE ' . $where,
             $params
         ) ?? [];
     }
@@ -95,9 +146,9 @@ final class Product extends Model
     public static function findFull(int $id): ?array
     {
         return Database::fetch(
-            'SELECT pr.*, cu.name AS created_by_name, uu.name AS updated_by_name,
+            'SELECT pr.*, ' . self::groupSql('pr') . ' AS product_group, cu.name AS created_by_name, uu.name AS updated_by_name,
                     COALESCE(po.line_count, 0) AS line_count, COALESCE(po.open_outstanding, 0) AS open_outstanding,
-                    COALESCE(po.delivered_qty, 0) AS delivered_qty,
+                    COALESCE(po.delivered_qty, 0) AS delivered_qty, COALESCE(po.oef_qty, 0) AS oef_qty, COALESCE(po.oef_count, 0) AS oef_count,
                     COALESCE(st.fg, 0) AS stock_fg, COALESCE(st.wip, 0) AS stock_wip, COALESCE(st.ready, 0) AS stock_ready,
                     COALESCE(st.reserved, 0) AS stock_reserved, COALESCE(st.entries, 0) AS stock_entries
              FROM products pr
@@ -114,7 +165,7 @@ final class Product extends Model
     public static function poLines(int $id, int $limit = 50): array
     {
         return Database::fetchAll(
-            "SELECT pl.id, pl.code, pl.po_id, p.po_number, p.code AS po_code, p.po_date, p.status AS po_status,
+            "SELECT pl.id, pl.code, pl.po_id, p.po_number, p.order_number, p.code AS po_code, p.po_date, p.status AS po_status, p.review_status, pl.item_description,
                     c.name AS customer_name, p.customer_id, t.order_qty, t.delivered_qty, t.return_qty, t.outstanding_qty
              FROM po_lines pl
              JOIN purchase_orders p ON p.id = pl.po_id
@@ -153,7 +204,7 @@ final class Product extends Model
         }
         $deps = self::dependents($id);
         if ($deps !== []) {
-            $labels = ['po_lines' => 'baris PO', 'stock' => 'data stok', 'deliveries' => 'delivery', 'returns' => 'retur', 'leadtime' => 'lead time', 'inbound' => 'inbound maklon'];
+            $labels = ['po_lines' => 'baris OEF', 'stock' => 'data stok', 'deliveries' => 'delivery', 'returns' => 'retur', 'leadtime' => 'lead time', 'inbound' => 'inbound maklon'];
             $parts = [];
             foreach ($deps as $k => $n) {
                 $parts[] = $n . ' ' . $labels[$k];
@@ -181,10 +232,16 @@ final class Product extends Model
         );
     }
 
-    /** @return list<string> */
+    /** @return list<string> kategori yang diisi manual di master produk */
     public static function categories(): array
     {
-        return array_map('strval', Database::fetchColumn("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category <> '' ORDER BY category"));
+        return array_map('strval', Database::fetchColumn("SELECT DISTINCT TRIM(category) FROM products WHERE category IS NOT NULL AND TRIM(category) <> '' ORDER BY 1"));
+    }
+
+    /** @return list<string> semua kelompok produk (otomatis + kategori manual) untuk filter */
+    public static function groups(): array
+    {
+        return array_values(array_unique(array_merge(array_keys(self::GROUPS), self::categories(), [self::GROUP_OTHER])));
     }
 
     /** @return list<string> satuan standar + satuan yang sudah dipakai */

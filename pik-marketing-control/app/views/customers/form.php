@@ -37,7 +37,7 @@ $cancel = $isEdit ? url('/customers/' . $customer['id']) : url('/customers');
     <?php endif; ?>
     <div class="form-section">
         <div class="form-section-title">Identitas</div>
-        <div class="form-section-desc">Nama customer dipakai di seluruh modul (PO, delivery, invoice).</div>
+        <div class="form-section-desc">Nama customer dipakai di seluruh modul (OEF, delivery, retur &amp; komplain).</div>
         <div class="row g-3">
             <?= Form::input('name', 'Nama customer', old('name', $customer), $errors, ['required' => true, 'maxlength' => 190, 'col' => 'col-md-6', 'autofocus' => !$isEdit]) ?>
             <?= Form::input('company', 'Nama perusahaan / badan usaha', old('company', $customer), $errors, ['maxlength' => 190, 'col' => 'col-md-6', 'help' => 'Kosongkan bila sama dengan nama customer.']) ?>

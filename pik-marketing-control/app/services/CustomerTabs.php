@@ -11,7 +11,7 @@ use App\Models\PoLine;
 
 /**
  * Tab pada halaman detail customer: satu tempat untuk melihat konteks
- * contacts, leads, activities, follow up, PO, delivery, return dan invoice.
+ * contacts, leads, activities, follow up, OEF, delivery, retur & komplain.
  * Tab hanya tampil bila role user punya akses ke modul tersebut.
  */
 final class CustomerTabs
@@ -22,10 +22,9 @@ final class CustomerTabs
         'leads'      => ['label' => 'Leads', 'perm' => 'leads.view', 'count' => 'leads'],
         'activities' => ['label' => 'Activities', 'perm' => 'activities.view', 'count' => 'activities'],
         'followups'  => ['label' => 'Follow Up', 'perm' => 'followups.view', 'count' => 'followups'],
-        'pos'        => ['label' => 'Purchase Orders', 'perm' => 'purchase_orders.view', 'count' => 'pos'],
+        'pos'        => ['label' => 'OEF', 'perm' => 'purchase_orders.view', 'count' => 'pos'],
         'deliveries' => ['label' => 'Deliveries', 'perm' => 'deliveries.view', 'count' => 'deliveries'],
-        'returns'    => ['label' => 'Returns', 'perm' => 'returns.view', 'count' => 'returns'],
-        'invoices'   => ['label' => 'Invoices', 'perm' => 'finance.view', 'count' => 'invoices'],
+        'returns'    => ['label' => 'Retur & Komplain', 'perm' => 'returns.view', 'count' => 'returns'],
     ];
 
     /**
@@ -86,7 +85,7 @@ final class CustomerTabs
                 20
             )],
             'deliveries' => ['deliveries' => Paginator::query(
-                'SELECT d.*, p.po_number, p.code AS po_code, pr.name AS product_name
+                'SELECT d.*, p.po_number, p.code AS po_code, COALESCE(p.order_number, p.po_number, p.code) AS order_ref, pr.name AS product_name
                  FROM deliveries d JOIN purchase_orders p ON p.id = d.po_id LEFT JOIN products pr ON pr.id = d.product_id
                  WHERE p.customer_id = :c',
                 ['c' => $customerId],
@@ -95,20 +94,11 @@ final class CustomerTabs
                 25
             )],
             'returns'    => ['returns' => Paginator::query(
-                'SELECT r.*, p.po_number, p.code AS po_code, pr.name AS product_name
+                'SELECT r.*, p.po_number, p.code AS po_code, COALESCE(p.order_number, p.po_number, p.code) AS order_ref, pr.name AS product_name
                  FROM returns r JOIN purchase_orders p ON p.id = r.po_id LEFT JOIN products pr ON pr.id = r.product_id
                  WHERE p.customer_id = :c',
                 ['c' => $customerId],
                 'r.return_date DESC, r.id DESC',
-                $page,
-                25
-            )],
-            'invoices'   => ['invoices' => Paginator::query(
-                'SELECT i.*, p.po_number, (i.invoice_amount - i.paid_amount) AS outstanding_amount
-                 FROM invoices_payments i LEFT JOIN purchase_orders p ON p.id = i.po_id
-                 WHERE i.customer_id = :c',
-                ['c' => $customerId],
-                'i.invoice_date DESC, i.id DESC',
                 $page,
                 25
             )],

@@ -6,7 +6,8 @@ declare(strict_types=1);
  * KHUSUS DEVELOPMENT / TESTING — membuat 1 user untuk setiap role:
  *
  *   admin@pik.test, marketing@pik.test, sales@pik.test,
- *   management@pik.test, viewer@pik.test
+ *   management@pik.test, viewer@pik.test, ppic@pik.test,
+ *   produksi@pik.test, gudang@pik.test, purchasing@pik.test
  *
  * Password semua user = nilai variabel DEV_PASSWORD, atau default
  * "PikDev2026!" bila tidak diset. Script hanya berjalan bila APP_ENV = development,
@@ -36,6 +37,10 @@ $users = [
     ['Sales Dev', 'sales@pik.test', 'Sales'],
     ['Management Dev', 'management@pik.test', 'Management'],
     ['Viewer Dev', 'viewer@pik.test', 'Viewer'],
+    ['PPIC Dev', 'ppic@pik.test', 'PPIC'],
+    ['Produksi Dev', 'produksi@pik.test', 'Produksi'],
+    ['Gudang Dev', 'gudang@pik.test', 'Gudang'],
+    ['Purchasing Dev', 'purchasing@pik.test', 'Purchasing'],
 ];
 
 foreach ($users as [$name, $email, $role]) {

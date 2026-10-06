@@ -3,7 +3,7 @@
     <div>
         <div class="page-eyebrow">Pencarian</div>
         <h1 class="page-title"><?= $q !== '' ? 'Hasil untuk “' . e($q) . '”' : 'Cari data' ?></h1>
-        <p class="page-subtitle">Mencari customer, kontak, lead, PO, delivery, produk, dan invoice sesuai hak akses Anda.</p>
+        <p class="page-subtitle">Mencari customer, kontak, lead, OEF, delivery, produk, dan inbound sesuai hak akses Anda.</p>
     </div>
 </div>
 

@@ -221,10 +221,10 @@ function fmt_money(mixed $value, string $empty = '—'): string
 function status_tone(?string $status): string
 {
     return match ((string) $status) {
-        'Active', 'Won', 'Done', 'Closed', 'Delivered', 'Paid', 'Resolved', 'OK' => 'success',
+        'Active', 'Won', 'Done', 'Closed', 'Delivered', 'Paid', 'Resolved', 'OK', 'Selesai', 'Approved' => 'success',
         'Potential', 'Quotation', 'Negotiation', 'Partial', 'Reschedule', 'On Process', 'On Delivery',
-        'Needs Review', 'High', 'Delayed' => 'warning',
-        'Lost', 'Overdue', 'Cancelled', 'Critical', 'Unpaid' => 'danger',
+        'Needs Review', 'High', 'Delayed', 'Pending' => 'warning',
+        'Lost', 'Overdue', 'Cancelled', 'Critical', 'Unpaid', 'Tidak selesai', 'Rejected' => 'danger',
         'New', 'Contacted', 'Qualified', 'Scheduled', 'Open', 'Planned', 'Auto-Corrected', 'Medium' => 'info',
         default => 'neutral',
     };
@@ -332,4 +332,20 @@ function to(string $pathWithQuery): string
 {
     [$path, $query] = array_pad(explode('?', $pathWithQuery, 2), 2, '');
     return url($path) . ($query !== '' ? '?' . $query : '');
+}
+
+/** Ukuran dari php.ini ("8M", "512K", "2G") dalam byte; 0 = tanpa batas / tidak diketahui. */
+function ini_bytes(string|false $value): int
+{
+    $value = trim((string) $value);
+    if ($value === '' || !preg_match('/^(\d+)\s*([KMG]?)/i', $value, $m)) {
+        return 0;
+    }
+    $n = (int) $m[1];
+    return match (strtoupper($m[2])) {
+        'G' => $n * 1024 * 1024 * 1024,
+        'M' => $n * 1024 * 1024,
+        'K' => $n * 1024,
+        default => $n,
+    };
 }

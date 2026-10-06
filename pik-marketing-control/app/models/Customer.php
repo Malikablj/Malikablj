@@ -163,12 +163,6 @@ final class Customer extends Model
             ['c' => $id]
         ) ?? [];
         $lastActivity = Database::fetchValue('SELECT MAX(activity_date) FROM activities WHERE customer_id = :c', ['c' => $id]);
-        $finance = Database::fetch(
-            'SELECT COALESCE(SUM(invoice_amount), 0) AS invoiced, COALESCE(SUM(paid_amount), 0) AS paid,
-                    COALESCE(SUM(GREATEST(invoice_amount - paid_amount, 0)), 0) AS outstanding
-             FROM invoices_payments WHERE customer_id = :c',
-            ['c' => $id]
-        ) ?? [];
         return [
             'leads_open'        => (int) ($leads['open_count'] ?? 0),
             'leads_pipeline'    => (float) ($leads['pipeline'] ?? 0),
@@ -180,9 +174,6 @@ final class Customer extends Model
             'delivered_qty'     => (int) ($po['delivered_qty'] ?? 0),
             'outstanding_qty'   => (int) ($po['outstanding'] ?? 0),
             'last_activity'     => $lastActivity !== null ? (string) $lastActivity : null,
-            'invoiced'          => (float) ($finance['invoiced'] ?? 0),
-            'paid'              => (float) ($finance['paid'] ?? 0),
-            'receivable'        => (float) ($finance['outstanding'] ?? 0),
         ];
     }
 
@@ -198,7 +189,7 @@ final class Customer extends Model
         }
         $counts = self::relatedCounts($id);
         $blocking = [];
-        foreach (['leads' => 'lead', 'activities' => 'activity', 'followups' => 'follow up', 'pos' => 'PO', 'invoices' => 'invoice'] as $key => $label) {
+        foreach (['leads' => 'lead', 'activities' => 'activity', 'followups' => 'follow up', 'pos' => 'OEF/PO', 'invoices' => 'invoice (data keuangan lama)'] as $key => $label) {
             if (($counts[$key] ?? 0) > 0) {
                 $blocking[] = $counts[$key] . ' ' . $label;
             }

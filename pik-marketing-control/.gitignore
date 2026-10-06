@@ -9,6 +9,7 @@ storage/cache/*
 storage/imports/*
 storage/exports/*
 storage/backups/*
+storage/uploads/*
 !storage/*/.gitkeep
 
 # Data bisnis tidak boleh masuk repository (repo public)

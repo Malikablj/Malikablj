@@ -8,8 +8,9 @@ use App\Helpers\Auth;
 use App\Helpers\Database;
 use App\Models\Delivery;
 use App\Models\FollowUp;
-use App\Models\Invoice;
+use App\Models\InboundSupplier;
 use App\Models\LeadTime;
+use App\Models\Stock;
 use App\Services\DashboardService;
 
 final class DashboardController extends Controller
@@ -20,11 +21,6 @@ final class DashboardController extends Controller
         $canFollow = Auth::can('followups.view');
         if ($canFollow) {
             FollowUp::refreshOverdue($today);
-        }
-        $finance = null;
-        if (Auth::can('finance.view')) {
-            Invoice::refreshStatuses($today);
-            $finance = Invoice::summary([], $today);
         }
         // Setiap daftar hanya diambil bila role boleh melihat modulnya (otorisasi di backend)
         $this->view('dashboard/index', [
@@ -38,7 +34,11 @@ final class DashboardController extends Controller
             'orders'          => Auth::can('purchase_orders.view') ? DashboardService::recentOrders() : null,
             'deliveries'      => Auth::can('deliveries.view') ? Delivery::upcoming(6) : null,
             'leadtimes'       => Auth::can('leadtime.view') ? LeadTime::upcoming($today, 4) : null,
-            'finance'         => $finance,
+            'pendingOef'      => Auth::can('oef_review.approve') ? DashboardService::pendingOef() : null,
+            'complaints'      => Auth::can('returns.view') ? DashboardService::openComplaints() : null,
+            'stockGroups'     => Auth::can('stock.view') ? Stock::groupTotals([]) : null,
+            'inbound'         => Auth::can('inbound.view') ? DashboardService::recentInbound() : null,
+            'supplier'        => Auth::can('inbound_supplier.view') ? InboundSupplier::recent(5) : null,
         ]);
     }
 }

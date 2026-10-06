@@ -35,6 +35,12 @@ final class Csrf
 
     public static function verifyRequest(): void
     {
+        // Upload melebihi post_max_size: PHP mengosongkan $_POST (termasuk token) — beri pesan yang jelas
+        $length = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+        $limit = ini_bytes(ini_get('post_max_size'));
+        if ($_POST === [] && $_FILES === [] && $limit > 0 && $length > $limit) {
+            throw new HttpException(413, 'Ukuran data/file yang dikirim (' . round($length / 1048576, 1) . ' MB) melebihi batas server (' . ini_get('post_max_size') . '). Kurangi jumlah atau ukuran file lalu coba lagi.');
+        }
         $submitted = $_POST[self::FIELD] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
         if (!self::verify(is_string($submitted) ? $submitted : null)) {
             throw new HttpException(419);

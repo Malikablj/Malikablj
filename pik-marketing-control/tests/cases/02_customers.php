@@ -153,7 +153,7 @@ test('hapus customer: diblokir bila ada PO, boleh bila hanya kontak (kontak ikut
     assert_redirect($res, '/customers/' . $withPo);
     assert_true((bool) Database::fetchValue('SELECT 1 FROM customers WHERE id = :id', ['id' => $withPo]), 'tidak terhapus');
     $flash = $c->get('/customers/' . $withPo);
-    assert_contains('tidak dapat dihapus karena masih memiliki 1 PO', $flash->body);
+    assert_contains('tidak dapat dihapus karena masih memiliki 1 OEF/PO', $flash->body);
 
     $simple = Customer::create(['name' => 'Customer Sementara', 'status' => 'Potential']);
     Database::insert('contacts', ['code' => 'CON-TEST00001', 'customer_id' => $simple, 'name' => 'Kontak Sementara']);
@@ -212,9 +212,9 @@ test('search menemukan customer, kontak, dan PO sesuai hak akses', function () {
     assert_contains('Customers', $res->body);
     assert_contains('PT. Maju Jaya Kosmetik', $res->body);
     $po = $admin->get('/search', ['q' => 'PO/UJI']);
-    assert_contains('Purchase Orders', $po->body);
+    assert_contains('Order Entry Form', $po->body);
     $sales = client_as('Sales')->get('/search', ['q' => 'PO/UJI']);
-    assert_not_contains('Purchase Orders', $sales->body, 'Sales tidak melihat PO');
+    assert_not_contains('Order Entry Form', $sales->body, 'Sales tidak melihat OEF');
     assert_status(200, $admin->get('/search', ['q' => "%' UNION SELECT password_hash FROM users -- "]));
     assert_status(200, $admin->get('/search', ['q' => 'x']));
 });

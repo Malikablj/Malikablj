@@ -9,13 +9,18 @@
  * @var list<array<string,mixed>>|null $orders
  * @var list<array<string,mixed>>|null $deliveries
  * @var list<array<string,mixed>>|null $leadtimes
- * @var array<string,mixed>|null $finance
+ * @var list<array<string,mixed>>|null $pendingOef
+ * @var list<array<string,mixed>>|null $complaints
+ * @var array<string,array<string,int>>|null $stockGroups
+ * @var list<array<string,mixed>>|null $inbound
+ * @var list<array<string,mixed>>|null $supplier
  */
 $user = auth_user();
 $hour = (int) date('G');
 $greeting = $hour < 11 ? 'Selamat pagi' : ($hour < 15 ? 'Selamat siang' : ($hour < 19 ? 'Selamat sore' : 'Selamat malam'));
 
-// KPI tampil bila user punya akses modul terkait, atau akses laporan (Management/Viewer).
+// KPI hanya tampil bila role user boleh melihat modul terkait (otorisasi juga dicek di backend).
+$canReview = can('oef_review.approve');
 $tiles = [
     ['perm' => 'customers.view', 'href' => url('/customers'), 'tone' => 'kpi-accent', 'icon' => 'bi-buildings', 'label' => 'Customer aktif',
      'value' => fmt_qty($kpi['customers_active'], '0'), 'meta' => 'dari ' . fmt_qty($kpi['customers_total'], '0') . ' customer', 'alert' => false],
@@ -25,10 +30,20 @@ $tiles = [
      'value' => fmt_qty($kpi['followups_today'], '0'), 'meta' => 'Jadwal yang belum selesai', 'alert' => false],
     ['perm' => 'followups.view', 'href' => url('/follow-ups', ['tab' => 'overdue']), 'tone' => 'kpi-danger', 'icon' => 'bi-alarm', 'label' => 'Overdue',
      'value' => fmt_qty($kpi['followups_overdue'], '0'), 'meta' => 'Follow up terlewat', 'alert' => $kpi['followups_overdue'] > 0],
-    ['perm' => 'purchase_orders.view', 'href' => url('/purchase-orders', ['status' => 'open']), 'tone' => 'kpi-warning', 'icon' => 'bi-receipt', 'label' => 'Open PO',
-     'value' => fmt_qty($kpi['po_open'], '0'), 'meta' => 'Open · On Process · Partial', 'alert' => false],
-    ['perm' => 'purchase_orders.view', 'href' => url('/purchase-orders', ['status' => 'open']), 'tone' => '', 'icon' => 'bi-box-seam', 'label' => 'Outstanding',
-     'value' => fmt_qty($kpi['outstanding_qty'], '0'), 'meta' => 'pcs belum terkirim (PO open)', 'alert' => false],
+    ['perm' => 'purchase_orders.view', 'href' => url('/purchase-orders', ['ppic' => 'Pending']), 'tone' => 'kpi-warning', 'icon' => 'bi-hourglass-split', 'label' => 'OEF menunggu review',
+     'value' => fmt_qty($kpi['oef_pending'], '0'), 'meta' => $canReview ? 'Perlu dikonfirmasi PPIC' : 'Menunggu konfirmasi PPIC', 'alert' => $canReview && $kpi['oef_pending'] > 0],
+    ['perm' => 'purchase_orders.view', 'href' => url('/purchase-orders', ['status' => 'open']), 'tone' => '', 'icon' => 'bi-receipt', 'label' => 'Outstanding OEF',
+     'value' => fmt_qty($kpi['outstanding_qty'], '0'), 'meta' => 'pcs · ' . fmt_qty($kpi['po_open'], '0') . ' OEF berjalan', 'alert' => false],
+    ['perm' => 'deliveries.view', 'href' => url('/deliveries', ['status' => 'upcoming']), 'tone' => 'kpi-info', 'icon' => 'bi-truck', 'label' => 'Kirim 7 hari ke depan',
+     'value' => fmt_qty($kpi['deliveries_week'], '0'), 'meta' => fmt_qty($kpi['deliveries_no_sj'], '0') . ' jadwal belum ada Surat Jalan', 'alert' => false],
+    ['perm' => 'returns.view', 'href' => url('/returns', ['resolution' => 'Open']), 'tone' => 'kpi-danger', 'icon' => 'bi-chat-left-dots', 'label' => 'Komplain belum selesai',
+     'value' => fmt_qty($kpi['complaints_open'], '0'), 'meta' => 'Retur & komplain tanpa hasil', 'alert' => $kpi['complaints_open'] > 0],
+    ['perm' => 'stock.view', 'href' => url('/stock'), 'tone' => 'kpi-success', 'icon' => 'bi-boxes', 'label' => 'Stok Ready',
+     'value' => fmt_qty($kpi['stock_ready'], '0'), 'meta' => 'FG ' . fmt_qty($kpi['stock_fg'], '0') . ' · WIP ' . fmt_qty($kpi['stock_wip'], '0'), 'alert' => false],
+    ['perm' => 'inbound.view', 'href' => url('/inbound'), 'tone' => 'kpi-accent', 'icon' => 'bi-box-arrow-in-down', 'label' => 'Inbound maklon bulan ini',
+     'value' => fmt_qty($kpi['inbound_month_qty'], '0'), 'meta' => fmt_qty($kpi['inbound_month'], '0') . ' penerimaan', 'alert' => false],
+    ['perm' => 'inbound_supplier.view', 'href' => url('/inbound-supplier'), 'tone' => 'kpi-accent', 'icon' => 'bi-truck-flatbed', 'label' => 'Inbound supplier bulan ini',
+     'value' => fmt_qty($kpi['supplier_month_qty'], '0'), 'meta' => fmt_qty($kpi['supplier_month'], '0') . ' penerimaan', 'alert' => false],
 ];
 $followRow = static function (array $f) use ($today): string {
     $who = $f['customer_name'] ?? $f['lead_name'] ?? '—';
@@ -44,7 +59,7 @@ $followRow = static function (array $f) use ($today): string {
     <div>
         <div class="page-eyebrow"><?= e(fmt_day($today) . ', ' . fmt_date($today, '—', true)) ?></div>
         <h1 class="page-title"><?= e($greeting) ?>, <?= e(explode(' ', (string) ($user['name'] ?? ''))[0]) ?></h1>
-        <p class="page-subtitle">Ringkasan customer, pipeline, follow up, dan order hari ini.</p>
+        <p class="page-subtitle">Ringkasan pekerjaan Anda hari ini.</p>
     </div>
 </div>
 
@@ -62,7 +77,7 @@ $followRow = static function (array $f) use ($today): string {
 
 <div class="kpi-grid">
     <?php foreach ($tiles as $t): ?>
-        <?php $canOpen = can($t['perm']); if (!$canOpen && !can('reports.view')) { continue; } ?>
+        <?php if (!can($t['perm'])) { continue; } $canOpen = true; ?>
         <<?= $canOpen ? 'a href="' . e($t['href']) . '"' : 'div' ?> class="kpi <?= e($t['tone']) ?>">
             <div class="kpi-label"><span class="kpi-icon"><i class="bi <?= e($t['icon']) ?>"></i></span><?= e($t['label']) ?></div>
             <div class="kpi-value<?= $t['alert'] ? ' is-alert' : '' ?>"><?= e($t['value']) ?></div>
@@ -71,9 +86,30 @@ $followRow = static function (array $f) use ($today): string {
     <?php endforeach; ?>
 </div>
 
+<?php $hasLeft = $followToday !== null || $orders !== null || $pendingOef !== null;
+$hasRight = $deliveries !== null || $leadtimes !== null || $activities !== null || $complaints !== null || $stockGroups !== null || $inbound !== null || $supplier !== null; ?>
 <div class="row g-4 section-gap">
-    <?php if ($followToday !== null || $orders !== null): ?>
-        <div class="col-xl-8 min-w-0">
+    <?php if ($hasLeft): ?>
+        <div class="<?= $hasRight ? 'col-xl-8' : 'col-12' ?> min-w-0">
+            <?php if ($pendingOef !== null): ?>
+                <section class="surface<?= $followToday !== null ? '' : '' ?> mb-4">
+                    <div class="surface-header"><div><h2 class="surface-title">OEF menunggu review <span class="tab-count"><?= count($pendingOef) ?></span></h2>
+                        <p class="surface-subtitle">Buka OEF lalu tekan <strong>Bisa diproses</strong> (hijau) atau <strong>Tidak bisa diproses</strong> (merah).</p></div>
+                        <a class="small" href="<?= e(url('/purchase-orders', ['ppic' => 'Pending'])) ?>">Semua</a></div>
+                    <?php if (!$pendingOef): ?>
+                        <div class="empty-inline">Tidak ada OEF yang menunggu review. <i class="bi bi-check2-circle text-success"></i></div>
+                    <?php else: ?>
+                        <ul class="list-lite">
+                            <?php foreach ($pendingOef as $o): ?>
+                                <li><span class="avatar avatar-sm"><i class="bi bi-receipt"></i></span>
+                                    <div class="li-main"><a class="li-title" href="<?= e(url('/purchase-orders/' . $o['id'])) ?>"><?= e(App\Models\PurchaseOrder::label($o)) ?></a>
+                                        <div class="li-sub"><?= e($o['customer_name'] ?? '—') ?> · <?= (int) $o['line_count'] ?> produk · <?= e(fmt_qty($o['total_qty'], '0')) ?> pcs<?= $o['sales_name'] ? ' · ' . e($o['sales_name']) : '' ?></div></div>
+                                    <div class="li-end"><div><?= e(fmt_date($o['requested_delivery_date'], '—')) ?></div><div class="x-small text-secondary">permintaan kirim</div></div></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </section>
+            <?php endif; ?>
             <?php if ($followToday !== null): ?>
                 <div class="row g-4">
                     <div class="col-lg-6 min-w-0">
@@ -103,21 +139,21 @@ $followRow = static function (array $f) use ($today): string {
 
             <?php if ($orders !== null): ?>
                 <section class="surface<?= $followToday !== null ? ' mt-4' : '' ?>">
-                    <div class="surface-header"><h2 class="surface-title">Order terbaru</h2><a class="small" href="<?= e(url('/purchase-orders')) ?>">Semua PO</a></div>
+                    <div class="surface-header"><h2 class="surface-title">OEF terbaru</h2><a class="small" href="<?= e(url('/purchase-orders')) ?>">Semua OEF</a></div>
                     <?php if (!$orders): ?>
-                        <div class="empty-inline">Belum ada purchase order.</div>
+                        <div class="empty-inline">Belum ada Order Entry Form.</div>
                     <?php else: ?>
                         <div class="table-wrap">
                             <table class="table-pik table-compact">
-                                <thead><tr><th>PO · Customer</th><th class="d-none d-sm-table-cell">Tanggal</th><th class="d-none d-sm-table-cell">Status</th><th class="num d-none d-md-table-cell">Qty</th><th class="num">Outstanding</th></tr></thead>
+                                <thead><tr><th>OEF · Customer</th><th class="d-none d-sm-table-cell">Tanggal</th><th class="d-none d-sm-table-cell">Review PPIC</th><th class="num d-none d-md-table-cell">Qty</th><th class="num">Outstanding</th></tr></thead>
                                 <tbody>
                                 <?php foreach ($orders as $o): ?>
                                     <tr>
-                                        <td class="min-w-0"><a class="cell-title" href="<?= e(url('/purchase-orders/' . $o['id'])) ?>"><?= e($o['po_number'] ?? $o['code']) ?></a>
+                                        <td class="min-w-0"><a class="cell-title" href="<?= e(url('/purchase-orders/' . $o['id'])) ?>"><?= e(App\Models\PurchaseOrder::label($o)) ?></a>
                                             <div class="cell-sub"><?= e($o['customer_name'] ?? 'Customer belum terhubung') ?></div>
-                                            <div class="cell-sub d-sm-none"><?= e(fmt_date($o['po_date'], 'Tanpa tanggal')) ?> · <?= status_badge($o['status']) ?></div></td>
+                                            <div class="cell-sub d-sm-none"><?= e(fmt_date($o['po_date'], 'Tanpa tanggal')) ?> · <?= App\Models\PurchaseOrder::reviewBadge($o['review_status']) ?></div></td>
                                         <td class="d-none d-sm-table-cell nowrap text-secondary"><?= e(fmt_date($o['po_date'], 'Tanpa tanggal')) ?></td>
-                                        <td class="d-none d-sm-table-cell"><?= status_badge($o['status']) ?></td>
+                                        <td class="d-none d-sm-table-cell"><?= App\Models\PurchaseOrder::reviewBadge($o['review_status']) ?></td>
                                         <td class="num d-none d-md-table-cell"><?= e(fmt_qty($o['total_qty'], '0')) ?></td>
                                         <td class="num fw-semibold<?= (int) $o['outstanding_qty'] < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($o['outstanding_qty'], '0')) ?></td>
                                     </tr>
@@ -131,16 +167,72 @@ $followRow = static function (array $f) use ($today): string {
         </div>
     <?php endif; ?>
 
-    <?php if ($deliveries !== null || $leadtimes !== null || $activities !== null || $finance !== null): ?>
-        <div class="<?= $followToday !== null || $orders !== null ? 'col-xl-4' : 'col-12' ?> min-w-0">
-            <?php if ($finance !== null): ?>
-                <a class="surface surface-pad d-block mb-4 finance-card" href="<?= e(url('/invoices', ['status' => 'open'])) ?>">
-                    <div class="d-flex justify-content-between align-items-start gap-3">
-                        <div><div class="stat-label">Piutang belum dibayar</div><div class="stat-value"><?= e(fmt_money($finance['outstanding'] ?? 0, 'Rp 0')) ?></div></div>
-                        <span class="avatar avatar-sm"><i class="bi bi-cash-coin"></i></span>
-                    </div>
-                    <div class="x-small text-secondary mt-1"><?php if ((int) ($finance['overdue_count'] ?? 0) > 0): ?><span class="text-danger fw-semibold"><?= (int) $finance['overdue_count'] ?> invoice overdue · <?= e(fmt_money($finance['overdue_amount'])) ?></span><?php else: ?>Tidak ada invoice overdue<?php endif; ?></div>
-                </a>
+    <?php if ($hasRight): ?>
+        <div class="<?= $hasLeft ? 'col-xl-4' : 'col-12' ?> min-w-0">
+            <?php if ($complaints !== null): ?>
+                <section class="surface mb-4">
+                    <div class="surface-header"><h2 class="surface-title">Komplain belum selesai <span class="tab-count"><?= (int) $kpi['complaints_open'] ?></span></h2>
+                        <a class="small" href="<?= e(url('/returns', ['resolution' => 'Open'])) ?>">Semua</a></div>
+                    <?php if (!$complaints): ?>
+                        <div class="empty-inline">Semua retur & komplain sudah ada hasilnya.</div>
+                    <?php else: ?>
+                        <ul class="list-lite">
+                            <?php foreach ($complaints as $c): ?>
+                                <li><div class="li-main"><a class="li-title" href="<?= e(url('/returns/' . $c['id'])) ?>"><?= e($c['case_type']) ?> · <?= e($c['customer_name'] ?? '—') ?></a>
+                                    <div class="li-sub"><?= e($c['product_name'] ?? '') ?><?= $c['reason'] ? ' · ' . e(App\Models\ProductReturn::REASON_LABELS[$c['reason']] ?? $c['reason']) : '' ?></div></div>
+                                    <div class="li-end x-small text-secondary"><?= e(fmt_date($c['return_date'])) ?></div></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </section>
+            <?php endif; ?>
+            <?php if ($stockGroups !== null): ?>
+                <section class="surface mb-4">
+                    <div class="surface-header"><h2 class="surface-title">Stok per kelompok</h2><a class="small" href="<?= e(url('/stock')) ?>">Semua</a></div>
+                    <?php if (!$stockGroups): ?>
+                        <div class="empty-inline">Belum ada data stok.<?= can('stock.create') ? ' <a href="' . e(url('/stock/create')) . '">Catat stok</a>' : '' ?></div>
+                    <?php else: ?>
+                        <ul class="list-lite">
+                            <?php foreach (array_slice($stockGroups, 0, 8, true) as $group => $g): ?>
+                                <li><div class="li-main"><a class="li-title" href="<?= e(url('/stock', ['group' => $group])) ?>"><?= e($group) ?></a>
+                                    <div class="li-sub"><?= (int) $g['products'] ?> produk · WIP <?= e(fmt_qty($g['wip'], '0')) ?></div></div>
+                                    <div class="li-end"><div>FG <?= e(fmt_qty($g['fg'], '0')) ?></div><div class="x-small text-secondary">Ready <?= e(fmt_qty($g['ready'], '0')) ?></div></div></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </section>
+            <?php endif; ?>
+            <?php if ($inbound !== null): ?>
+                <section class="surface mb-4">
+                    <div class="surface-header"><h2 class="surface-title">Inbound maklon terakhir</h2><a class="small" href="<?= e(url('/inbound')) ?>">Semua</a></div>
+                    <?php if (!$inbound): ?>
+                        <div class="empty-inline">Belum ada penerimaan maklon.</div>
+                    <?php else: ?>
+                        <ul class="list-lite">
+                            <?php foreach ($inbound as $ib): ?>
+                                <li><div class="li-main"><a class="li-title" href="<?= e(url('/inbound/' . $ib['id'])) ?>"><?= e(excerpt($ib['component_name'] ?? $ib['sj_number'] ?? $ib['code'], 50)) ?></a>
+                                    <div class="li-sub"><?= e($ib['vendor'] ?? '') ?></div></div>
+                                    <div class="li-end"><div><?= e(fmt_qty($ib['total_in'])) ?></div><div class="x-small text-secondary"><?= e(fmt_date($ib['actual_inbound_date'])) ?></div></div></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </section>
+            <?php endif; ?>
+            <?php if ($supplier !== null): ?>
+                <section class="surface mb-4">
+                    <div class="surface-header"><h2 class="surface-title">Inbound supplier terakhir</h2><a class="small" href="<?= e(url('/inbound-supplier')) ?>">Semua</a></div>
+                    <?php if (!$supplier): ?>
+                        <div class="empty-inline">Belum ada penerimaan dari supplier.<?= can('inbound_supplier.create') ? ' <a href="' . e(url('/inbound-supplier/create')) . '">Catat penerimaan</a>' : '' ?></div>
+                    <?php else: ?>
+                        <ul class="list-lite">
+                            <?php foreach ($supplier as $sp): ?>
+                                <li><div class="li-main"><a class="li-title" href="<?= e(url('/inbound-supplier/' . $sp['id'])) ?>"><?= e(excerpt($sp['item_name'], 50)) ?></a>
+                                    <div class="li-sub"><?= e($sp['supplier']) ?></div></div>
+                                    <div class="li-end"><div><?= e(fmt_qty($sp['accepted_qty'])) ?> <?= e($sp['unit']) ?></div><div class="x-small text-secondary"><?= e(fmt_date($sp['receive_date'])) ?></div></div></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </section>
             <?php endif; ?>
             <?php if ($deliveries !== null || $leadtimes !== null): ?>
                 <section class="surface">
@@ -151,7 +243,7 @@ $followRow = static function (array $f) use ($today): string {
                     <?php else: ?>
                         <ul class="list-lite">
                             <?php foreach ($deliveries ?? [] as $d): ?>
-                                <li><div class="li-main"><a class="li-title" href="<?= e(url('/deliveries/' . $d['id'])) ?>"><?= e($d['sj_number'] ?? $d['code']) ?></a>
+                                <li><div class="li-main"><a class="li-title" href="<?= e(url('/deliveries/' . $d['id'])) ?>"><?= e($d['sj_number'] ?: ('Jadwal ' . ($d['order_ref'] ?? $d['code']))) ?></a>
                                     <div class="li-sub"><?= e($d['customer_name'] ?? $d['destination'] ?? '') ?><?= $d['product_name'] ? ' · ' . e($d['product_name']) : '' ?></div></div>
                                     <div class="li-end"><div><?= e(fmt_date($d['delivery_date'], 'Belum dijadwalkan')) ?></div><?= status_badge($d['status']) ?></div></li>
                             <?php endforeach; ?>

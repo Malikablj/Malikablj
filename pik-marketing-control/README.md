@@ -1,6 +1,8 @@
 # PIK Marketing Control
 
-Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (lead, aktivitas, follow up), purchase order, delivery, retur, stok, lead time, invoice & pembayaran, laporan, dan notifikasi — satu tempat yang menggantikan spreadsheet AppSheet.
+Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (lead, aktivitas, follow up), **Order Entry Form (OEF)** dengan review PPIC, delivery & Surat Jalan, **retur & komplain** (bukti foto/PDF + email ke QC), stok, lead time, inbound maklon, **inbound supplier**, laporan, dan notifikasi — satu tempat yang menggantikan spreadsheet AppSheet.
+
+> Menu Finance (Invoice & Payment, PO Financials) sudah dihapus karena ranah divisi keuangan. Data keuangan lama **tidak dihapus** — tetap tersimpan di tabel `invoices_payments` dan `po_financials`.
 
 - **Stack:** PHP 8 native (MVC sederhana, tanpa framework), MySQL/MariaDB via PDO, HTML5 + CSS3 + JavaScript, Bootstrap 5 (file lokal), Apache.
 - **Tanpa dependensi eksternal:** tidak perlu Composer/Node. Semua library (Bootstrap, Bootstrap Icons, font) ikut di `public/assets/vendor`.
@@ -93,12 +95,33 @@ File `.env` berisi kredensial — **jangan di-commit / dibagikan**. Semua opsi a
 | `DB_TIMEZONE` | `+07:00` | Samakan dengan `APP_TIMEZONE`. |
 | `SESSION_IDLE_MINUTES` | `120` | Logout otomatis setelah tidak aktif. |
 | `SESSION_ABSOLUTE_HOURS` | `12` | Batas maksimal umur sesi. |
+| `APP_URL` | `https://marketing.permataindokemas.com` | Alamat situs **tanpa subfolder**, untuk link di email QC. |
+| `MAIL_DRIVER` | `log` | `log` = email **tidak dikirim**, hanya dicatat di `storage/logs/mail-*.log` (untuk uji coba). `smtp` = kirim lewat server email perusahaan. `mail` = fungsi `mail()` hosting. |
+| `MAIL_HOST`, `MAIL_PORT`, `MAIL_ENCRYPTION` | `mail.domain.com`, `587`, `tls` | Server SMTP. `tls` untuk port 587, `ssl` untuk 465, `none` tanpa enkripsi. |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | | Akun email pengirim (AUTH LOGIN). |
+| `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | `noreply@domain.com` | Alamat & nama pengirim. Wajib diisi untuk `smtp`/`mail`. |
 
-Pengaturan bisnis (nama perusahaan, jatuh tempo default invoice, tarif PPN, pengingat delivery, interval otomasi) diubah Admin di **Settings › Pengaturan**, bukan di `.env`.
+Pengaturan bisnis (nama perusahaan, **email QC default**, tarif PPN untuk import database PO, pengingat delivery, interval otomasi) diubah Admin di **Settings › Pengaturan**, bukan di `.env`. Halaman itu juga menampilkan cara email dikirim saat ini (mis. "MAIL_DRIVER=log — email tidak benar-benar dikirim").
+
+**Mengaktifkan email ke QC** (contoh server email perusahaan):
+
+```ini
+MAIL_DRIVER=smtp
+MAIL_HOST=mail.permataindokemas.com
+MAIL_PORT=587
+MAIL_ENCRYPTION=tls
+MAIL_USERNAME=noreply@permataindokemas.com
+MAIL_PASSWORD=isi_password_email_di_server_saja
+MAIL_FROM_ADDRESS=noreply@permataindokemas.com
+MAIL_FROM_NAME="PIK Marketing Control"
+```
+
+Setiap percobaan kirim tercatat di detail retur/komplain (Terkirim / Dicatat (log) / Gagal + alasannya). Bila gagal, data komplain tetap tersimpan dan bisa dikirim ulang dengan tombol **Kirim ulang**.
 
 ## 4. Setup database
 
-- `database/schema.sql` — seluruh tabel (users, customers, contacts, products, purchase_orders, po_lines, deliveries, returns, stock, leadtime, inbound_maklon, invoices_payments, po_financials, leads, activities, follow_up + notifications, audit_logs, migration_issues, settings, login_attempts). Aman dijalankan ulang (`CREATE TABLE IF NOT EXISTS`).
+- `database/schema.sql` — tabel dasar (users, customers, contacts, products, purchase_orders, po_lines, deliveries, returns, stock, leadtime, inbound_maklon, invoices_payments, po_financials, leads, activities, follow_up + notifications, audit_logs, migration_issues, settings, login_attempts). Aman dijalankan ulang (`CREATE TABLE IF NOT EXISTS`).
+- `database/migrations/` — tambahan setelah schema: nilai dokumen PO & log import (`2026_10_01_…`), lalu OEF + review PPIC, role baru, retur & komplain (bukti, email QC, hasil), dan Inbound Supplier (`2026_10_06_…`).
 - `database/seed.sql` — **hanya** pengaturan awal (nama perusahaan, jatuh tempo default 30 hari, PPN 11%, dll.). Tidak berisi data bisnis maupun akun.
 - `php database/install.php` menjalankan keduanya memakai kredensial `.env`, lalu semua **migrasi**.
 - Tanpa akses SSH (mis. hosting dengan phpMyAdmin): impor `schema.sql` lalu `seed.sql` lewat tab *Import* phpMyAdmin, login sebagai Admin, lalu jalankan **Settings › Pembaruan database**.
@@ -114,6 +137,14 @@ Saat meng-update aplikasi di server:
 3. Jalankan `php database/migrate.php` (atau login Admin → **Settings › Pembaruan database** → *Jalankan pembaruan*). Tabel terkait otomatis dibackup ke `storage/backups/` sebelum migrasi.
 
 Selama migrasi belum dijalankan, Admin otomatis diarahkan ke halaman Pembaruan database dan user lain melihat pesan "Aplikasi sedang diperbarui" (tidak ada error SQL). `php database/migrate.php --status` hanya menampilkan status.
+
+#### Update ke versi OEF / Retur & Komplain (Oktober 2026)
+
+1. Backup database **dan** folder `storage/` (bagian 10).
+2. Upload kode baru, lalu jalankan pembaruan database (langkah 3 di atas). Migrasi `2026_10_06_000001_…` hanya menambah: nilai role `PPIC`, `Produksi`, `Gudang`, `Purchasing`; kolom OEF (`order_number`, `sales_name`, `review_status`, …); kolom komplain di `returns`; tabel `return_attachments`, `email_logs`, `inbound_supplier`. PO yang sudah ada otomatis berstatus review **Bisa diproses** (sudah berjalan sebelum review PPIC).
+3. Tambahkan `APP_URL` dan `MAIL_*` ke `.env` (bagian 3) bila email ke QC ingin benar-benar dikirim.
+4. Pastikan folder `storage/uploads/` dapat ditulis web server (file bukti komplain).
+5. Login Admin → **Settings › Users**: buat akun untuk PPIC, Produksi, Gudang, dan Purchasing; isi **Email QC default** di Settings › Pengaturan.
 
 ## 5. Import data awal (migrasi)
 
@@ -150,7 +181,7 @@ Setelah import, tinjau **Settings › Migration Issues**:
 - Filter per status / sheet / jenis; tandai **Selesai** atau **Abaikan** (satu per satu atau massal) dengan catatan.
 - Issue tanggal/angka: pilih **Pakai nilai master** atau **Pakai nilai spreadsheet legacy** — kolom record diperbarui dan tercatat di audit log.
 - **Tinjau delivery legacy**: delivery tanpa baris PO yang PO-nya hanya punya satu baris ditampilkan berdampingan (nama produk di spreadsheet vs produk baris PO). Hanya yang dicentang yang dihubungkan; outstanding & status PO dihitung ulang.
-- Banyak issue selesai otomatis saat datanya dilengkapi (mis. menghubungkan delivery/retur/stok/lead time ke PO/produk, mengisi jatuh tempo invoice).
+- Banyak issue selesai otomatis saat datanya dilengkapi (mis. menghubungkan delivery/retur/stok/lead time ke OEF/produk). Issue data keuangan lama (invoice, PO financial) tetap tercatat; karena menu Finance sudah dihapus, tandai *Ignored* bila tidak lagi relevan.
 
 ### Import database PO (`PIK_PO_DATABASE_*.xlsx`)
 
@@ -196,6 +227,10 @@ php -S 127.0.0.1:8080 -t public public/index.php
 | sales@pik.test | Sales |
 | management@pik.test | Management |
 | viewer@pik.test | Viewer |
+| ppic@pik.test | PPIC |
+| produksi@pik.test | Produksi |
+| gudang@pik.test | Gudang |
+| purchasing@pik.test | Purchasing |
 
 Password semua akun: nilai variabel `DEV_PASSWORD`, atau default `PikDev2026!`. Script hanya mau berjalan bila `APP_ENV` = `development`, `local`, atau `testing`.
 
@@ -207,11 +242,11 @@ Test berjalan pada database terpisah yang **wajib** berakhiran `_test` (dikosong
 mysql -u root -p -e "CREATE DATABASE pik_marketing_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   GRANT ALL PRIVILEGES ON pik_marketing_test.* TO 'pik_app'@'localhost';"
 
-php tests/run.php              # semua test (±120 test, ±40 detik)
+php tests/run.php              # semua test (±137 test, ±65 detik)
 php tests/run.php "Phase 4"    # hanya grup tertentu
 ```
 
-Test menjalankan server PHP bawaan dan menguji lewat HTTP sungguhan: CRUD, validasi, otorisasi per role, relasi, perhitungan outstanding/invoice, laporan & export, otomasi, import, serta pengujian keamanan (XSS di semua halaman, SQL injection, CSRF, cookie). Opsional, menguji import workbook asli (beberapa file legacy dipisah titik koma):
+Test menjalankan server PHP bawaan dan menguji lewat HTTP sungguhan: CRUD, validasi, otorisasi per role (termasuk PPIC/Produksi/Gudang/Purchasing), alur OEF → review PPIC → jadwal delivery, Surat Jalan khusus PPIC, outstanding, retur & komplain (upload bukti, akses file, hasil Selesai/Tidak selesai), pengiriman email lewat **server SMTP tiruan**, laporan & export, otomasi, import, serta pengujian keamanan (XSS di semua halaman, SQL injection, CSRF, cookie). Opsional, menguji import workbook asli (beberapa file legacy dipisah titik koma):
 
 ```bash
 PIK_REAL_WORKBOOK="/path/master.xlsx" PIK_REAL_LEGACY="/path/legacy1.xlsx;/path/legacy2.xlsx" php tests/run.php "Workbook asli"
@@ -249,14 +284,21 @@ Wajib `AllowOverride All` agar `.htaccess` aktif. Setelah deploy, cek bahwa `htt
 
 ## 9. Otomasi & notifikasi (cron)
 
-Otomasi menandai follow up & invoice yang lewat jatuh tempo (Overdue) dan mengirim notifikasi (tanpa duplikat) kepada user yang berhak:
+Otomasi menandai follow up yang lewat jadwal (Overdue) dan mengirim notifikasi (tanpa duplikat) kepada user yang berhak:
 
 | Notifikasi | Penerima |
 |---|---|
 | Follow up hari ini / terlewat | PIC follow up (bila pengingat aktif) |
-| Delivery terjadwal dalam N hari (Settings) | PIC marketing customer / pembuat delivery (atau semua user Marketing) |
-| Invoice overdue | User dengan akses Finance |
+| Delivery terjadwal dalam N hari (Settings) | PIC marketing customer / pembuat delivery + semua user PPIC (atau semua user Marketing) |
 | Target closing lead ≤ 3 hari / terlewat | PIC lead |
+
+Notifikasi yang dikirim langsung saat kejadian (bukan dari otomasi):
+
+| Kejadian | Penerima |
+|---|---|
+| OEF baru dibuat / OEF diubah setelah direview | Semua user PPIC ("menunggu review") |
+| PPIC menandai **Bisa diproses** / **Tidak bisa diproses** (+ alasan) | Pembuat / pengubah terakhir OEF |
+| Komplain dicatat (bila dicentang) dan saat diberi hasil Selesai / Tidak selesai | **Email** ke alamat di kolom Email QC (lihat bagian 3) |
 
 Otomasi berjalan sendiri saat aplikasi dipakai (maksimal sekali per interval, default 60 menit) dan bisa dijalankan manual di Settings › Pengaturan. Untuk server yang tidak selalu dibuka, tambahkan cron:
 
@@ -281,40 +323,66 @@ Contoh cron dengan kredensial di `~/.my.cnf` (chmod 600):
 30 1 * * * mysqldump --single-transaction pik_marketing | gzip > /backup/pik_$(date +\%F).sql.gz && find /backup -name 'pik_*.sql.gz' -mtime +30 -delete
 ```
 
-Yang perlu dibackup: **database** dan file **`.env`** (simpan terpisah dan aman). Folder `storage/logs` boleh dirotasi/dihapus berkala. File upload import dihapus otomatis setelah diproses.
+Yang perlu dibackup: **database**, folder **`storage/uploads/`** (file bukti retur & komplain), dan file **`.env`** (simpan terpisah dan aman). Folder `storage/logs` boleh dirotasi/dihapus berkala. File upload import dihapus otomatis setelah diproses.
+
+```bash
+tar czf /backup/pik_uploads_$(date +%F).tar.gz -C /var/www/pik-marketing-control storage/uploads
+```
 
 ## 11. Hak akses per role
 
 Otorisasi dicek di **backend** pada setiap route (lihat `app/routes.php` + `config/permissions.php`); menu & tombol hanya disembunyikan sebagai kenyamanan tampilan.
 
-| Modul | Admin | Marketing | Sales | Management | Viewer |
-|---|:-:|:-:|:-:|:-:|:-:|
-| Dashboard | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Customers & Contacts | ✔ | ✔ | ✔ | ✔ | lihat |
-| Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | lihat |
-| Purchase Orders, Deliveries, Returns | ✔ | ✔ | — | ✔ | lihat |
-| Products | ✔ | ✔ | — | — | lihat |
-| Stock, Inbound Maklon | ✔ | — | — | ✔ | lihat |
-| Lead Time | ✔ | ✔ | — | ✔ | lihat |
-| Finance (Invoice, Payment, PO Financials) | ✔ | — | — | — | — |
-| Reports | ✔ | — | — | semua + export | tanpa Financial & export |
-| Users, Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — |
+| Modul | Admin | Marketing | Sales | Management | Viewer | PPIC | Produksi | Gudang | Purchasing |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Dashboard (isi sesuai role) | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Customers & Contacts | ✔ | ✔ | ✔ | ✔ | lihat | — | — | — | — |
+| Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | lihat | — | — | — | — |
+| Order Entry Form (buat/ubah) | ✔ | ✔ | — | lihat | lihat | lihat | — | — | — |
+| Review OEF (Bisa / Tidak bisa diproses) | — ¹ | — | — | — | — | ✔ | — | — | — |
+| Deliveries (jadwal, status) | ✔ | lihat | — | lihat | lihat | ✔ | — | — | — |
+| Isi nomor Surat Jalan | — ¹ | — | — | — | — | ✔ | — | — | — |
+| Retur & Komplain | ✔ | ✔ | — | lihat | lihat | — | — | — | — |
+| Products | ✔ | ✔ | — | lihat | lihat | — | — | — | — |
+| Stock | ✔ | — | — | lihat | lihat | — | ✔ | ✔ | — |
+| Inbound Maklon | ✔ | — | — | lihat | lihat | — | — | ✔ | — |
+| Inbound Supplier | ✔ | — | — | lihat | lihat | — | — | — | ✔ |
+| Lead Time | ✔ | ✔ | — | lihat | lihat | — | — | — | — |
+| Reports | ✔ | — | — | semua + export | tanpa export | — | — | — | — |
+| Nilai PO hasil import (data keuangan) | ✔ | — | — | — | — | — | — | — | — |
+| Users, Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — | — | — | — | — |
 
-Interpretasi PRD (bisa diubah di `config/permissions.php`):
-- Lead Time mengikuti akses PO/Delivery; Inbound Maklon mengikuti akses Stock.
-- Finance tidak disebut untuk role selain Admin di PRD, sehingga hanya Admin. Management melihat angka keuangan lewat laporan Financial.
-- "Viewer: read-only" = boleh melihat modul operasional, tanpa Finance, area Admin, dan export.
+¹ Khusus PPIC sesuai permintaan. Bila Admin juga boleh, hapus baris `'!oef_review.approve'` / `'!deliveries.sj'` di `config/permissions.php`. Admin tetap bisa mengoreksi jadwal delivery (tanpa mengubah nomor Surat Jalan).
+
+Catatan:
+- Produk yang diketik di OEF atau di form stok otomatis masuk menu Products; role yang menginput tidak perlu akses menu Products.
+- Management sekarang **memantau** (lihat semua data operasional + laporan); input dilakukan role pemilik prosesnya.
+- Ubah kebijakan akses cukup di `config/permissions.php` (format `modul.aksi`, `modul.*`, `*`, dan pengecualian `!modul.aksi`).
 
 ## 12. Aturan bisnis
 
-- **Outstanding Quantity = Order Quantity − Delivered Quantity + Return Quantity** (per baris PO). Delivered hanya menghitung delivery berstatus *Delivered*/*Partial*. Nilai negatif = kelebihan kirim (harus dikonfirmasi saat input).
-- **Status PO otomatis:** Open/On Process → *Partial* saat ada kiriman; → *Closed* saat semua baris outstanding ≤ 0. Status *Closed* dan *Cancelled* tidak pernah diubah otomatis. Setiap perubahan otomatis tercatat di audit log.
+### Order Entry Form (OEF) → review PPIC → delivery
+
+1. **Marketing** mengisi OEF: No order (manual, unik), tanggal order, nama sales, nama customer, No PO dari customer, lalu per produk: nama produk, spesifikasi, qty, satuan, supplier (jika subcont); permintaan selesai/kirim, tujuan kirim, dan keterangan.
+2. **Customer & produk diketik manual.** Nama dicocokkan tanpa peka huruf besar/kecil & spasi berlebih. Bila belum ada, otomatis ditambahkan ke menu Customer / Products (sumber "OEF"). Bila ada beberapa produk/customer dengan nama sama, user diminta memilih dari daftar saran — aplikasi **tidak menebak**.
+3. OEF baru berstatus review **Menunggu review PPIC**; semua user PPIC mendapat notifikasi.
+4. **PPIC** membuka OEF dan menekan **Bisa diproses** (hijau) atau **Tidak bisa diproses** (merah, alasan wajib). Pembuat OEF mendapat notifikasi beserta alasannya.
+5. Saat **Bisa diproses**: status OEF Open → *On Process*, dan menu Delivery otomatis berisi jadwal *Scheduled* per produk pada tanggal **permintaan selesai/kirim** (qty = sisa yang belum dijadwalkan, tujuan = tujuan kirim).
+6. Jadwal bisa diubah PPIC di menu Delivery bila jadwal berubah. **Nomor Surat Jalan hanya diisi PPIC.** Jadwal yang sudah diubah PPIC tidak lagi disesuaikan otomatis.
+7. Bila isi OEF diubah setelah direview (selain status), OEF kembali **Menunggu review PPIC**. Saat disetujui ulang, jadwal otomatis yang masih *Scheduled* & belum ber-SJ disesuaikan dengan tanggal/qty terbaru (tidak pernah dobel).
+
+### Perhitungan & status
+
+- **Outstanding Quantity = Order Quantity − Delivered Quantity + Return Quantity** (per produk OEF). Delivered hanya menghitung delivery berstatus *Delivered*/*Partial*; jadwal *Scheduled* belum mengurangi outstanding. Nilai negatif = kelebihan kirim (harus dikonfirmasi saat input).
+- **Status OEF otomatis:** Open/On Process → *Partial* saat ada kiriman; → *Closed* saat semua produk outstanding ≤ 0. Status *Closed* dan *Cancelled* tidak pernah diubah otomatis. Setiap perubahan otomatis tercatat di audit log.
+- **Retur & Komplain** (satu menu): jenis *Retur* = barang dikembalikan, qty wajib dan **menambah outstanding**; jenis *Komplain* = tanpa barang kembali, qty bermasalah hanya informasi, detail masalah wajib. Bukti berupa gambar JPG/PNG/WEBP atau PDF (maks 5 MB per file, 10 file per kasus). Hasil: **Selesai** (hijau, catatan opsional) atau **Tidak selesai** (merah, alasan wajib); bisa dibuka kembali. Hasil otomatis dikirim ke email QC. Seluruh kasus ada di **Reports › Retur & Komplain**.
+- **Products:** "Qty (arsip OEF)" = total qty produk tersebut di semua OEF (tanpa *Cancelled*) — menggantikan tampilan kapasitas produksi per hari (kolom lama tetap tersimpan, tidak dihapus). **Kelompok** produk dibuat otomatis dari kata di nama produk (Botol, Pot / Jar, Tube, Pump & Sprayer, Cap / Tutup, Dropper, Label & Shrink, Printing, Box & Karton, Pouch & Sachet, selain itu *Lainnya*); kategori yang diisi manual di produk selalu didahulukan.
+- **Stok:** diisi Produksi & Gudang dengan mengetik nama produk; produk baru otomatis dibuat. Halaman Stock dikelompokkan per kelompok lalu per produk. Qty = jumlah box × isi per box bila Qty dikosongkan; Qty yang berbeda harus dikonfirmasi. Entri tanpa qty ditandai, tidak dihitung sebagai 0.
 - **Follow up overdue:** tanggal < hari ini dan status bukan *Done* (status *Cancelled* juga dianggap selesai).
-- **Invoice:** sisa tagihan = nilai invoice − total dibayar; tidak boleh bayar melebihi sisa. Status *Paid* (lunas), *Overdue* (belum lunas & lewat jatuh tempo), *Partial*, *Unpaid*. Jatuh tempo kosong diisi otomatis: termin PO NET n → n hari; CBD/COD → hari yang sama; selain itu default Settings (30 hari). Setiap pembayaran tercatat sebagai riwayat.
-- **PO Financials:** total = qty × harga satuan; PPN = total × tarif Settings (default 11%, sesuai data workbook).
-- **Stok:** Qty = jumlah box × isi per box bila Qty dikosongkan; Qty yang berbeda harus dikonfirmasi. Entri tanpa qty ditandai, tidak dihitung sebagai 0.
 - **Lead time:** estimasi terbuka yang tanggalnya lewat ditandai *Terlambat*.
-- **Inbound maklon:** total masuk = qty diterima − qty reject.
+- **Inbound maklon** (input Gudang): total masuk = qty diterima − qty reject.
+- **Inbound supplier** (input Purchasing): diterima bersih = qty datang − qty reject; reject tidak boleh melebihi qty datang.
+- **Nilai PO** dari import database PO (harga, PPN, grand total) adalah data keuangan: tidak tampil di form/daftar OEF, hanya sebagai arsip untuk Admin. Bila qty produk berharga diubah, nilai arsipnya dihitung ulang (harga tidak dihapus).
 - Uang dihitung dalam sen (integer) agar tidak ada selisih pembulatan; input menerima format Indonesia (`12.500.000` atau `1.250.000,50`).
 
 ## 13. Temuan data migrasi
@@ -327,7 +395,7 @@ Hasil import workbook asli (44 customer, 262 produk, 365 PO, 407 baris PO, 1.526
 - **614 delivery belum terhubung ke baris PO** (537 produk tidak cocok persis, 77 PO tidak ditemukan). 435 di antaranya berada di PO satu baris dan bisa ditinjau cepat di halaman *Tinjau delivery legacy*. Sampai dihubungkan, delivery ini belum mengurangi outstanding.
 - PO tanpa nomor (36) / tanpa tanggal (37), nomor PO ganda (4), kemungkinan customer (3) & produk (7) ganda.
 - Stok: 9 baris judul kolom spreadsheet, 35 nama barang belum cocok ke master produk.
-- Seluruh 92 invoice tidak memiliki jatuh tempo; 1 invoice belum lunas ditandai untuk dilengkapi.
+- Seluruh 92 invoice tidak memiliki jatuh tempo; 1 invoice belum lunas ditandai untuk dilengkapi (data keuangan lama — menu Finance sudah dihapus, datanya tetap tersimpan).
 
 ## 14. Struktur folder
 
@@ -340,7 +408,7 @@ pik-marketing-control/
 │   ├── routes.php          # semua URL + permission yang wajib dimiliki
 │   ├── controllers/        # satu controller per modul
 │   ├── models/             # akses data + aturan bisnis (PDO prepared statements)
-│   ├── services/           # dashboard, laporan, otomasi, importer workbook
+│   ├── services/           # dashboard, laporan, otomasi, alur OEF, email komplain, importer
 │   ├── helpers/            # Router, Auth, Session, Csrf, Validator, Database, Xlsx, ...
 │   └── views/              # template PHP (layout, halaman per modul)
 ├── config/
@@ -363,7 +431,7 @@ pik-marketing-control/
 │   ├── css/app.css
 │   ├── js/app.js
 │   └── assets/             # Bootstrap, ikon, font, gambar (lokal)
-├── storage/                # log, file import sementara, backup otomatis (tidak di-commit)
+├── storage/                # log, file import sementara, backup otomatis, uploads/ (bukti komplain) — tidak di-commit
 └── tests/                  # test runner + skenario per fase
 ```
 
@@ -375,6 +443,8 @@ pik-marketing-control/
 - Semua output di-escape; link eksternal hanya `http/https`; Content-Security-Policy tanpa inline script, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`.
 - Export CSV dilindungi dari formula injection; setiap export, import, perubahan data, dan login tercatat di **Audit Log**.
 - Upload import divalidasi (ekstensi .xlsx + signature zip + ukuran), disimpan di luar document root, dan dihapus setelah diproses.
+- Bukti komplain divalidasi dari **isi file** (signature JPEG/PNG/WEBP/PDF, gambar harus benar-benar terbaca), disimpan dengan nama acak di `storage/uploads/` (di luar `public/`), dan hanya bisa dibuka lewat aplikasi oleh role yang berhak (dengan `nosniff` + CSP sandbox).
+- Email: alamat divalidasi, baris baru di subjek dibuang (anti header injection), password SMTP hanya di `.env`. Kegagalan kirim tidak pernah disembunyikan — status tercatat di `email_logs` dan ditampilkan.
 - Detail error hanya tampil bila `APP_DEBUG=true`; di production error dicatat ke `storage/logs/`.
 
 ## 16. Troubleshooting
@@ -391,7 +461,13 @@ pik-marketing-control/
 | Upload import gagal "terlalu besar" | Naikkan `upload_max_filesize` & `post_max_size` di `php.ini`, restart Apache. |
 | Error menulis log / import | Pastikan `storage/` dapat ditulis user web server (`chown -R www-data storage`). |
 | Notifikasi tidak muncul | Cek Settings › Pengaturan (waktu otomasi terakhir), tombol *Jalankan sekarang*, atau pasang cron (bagian 9). |
-| Angka outstanding PO lama terlihat besar | Delivery legacy belum terhubung ke baris PO — tinjau di Migration Issues › Tinjau delivery legacy. |
+| Angka outstanding OEF/PO lama terlihat besar | Delivery legacy belum terhubung ke produk OEF — tinjau di Migration Issues › Tinjau delivery legacy. |
 | Lupa password Admin | `php database/create_admin.php` untuk membuat Admin baru dari server. |
+| Email ke QC tidak sampai | Lihat status di detail komplain › Email QC. "Dicatat (log)" = `MAIL_DRIVER=log` (email tidak dikirim) → isi `MAIL_*` di `.env`. "Gagal" menampilkan alasan dari server email (mis. login ditolak, host salah). Setelah diperbaiki tekan **Kirim ulang**. |
+| Upload bukti ditolak "hanya gambar JPG, PNG, WEBP, atau PDF" | File bukan gambar/PDF asli (mis. HEIC dari iPhone atau file yang hanya diganti ekstensinya). Simpan ulang sebagai JPG/PNG/PDF. |
+| Halaman 413 "File terlalu besar" saat upload bukti | Total file melebihi `post_max_size` server. Kirim lebih sedikit file sekaligus, atau naikkan `post_max_size` & `upload_max_filesize` di `php.ini`. |
+| OEF ditolak "Ada N produk bernama sama" | Master produk punya beberapa produk dengan nama sama (beda varian/kode). Ketik nama lalu pilih salah satu saran yang memuat varian/kode. |
+| Tombol "Bisa diproses" tidak muncul | Hanya role **PPIC** yang bisa mengonfirmasi OEF, dan hanya saat OEF *Menunggu review PPIC*. |
+| Kolom Surat Jalan tidak bisa diisi | Hanya role **PPIC** yang dapat mengisi nomor Surat Jalan. |
 
 Log aplikasi: `storage/logs/app-YYYY-MM-DD.log`.

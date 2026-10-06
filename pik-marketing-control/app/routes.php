@@ -12,12 +12,11 @@ use App\Controllers\DeliveryController;
 use App\Controllers\FollowUpController;
 use App\Controllers\ImportController;
 use App\Controllers\InboundController;
-use App\Controllers\InvoiceController;
+use App\Controllers\InboundSupplierController;
 use App\Controllers\LeadController;
 use App\Controllers\LeadTimeController;
 use App\Controllers\MigrationIssueController;
 use App\Controllers\NotificationController;
-use App\Controllers\PoFinancialController;
 use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Controllers\PurchaseOrderController;
@@ -99,7 +98,7 @@ return static function (Router $r): void {
     $r->post('/follow-ups/{id}/reschedule', [FollowUpController::class, 'reschedule'], 'followups.edit');
     $r->post('/follow-ups/{id}/delete', [FollowUpController::class, 'destroy'], 'followups.delete');
 
-    // Operations: purchase orders, PO lines, deliveries, returns
+    // Operations: Order Entry Form (tabel purchase_orders), baris produk, review PPIC, deliveries, retur & komplain
     $r->get('/purchase-orders', [PurchaseOrderController::class, 'index'], 'purchase_orders.view');
     $r->get('/purchase-orders/create', [PurchaseOrderController::class, 'create'], 'purchase_orders.create');
     $r->post('/purchase-orders', [PurchaseOrderController::class, 'store'], 'purchase_orders.create');
@@ -107,6 +106,8 @@ return static function (Router $r): void {
     $r->get('/purchase-orders/{id}/edit', [PurchaseOrderController::class, 'edit'], 'purchase_orders.edit');
     $r->post('/purchase-orders/{id}', [PurchaseOrderController::class, 'update'], 'purchase_orders.edit');
     $r->post('/purchase-orders/{id}/delete', [PurchaseOrderController::class, 'destroy'], 'purchase_orders.delete');
+    $r->post('/purchase-orders/{id}/approve', [PurchaseOrderController::class, 'approve'], 'oef_review.approve');
+    $r->post('/purchase-orders/{id}/reject', [PurchaseOrderController::class, 'reject'], 'oef_review.approve');
     $r->post('/purchase-orders/{id}/lines', [PurchaseOrderController::class, 'addLine'], 'purchase_orders.edit');
     $r->get('/po-lines/{id}/edit', [PurchaseOrderController::class, 'editLine'], 'purchase_orders.edit');
     $r->post('/po-lines/{id}', [PurchaseOrderController::class, 'updateLine'], 'purchase_orders.edit');
@@ -122,11 +123,18 @@ return static function (Router $r): void {
     $r->get('/returns', [ReturnController::class, 'index'], 'returns.view');
     $r->get('/returns/create', [ReturnController::class, 'create'], 'returns.create');
     $r->post('/returns', [ReturnController::class, 'store'], 'returns.create');
+    $r->get('/returns/{id}', [ReturnController::class, 'show'], 'returns.view');
     $r->get('/returns/{id}/edit', [ReturnController::class, 'edit'], 'returns.edit');
     $r->post('/returns/{id}', [ReturnController::class, 'update'], 'returns.edit');
     $r->post('/returns/{id}/delete', [ReturnController::class, 'destroy'], 'returns.delete');
+    $r->post('/returns/{id}/resolve', [ReturnController::class, 'resolve'], 'returns.edit');
+    $r->post('/returns/{id}/reopen', [ReturnController::class, 'reopen'], 'returns.edit');
+    $r->post('/returns/{id}/email', [ReturnController::class, 'email'], 'returns.edit');
+    $r->post('/returns/{id}/files', [ReturnController::class, 'upload'], 'returns.edit');
+    $r->get('/returns/{id}/files/{file_id}', [ReturnController::class, 'file'], 'returns.view');
+    $r->post('/returns/{id}/files/{file_id}/delete', [ReturnController::class, 'deleteFile'], 'returns.edit');
 
-    // Inventory: products, stock, lead time, inbound maklon
+    // Inventory: products, stock, lead time, inbound maklon (Gudang), inbound supplier (Purchasing)
     $r->get('/products', [ProductController::class, 'index'], 'products.view');
     $r->get('/products/create', [ProductController::class, 'create'], 'products.create');
     $r->post('/products', [ProductController::class, 'store'], 'products.create');
@@ -153,23 +161,13 @@ return static function (Router $r): void {
     $r->get('/inbound/{id}/edit', [InboundController::class, 'edit'], 'inbound.edit');
     $r->post('/inbound/{id}', [InboundController::class, 'update'], 'inbound.edit');
     $r->post('/inbound/{id}/delete', [InboundController::class, 'destroy'], 'inbound.delete');
-
-    // Finance: invoice & payment, PO financials
-    $r->get('/invoices', [InvoiceController::class, 'index'], 'finance.view');
-    $r->get('/invoices/create', [InvoiceController::class, 'create'], 'finance.create');
-    $r->post('/invoices', [InvoiceController::class, 'store'], 'finance.create');
-    $r->get('/invoices/{id}', [InvoiceController::class, 'show'], 'finance.view');
-    $r->get('/invoices/{id}/edit', [InvoiceController::class, 'edit'], 'finance.edit');
-    $r->post('/invoices/{id}', [InvoiceController::class, 'update'], 'finance.edit');
-    $r->post('/invoices/{id}/payments', [InvoiceController::class, 'pay'], 'finance.edit');
-    $r->post('/invoices/{id}/delete', [InvoiceController::class, 'destroy'], 'finance.delete');
-    $r->get('/po-financials', [PoFinancialController::class, 'index'], 'finance.view');
-    $r->get('/po-financials/create', [PoFinancialController::class, 'create'], 'finance.create');
-    $r->post('/po-financials', [PoFinancialController::class, 'store'], 'finance.create');
-    $r->get('/po-financials/{id}', [PoFinancialController::class, 'show'], 'finance.view');
-    $r->get('/po-financials/{id}/edit', [PoFinancialController::class, 'edit'], 'finance.edit');
-    $r->post('/po-financials/{id}', [PoFinancialController::class, 'update'], 'finance.edit');
-    $r->post('/po-financials/{id}/delete', [PoFinancialController::class, 'destroy'], 'finance.delete');
+    $r->get('/inbound-supplier', [InboundSupplierController::class, 'index'], 'inbound_supplier.view');
+    $r->get('/inbound-supplier/create', [InboundSupplierController::class, 'create'], 'inbound_supplier.create');
+    $r->post('/inbound-supplier', [InboundSupplierController::class, 'store'], 'inbound_supplier.create');
+    $r->get('/inbound-supplier/{id}', [InboundSupplierController::class, 'show'], 'inbound_supplier.view');
+    $r->get('/inbound-supplier/{id}/edit', [InboundSupplierController::class, 'edit'], 'inbound_supplier.edit');
+    $r->post('/inbound-supplier/{id}', [InboundSupplierController::class, 'update'], 'inbound_supplier.edit');
+    $r->post('/inbound-supplier/{id}/delete', [InboundSupplierController::class, 'destroy'], 'inbound_supplier.delete');
 
     // Reports (akses per jenis laporan dicek di controller: reports.customer, reports.po, ...)
     $r->get('/reports', [ReportController::class, 'index'], 'reports.view');

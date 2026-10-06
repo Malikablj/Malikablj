@@ -28,6 +28,7 @@ final class DeliveryController extends Controller
             'from'        => Validator::parseDate(Request::queryString('from')) ?? '',
             'to'          => Validator::parseDate(Request::queryString('to')) ?? '',
             'link'        => Request::queryString('link'),
+            'sj'          => Request::queryString('sj') === 'missing' ? 'missing' : '',
         ];
         $this->view('deliveries/index', [
             'title'      => 'Deliveries',
@@ -48,9 +49,10 @@ final class DeliveryController extends Controller
         }
         $destination = null;
         if ($poId) {
-            $destination = Database::fetchValue('SELECT c.name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id WHERE p.id = :id', ['id' => $poId]);
+            $row = Database::fetch('SELECT p.delivery_address, c.name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id WHERE p.id = :id', ['id' => $poId]);
+            $destination = $row !== null ? mb_substr(trim((string) preg_replace('/\s+/u', ' ', (string) ($row['delivery_address'] ?? $row['name'] ?? ''))), 0, 255) : null;
         }
-        $preset = ['po_line_id' => $lineId, 'delivery_date' => today(), 'status' => 'Delivered', 'destination' => $destination];
+        $preset = ['po_line_id' => $lineId, 'delivery_date' => today(), 'status' => 'Scheduled', 'destination' => $destination ?: null];
         $this->view('deliveries/form', $this->formData(null, $poId, $lineId) + ['errors' => [], 'preset' => $preset, 'line' => $line]);
     }
 
@@ -61,11 +63,11 @@ final class DeliveryController extends Controller
             $this->invalid('deliveries/form', $this->formData(null, null, (int) ($_POST['po_line_id'] ?? 0) ?: null) + ['preset' => [], 'line' => null], $v->errors(), $this->old());
             return;
         }
-        $data = $v->validated();
+        $data = $this->withSjRule($v->validated(), null);
         unset($data['confirm_over_delivery']);
         $id = Delivery::saveDelivery(null, $data);
         $po = Database::fetchValue('SELECT po_id FROM deliveries WHERE id = :id', ['id' => $id]);
-        $this->success('Delivery ' . ($data['sj_number'] ?? '') . ' tersimpan. Outstanding PO diperbarui otomatis.', $this->returnTo('/purchase-orders/' . $po));
+        $this->success('Delivery ' . ($data['sj_number'] ?? '') . ' tersimpan. Outstanding OEF diperbarui otomatis.', $this->returnTo('/purchase-orders/' . $po));
     }
 
     public function show(int $id): void
@@ -97,8 +99,12 @@ final class DeliveryController extends Controller
             $this->invalid('deliveries/form', $this->formData($d, $d['po_id'] ? (int) $d['po_id'] : null, $d['po_line_id'] ? (int) $d['po_line_id'] : null) + ['preset' => [], 'line' => null], $v->errors(), $this->old());
             return;
         }
-        $data = $v->validated();
+        $data = $this->withSjRule($v->validated(), $d);
         unset($data['confirm_over_delivery']);
+        if ($d['schedule_source'] === Delivery::SOURCE_OEF) {
+            // jadwal otomatis yang sudah diubah user tidak lagi disesuaikan otomatis oleh OEF
+            $data['schedule_source'] = Delivery::SOURCE_OEF_EDITED;
+        }
         Delivery::saveDelivery($id, $data);
         $this->success('Delivery diperbarui.', $this->returnTo('/deliveries/' . $id));
     }
@@ -116,13 +122,13 @@ final class DeliveryController extends Controller
             }
         }
         if (!$valid) {
-            $this->failure('Pilih baris PO yang valid' . ($d['po_id'] ? ' dari PO delivery ini.' : '.'), '/deliveries/' . $id);
+            $this->failure('Pilih produk OEF yang valid' . ($d['po_id'] ? ' dari OEF delivery ini.' : '.'), '/deliveries/' . $id);
         }
         Delivery::saveDelivery($id, [
             'po_line_id' => $lineId, 'delivery_date' => $d['delivery_date'], 'sj_number' => $d['sj_number'], 'destination' => $d['destination'],
             'delivered_qty' => $d['delivered_qty'], 'status' => $d['status'], 'note' => $d['note'], 'attachment' => $d['attachment'],
         ]);
-        $this->success('Delivery dihubungkan ke baris PO. Outstanding & migration issue diperbarui.', $this->returnTo('/deliveries/' . $id));
+        $this->success('Delivery dihubungkan ke produk OEF. Outstanding & migration issue diperbarui.', $this->returnTo('/deliveries/' . $id));
     }
 
     public function destroy(int $id): void
@@ -134,6 +140,20 @@ final class DeliveryController extends Controller
             $this->failure($e->getMessage(), '/deliveries/' . $id);
         }
         $this->success('Delivery ' . ($d['sj_number'] ?? $d['code']) . ' dihapus.', $d['po_id'] ? '/purchase-orders/' . $d['po_id'] : '/deliveries');
+    }
+
+    /**
+     * Nomor Surat Jalan hanya boleh diisi/diubah role dengan deliveries.sj (PPIC).
+     * Untuk role lain nilai SJ yang tersimpan dipertahankan (atau kosong untuk data baru).
+     * @param array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function withSjRule(array $data, ?array $existing): array
+    {
+        if (!Auth::can('deliveries.sj')) {
+            $data['sj_number'] = $existing['sj_number'] ?? null;
+        }
+        return $data;
     }
 
     /** @return array<string,array<int,string>> baris PO yang boleh dipilih untuk delivery legacy */
@@ -155,7 +175,7 @@ final class DeliveryController extends Controller
             'attachment'            => 'nullable|url|max:500',
             'confirm_over_delivery' => 'boolean',
         ], [
-            'po_line_id' => 'Baris PO', 'delivery_date' => 'Tanggal delivery', 'sj_number' => 'Nomor surat jalan', 'destination' => 'Tujuan',
+            'po_line_id' => 'Produk OEF', 'delivery_date' => 'Tanggal delivery', 'sj_number' => 'Nomor surat jalan', 'destination' => 'Tujuan',
             'delivered_qty' => 'Qty', 'status' => 'Status', 'note' => 'Catatan', 'attachment' => 'Link lampiran',
         ]);
         $data = $v->validated();
@@ -167,7 +187,7 @@ final class DeliveryController extends Controller
                 $available += (int) $existing['delivered_qty'];
             }
             if ((int) $data['delivered_qty'] > $available) {
-                $v->addError('delivered_qty', 'Qty melebihi outstanding baris PO (' . number_format(max(0, $available), 0, ',', '.') . ' pcs). Centang "Konfirmasi kelebihan kirim" bila memang over delivery.');
+                $v->addError('delivered_qty', 'Qty melebihi outstanding produk OEF (' . number_format(max(0, $available), 0, ',', '.') . ' pcs). Centang "Konfirmasi kelebihan kirim" bila memang over delivery.');
             }
         }
         return $v;

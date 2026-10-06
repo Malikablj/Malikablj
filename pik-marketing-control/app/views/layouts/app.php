@@ -69,7 +69,7 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
         <?php if (can('customers.view') || can('purchase_orders.view') || can('products.view') || can('leads.view')): ?>
             <form class="topbar-search" action="<?= e(url('/search')) ?>" method="get" role="search">
                 <i class="bi bi-search"></i>
-                <input type="search" name="q" placeholder="Cari customer, PO, lead, produk…" aria-label="Pencarian global" value="<?= e($_GET['q'] ?? '') ?>" maxlength="100">
+                <input type="search" name="q" placeholder="Cari customer, OEF, lead, produk…" aria-label="Pencarian global" value="<?= e($_GET['q'] ?? '') ?>" maxlength="100">
             </form>
         <?php else: ?>
             <div class="flex-grow-1"></div>

@@ -10,20 +10,51 @@ use App\Helpers\Number;
 use App\Helpers\Paginator;
 use DomainException;
 
+/**
+ * Order Entry Form (OEF). Disimpan di tabel purchase_orders:
+ *   order_number = No order (diisi manual, unik), po_number = No PO dari customer,
+ *   review_status = hasil review PPIC (Pending → Approved "Bisa diproses" / Rejected "Tidak bisa diproses").
+ * Data PO lama (sebelum OEF) tidak punya order_number dan berstatus review Approved.
+ */
 final class PurchaseOrder extends Model
 {
     public const TABLE = 'purchase_orders';
     public const ENTITY = 'purchase_order';
-    public const LABEL = 'po_number';
+    public const LABEL = 'order_number';
 
     public const STATUSES = ['Open', 'On Process', 'Partial', 'Closed', 'Cancelled'];
     public const OPEN_STATUSES = ['Open', 'On Process', 'Partial'];
     public const PAYMENT_TERMS = ['CBD', 'COD', 'DP 50%', 'Partial by SJ', 'NET 14', 'NET 30', 'NET 45', 'NET 60'];
 
+    public const REVIEW_STATUSES = ['Pending', 'Approved', 'Rejected'];
+    public const REVIEW_LABELS = ['Pending' => 'Menunggu review PPIC', 'Approved' => 'Bisa diproses', 'Rejected' => 'Tidak bisa diproses'];
+    /** Field OEF yang bila diubah setelah direview membuat OEF kembali menunggu review PPIC. */
+    public const REVIEWED_FIELDS = ['order_number', 'customer_id', 'sales_name', 'po_number', 'po_date', 'requested_delivery_date', 'delivery_address', 'remark'];
+
     private const SORTS = [
-        'date' => 'p.po_date', 'number' => 'p.po_number', 'customer' => 'c.name', 'status' => 'p.status',
-        'qty' => 't.total_qty', 'outstanding' => 't.outstanding_qty', 'value' => 'p.grand_total',
+        'date' => 'p.po_date', 'number' => 'p.po_number', 'order' => 'p.order_number', 'customer' => 'c.name', 'status' => 'p.status',
+        'qty' => 't.total_qty', 'outstanding' => 't.outstanding_qty', 'value' => 'p.grand_total', 'request' => 'p.requested_delivery_date',
     ];
+
+    /** Label OEF: No order → No PO customer → kode. */
+    public static function label(array $row): string
+    {
+        foreach (['order_number', 'po_number', 'code'] as $k) {
+            if (isset($row[$k]) && trim((string) $row[$k]) !== '') {
+                return (string) $row[$k];
+            }
+        }
+        return '#' . ($row['id'] ?? '');
+    }
+
+    /** Badge review PPIC (hijau / merah / kuning). */
+    public static function reviewBadge(?string $status): string
+    {
+        $tone = match ((string) $status) {
+            'Approved' => 'success', 'Rejected' => 'danger', default => 'warning',
+        };
+        return '<span class="badge-soft badge-soft-' . $tone . '">' . e(self::REVIEW_LABELS[(string) $status] ?? (string) $status) . '</span>';
+    }
 
     /** Kolom nilai dokumen PO (diisi import database PO atau form PO). */
     public const VALUE_FIELDS = ['currency', 'price_includes_tax', 'subtotal', 'discount_amount', 'tax_amount', 'shipping_cost', 'grand_total'];
@@ -34,10 +65,16 @@ final class PurchaseOrder extends Model
         $where = ['1=1'];
         $params = [];
         if (!empty($f['q'])) {
-            $where[] = '(p.po_number LIKE :q1 OR p.code LIKE :q2 OR c.name LIKE :q3 OR EXISTS (SELECT 1 FROM po_lines pl2 JOIN products pr2 ON pr2.id = pl2.product_id WHERE pl2.po_id = p.id AND (pr2.name LIKE :q4 OR pl2.product_name_legacy LIKE :q5 OR pl2.item_code LIKE :q6)))';
-            foreach (['q1', 'q2', 'q3', 'q4', 'q5', 'q6'] as $k) {
+            $where[] = '(p.po_number LIKE :q1 OR p.code LIKE :q2 OR c.name LIKE :q3 OR p.order_number LIKE :q7 OR p.sales_name LIKE :q8
+                OR EXISTS (SELECT 1 FROM po_lines pl2 JOIN products pr2 ON pr2.id = pl2.product_id WHERE pl2.po_id = p.id
+                    AND (pr2.name LIKE :q4 OR pl2.product_name_legacy LIKE :q5 OR pl2.item_code LIKE :q6 OR pl2.item_description LIKE :q9 OR pl2.subcont_supplier LIKE :q10)))';
+            foreach (['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10'] as $k) {
                 $params[$k] = Database::like((string) $f['q']);
             }
+        }
+        if (!empty($f['ppic']) && in_array($f['ppic'], self::REVIEW_STATUSES, true)) {
+            $where[] = 'p.review_status = :ppic';
+            $params['ppic'] = $f['ppic'];
         }
         $status = (string) ($f['status'] ?? '');
         if ($status === 'open') {
@@ -99,6 +136,7 @@ final class PurchaseOrder extends Model
         return Database::fetch(
             "SELECT COUNT(*) AS po_count, COALESCE(SUM(t.total_qty), 0) AS total_qty, COALESCE(SUM(t.delivered_qty), 0) AS delivered_qty,
                     COALESCE(SUM(t.open_outstanding_qty), 0) AS outstanding_qty,
+                    COALESCE(SUM(p.review_status = 'Pending'), 0) AS pending_review, COALESCE(SUM(p.review_status = 'Rejected'), 0) AS rejected,
                     COALESCE(SUM(CASE WHEN p.status <> 'Cancelled' THEN p.grand_total END), 0) AS total_value,
                     SUM(CASE WHEN p.status <> 'Cancelled' AND p.grand_total IS NULL THEN 1 ELSE 0 END) AS without_value,
                     SUM(CASE WHEN p.import_status = 'NEEDS_REVIEW' THEN 1 ELSE 0 END) AS needs_review
@@ -112,13 +150,14 @@ final class PurchaseOrder extends Model
     public static function findFull(int $id): ?array
     {
         return Database::fetch(
-            'SELECT p.*, c.name AS customer_name, cu.name AS created_by_name,
+            'SELECT p.*, c.name AS customer_name, cu.name AS created_by_name, ru.name AS reviewed_by_name,
                     COALESCE(t.line_count, 0) AS line_count, COALESCE(t.total_qty, 0) AS total_qty,
                     COALESCE(t.delivered_qty, 0) AS delivered_qty, COALESCE(t.return_qty, 0) AS return_qty,
                     COALESCE(t.outstanding_qty, 0) AS outstanding_qty, COALESCE(t.open_outstanding_qty, 0) AS open_outstanding_qty
              FROM purchase_orders p
              LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN users cu ON cu.id = p.created_by
+             LEFT JOIN users ru ON ru.id = p.reviewed_by
              LEFT JOIN (' . PoLine::poTotalsSql() . ') t ON t.po_id = p.id
              WHERE p.id = :id',
             ['id' => $id]
@@ -140,6 +179,16 @@ final class PurchaseOrder extends Model
         );
     }
 
+    /** No order OEF sudah dipakai OEF lain? (tidak peka huruf besar/kecil & spasi di awal/akhir) */
+    public static function orderNumberTaken(string $number, ?int $exceptId = null): ?array
+    {
+        return Database::fetch(
+            'SELECT p.id, p.code, p.order_number, c.name AS customer_name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
+             WHERE LOWER(TRIM(p.order_number)) = LOWER(TRIM(:n)) AND p.id <> :ex LIMIT 1',
+            ['n' => $number, 'ex' => $exceptId ?? 0]
+        );
+    }
+
     /** Nomor PO sudah dipakai PO lain? (tidak peka huruf besar/kecil) */
     public static function numberTaken(string $number, ?int $exceptId = null): ?array
     {
@@ -158,7 +207,7 @@ final class PurchaseOrder extends Model
     public static function createWithLines(array $header, array $lines): int
     {
         if ($lines === []) {
-            throw new DomainException('PO minimal memiliki satu baris produk.');
+            throw new DomainException('OEF minimal memiliki satu produk.');
         }
         return Database::transaction(function () use ($header, $lines): int {
             $id = self::create($header);
@@ -167,6 +216,7 @@ final class PurchaseOrder extends Model
                 PoLine::create([
                     'po_id' => $id, 'product_id' => $line['product_id'], 'order_qty' => $line['order_qty'], 'remark' => $line['remark'] ?? null,
                     'unit' => $line['unit'] ?? null, 'unit_price' => $line['unit_price'] ?? null,
+                    'item_description' => $line['item_description'] ?? null, 'subcont_supplier' => $line['subcont_supplier'] ?? null,
                     'line_subtotal' => PoLine::subtotalFor((int) $line['order_qty'], $line['unit_price'] ?? null, $includesTax, null),
                 ]);
             }
@@ -229,16 +279,16 @@ final class PurchaseOrder extends Model
     {
         $po = self::find($id);
         if ($po === null) {
-            throw new DomainException('PO tidak ditemukan.');
+            throw new DomainException('OEF tidak ditemukan.');
         }
         $deps = self::dependents($id);
         if ($deps !== []) {
-            $labels = ['deliveries' => 'delivery', 'returns' => 'retur', 'invoices' => 'invoice', 'financials' => 'ringkasan finansial', 'leadtimes' => 'lead time', 'inbound' => 'inbound maklon'];
+            $labels = ['deliveries' => 'delivery', 'returns' => 'retur/komplain', 'invoices' => 'invoice (data keuangan lama)', 'financials' => 'ringkasan finansial (data keuangan lama)', 'leadtimes' => 'lead time', 'inbound' => 'inbound maklon'];
             $parts = [];
             foreach ($deps as $k => $n) {
                 $parts[] = $n . ' ' . $labels[$k];
             }
-            throw new DomainException('PO tidak dapat dihapus karena masih memiliki ' . implode(', ', $parts) . '. Gunakan status Cancelled.');
+            throw new DomainException('OEF tidak dapat dihapus karena masih memiliki ' . implode(', ', $parts) . '. Gunakan status Cancelled.');
         }
         Database::transaction(function () use ($id, $po): void {
             foreach (Database::fetchAll('SELECT * FROM po_lines WHERE po_id = :id', ['id' => $id]) as $line) {
@@ -293,19 +343,20 @@ final class PurchaseOrder extends Model
             $params['po'] = $poId;
         }
         $rows = Database::fetchAll(
-            'SELECT pl.id, p.po_number, p.code AS po_code, p.status, c.name AS customer_name, pr.name AS product_name, pl.order_qty, t.outstanding_qty
+            'SELECT pl.id, p.order_number, p.po_number, p.code AS po_code, p.status, c.name AS customer_name, pr.name AS product_name, pl.order_qty, t.outstanding_qty
              FROM po_lines pl
              JOIN purchase_orders p ON p.id = pl.po_id
              LEFT JOIN customers c ON c.id = p.customer_id
              JOIN products pr ON pr.id = pl.product_id
              JOIN (' . PoLine::totalsSql() . ') t ON t.line_id = pl.id
-             WHERE ' . ($openOnly ? "(p.status IN ('Open','On Process','Partial') OR pl.id = :inc)" : '(1=1 OR pl.id = :inc)') . $poFilter . '
+             WHERE ' . ($openOnly ? "((p.status IN ('Open','On Process','Partial') AND p.review_status = 'Approved') OR pl.id = :inc)" : '(1=1 OR pl.id = :inc)') . $poFilter . '
              ORDER BY p.po_date DESC, p.id DESC, pl.id',
             $params
         );
         $out = [];
         foreach ($rows as $r) {
-            $group = ($r['po_number'] ?? $r['po_code']) . ' — ' . ($r['customer_name'] ?? 'customer ?') . ' (' . $r['status'] . ')';
+            $ref = $r['order_number'] !== null && $r['order_number'] !== '' ? $r['order_number'] . ($r['po_number'] ? ' / PO ' . $r['po_number'] : '') : ($r['po_number'] ?? $r['po_code']);
+            $group = $ref . ' — ' . ($r['customer_name'] ?? 'customer ?') . ' (' . $r['status'] . ')';
             $out[$group][(int) $r['id']] = $r['product_name'] . ' · order ' . number_format((int) $r['order_qty'], 0, ',', '.') . ' · outstanding ' . number_format((int) $r['outstanding_qty'], 0, ',', '.');
         }
         return $out;

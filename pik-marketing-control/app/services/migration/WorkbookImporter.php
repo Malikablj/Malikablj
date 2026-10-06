@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Migration;
 
+use App\Models\ReturnAttachment;
 use App\Helpers\Database;
+use App\Helpers\Schema;
 use App\Helpers\Validator;
 use App\Helpers\XlsxReader;
 use DateTimeImmutable;
@@ -30,10 +32,13 @@ final class WorkbookImporter
         'stock', 'leadtime', 'inbound_maklon', 'invoices_payments', 'po_financials', 'migration_issues',
     ];
 
-    /** Tabel data bisnis yang dikosongkan oleh --fresh (users, settings, audit log tetap). */
+    /**
+     * Tabel data bisnis yang dikosongkan oleh --fresh (users, settings, audit log tetap).
+     * inbound_supplier tidak ikut: datanya diinput Purchasing dan tidak ada di workbook AppSheet.
+     */
     public const WIPE_ORDER = [
-        'notifications', 'migration_issues', 'po_financials', 'invoices_payments', 'inbound_maklon', 'leadtime', 'stock',
-        'returns', 'deliveries', 'po_lines', 'follow_up', 'activities', 'leads', 'purchase_orders', 'contacts', 'customers', 'products',
+        'notifications', 'email_logs', 'migration_issues', 'po_financials', 'invoices_payments', 'inbound_maklon', 'leadtime', 'stock',
+        'return_attachments', 'returns', 'deliveries', 'po_lines', 'follow_up', 'activities', 'leads', 'purchase_orders', 'contacts', 'customers', 'products',
     ];
 
     /** Sheet master => tabel database (untuk referensi record migration issue). */
@@ -950,11 +955,18 @@ final class WorkbookImporter
     /** Hapus seluruh data bisnis (users, settings, audit log tidak disentuh). */
     public static function wipeBusinessData(): void
     {
-        Database::transaction(static function (): void {
-            foreach (self::WIPE_ORDER as $table) {
+        // tabel dari migrasi yang belum dijalankan dilewati
+        $tables = array_values(array_filter(self::WIPE_ORDER, [Schema::class, 'hasTable']));
+        // file bukti retur & komplain ikut dihapus setelah datanya terhapus
+        $files = in_array('return_attachments', $tables, true)
+            ? array_values(array_filter(array_map([ReturnAttachment::class, 'path'], Database::fetchAll('SELECT * FROM return_attachments'))))
+            : [];
+        Database::transaction(static function () use ($tables): void {
+            foreach ($tables as $table) {
                 Database::query('DELETE FROM `' . $table . '`');
             }
         });
+        ReturnAttachment::discard($files);
     }
 
     /**

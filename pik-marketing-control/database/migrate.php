@@ -38,7 +38,7 @@ try {
         echo "\n" . count($pending) . " migrasi belum dijalankan. Jalankan: php database/migrate.php\n";
         exit(0);
     }
-    $backup = DbBackup::tables(['purchase_orders', 'po_lines', 'customers', 'migration_issues'], 'before-migrate');
+    $backup = DbBackup::tables(['users', 'purchase_orders', 'po_lines', 'deliveries', 'returns', 'customers', 'migration_issues'], 'before-migrate');
     echo "\nBackup tabel terkait: {$backup}\n";
     Migrator::run(static function (string $name): void {
         echo "  selesai: {$name}\n";

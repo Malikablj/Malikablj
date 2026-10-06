@@ -7,12 +7,12 @@ namespace App\Services;
 use App\Helpers\Auth;
 use App\Helpers\Database;
 use App\Helpers\Number;
-use App\Models\Invoice;
 use App\Models\Lead;
 use App\Models\PoLine;
+use App\Models\ProductReturn;
 
 /**
- * Laporan (PRD: Customer, Lead, Activity, PO, Delivery, Financial).
+ * Laporan: Customer, Lead, Activity, OEF, Delivery, Retur & Komplain.
  * Filter umum: periode (from/to), customer, PIC. Satu definisi kolom dipakai
  * untuk tampilan layar, export CSV, dan export Excel sehingga angkanya selalu sama.
  *
@@ -27,17 +27,17 @@ final class ReportService
 
     public const REPORTS = [
         'customer'  => ['title' => 'Customer', 'perm' => 'reports.customer', 'icon' => 'bi-buildings',
-                        'desc' => 'Aktivitas, PO, outstanding, dan piutang per customer.', 'date' => 'Periode aktivitas, PO & invoice', 'pic' => 'PIC marketing customer'],
+                        'desc' => 'Aktivitas, OEF, dan outstanding per customer.', 'date' => 'Periode aktivitas & OEF', 'pic' => 'PIC marketing customer'],
         'lead'      => ['title' => 'Lead', 'perm' => 'reports.lead', 'icon' => 'bi-kanban',
                         'desc' => 'Pipeline lead per status, sumber, dan PIC; win rate.', 'date' => 'Tanggal lead dibuat', 'pic' => 'PIC lead'],
         'activity'  => ['title' => 'Activity', 'perm' => 'reports.activity', 'icon' => 'bi-chat-square-text',
                         'desc' => 'Aktivitas marketing & sales per tipe dan PIC.', 'date' => 'Tanggal aktivitas', 'pic' => 'PIC aktivitas'],
-        'po'        => ['title' => 'Purchase Order', 'perm' => 'reports.po', 'icon' => 'bi-receipt',
-                        'desc' => 'PO per status: qty order, terkirim, retur, dan outstanding.', 'date' => 'Tanggal PO', 'pic' => 'PIC marketing customer'],
+        'po'        => ['title' => 'Order Entry Form (OEF)', 'perm' => 'reports.po', 'icon' => 'bi-receipt',
+                        'desc' => 'OEF per status & review PPIC: qty order, terkirim, retur, dan outstanding.', 'date' => 'Tanggal OEF', 'pic' => 'PIC marketing customer'],
         'delivery'  => ['title' => 'Delivery', 'perm' => 'reports.delivery', 'icon' => 'bi-truck',
                         'desc' => 'Pengiriman per periode, customer, dan status.', 'date' => 'Tanggal delivery', 'pic' => 'PIC marketing customer'],
-        'financial' => ['title' => 'Financial', 'perm' => 'reports.financial', 'icon' => 'bi-cash-coin',
-                        'desc' => 'Invoice, pembayaran, sisa tagihan, dan umur piutang.', 'date' => 'Tanggal invoice', 'pic' => 'PIC marketing customer'],
+        'complaint' => ['title' => 'Retur & Komplain', 'perm' => 'reports.complaint', 'icon' => 'bi-chat-left-dots',
+                        'desc' => 'Seluruh retur & komplain: alasan, bukti, hasil penyelesaian, dan email QC.', 'date' => 'Tanggal retur / komplain', 'pic' => 'PIC marketing customer'],
     ];
 
     /** @return array<string,array<string,string>> laporan yang boleh dibuka user saat ini */
@@ -72,7 +72,7 @@ final class ReportService
             'activity'  => self::activityReport($f),
             'po'        => self::poReport($f),
             'delivery'  => self::deliveryReport($f),
-            'financial' => self::financialReport($f, $today),
+            'complaint' => self::complaintReport($f),
             default     => throw new \InvalidArgumentException('Laporan tidak dikenal.'),
         };
         $result['truncated'] = count($result['rows']) >= self::MAX_ROWS;
@@ -178,11 +178,9 @@ final class ReportService
 
     private static function customerReport(array $f): array
     {
-        $withFinance = Auth::can('reports.financial');
         $params = [];
         $actPeriod = self::period('a.activity_date', 'ac', $f, $params, true);
         $poPeriod = self::period('p.po_date', 'po', $f, $params);
-        $invPeriod = self::period('i.invoice_date', 'iv', $f, $params);
         $where = ['1=1'];
         if (!empty($f['customer_id'])) {
             $where[] = 'c.id = :cid';
@@ -198,8 +196,7 @@ final class ReportService
                     COALESCE(ld.open_leads, 0) AS open_leads, COALESCE(ld.pipeline, 0) AS pipeline,
                     COALESCE(ac.n, 0) AS activities, ac.last_activity,
                     COALESCE(po.n, 0) AS po_count, COALESCE(po.qty, 0) AS order_qty, COALESCE(po.delivered, 0) AS delivered_qty,
-                    COALESCE(op.outstanding, 0) AS outstanding_qty,
-                    COALESCE(iv.invoiced, 0) AS invoiced, COALESCE(iv.paid, 0) AS paid, COALESCE(iv.receivable, 0) AS receivable
+                    COALESCE(op.outstanding, 0) AS outstanding_qty
              FROM customers c
              LEFT JOIN users u ON u.id = c.marketing_pic_id
              LEFT JOIN (SELECT customer_id, SUM(status NOT IN ('Won','Lost','Dormant')) AS open_leads,
@@ -213,9 +210,6 @@ final class ReportService
              LEFT JOIN (SELECT p.customer_id, SUM(COALESCE(t.open_outstanding_qty, 0)) AS outstanding
                         FROM purchase_orders p JOIN (" . PoLine::poTotalsSql() . ") t ON t.po_id = p.id
                         WHERE p.customer_id IS NOT NULL AND p.status IN ({$open}) GROUP BY p.customer_id) op ON op.customer_id = c.id
-             LEFT JOIN (SELECT i.customer_id, SUM(i.invoice_amount) AS invoiced, SUM(i.paid_amount) AS paid,
-                               SUM(GREATEST(i.invoice_amount - i.paid_amount, 0)) AS receivable
-                        FROM invoices_payments i WHERE i.customer_id IS NOT NULL{$invPeriod} GROUP BY i.customer_id) iv ON iv.customer_id = c.id
              WHERE " . implode(' AND ', $where) . '
              ORDER BY COALESCE(po.qty, 0) DESC, COALESCE(ac.n, 0) DESC, c.name
              LIMIT ' . self::MAX_ROWS,
@@ -228,27 +222,20 @@ final class ReportService
             ['key' => 'open_leads', 'label' => 'Lead aktif', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
             ['key' => 'activities', 'label' => 'Aktivitas', 'type' => 'qty', 'total' => true, 'hide' => 'lg'],
             ['key' => 'last_activity', 'label' => 'Aktivitas terakhir', 'type' => 'datetime', 'hide' => 'xxl'],
-            ['key' => 'po_count', 'label' => 'PO', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
+            ['key' => 'po_count', 'label' => 'OEF', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
             ['key' => 'order_qty', 'label' => 'Qty order', 'type' => 'qty', 'total' => true],
             ['key' => 'delivered_qty', 'label' => 'Terkirim', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
-            ['key' => 'outstanding_qty', 'label' => 'Outstanding (PO open)', 'type' => 'qty', 'total' => true, 'hide' => 'sm'],
+            ['key' => 'outstanding_qty', 'label' => 'Outstanding (OEF berjalan)', 'type' => 'qty', 'total' => true, 'hide' => 'sm'],
         ];
-        if ($withFinance) {
-            $columns[] = ['key' => 'invoiced', 'label' => 'Nilai invoice', 'type' => 'money', 'total' => true, 'hide' => 'xxl'];
-            $columns[] = ['key' => 'receivable', 'label' => 'Piutang', 'type' => 'money', 'total' => true, 'hide' => 'lg'];
-        }
         $active = count(array_filter($rows, static fn ($r) => $r['status'] === 'Active'));
         $withPo = count(array_filter($rows, static fn ($r) => (int) $r['po_count'] > 0));
         $summary = [
             ['label' => 'Customer', 'value' => Number::qty(count($rows)), 'meta' => Number::qty($active) . ' aktif'],
-            ['label' => 'Customer dengan PO', 'value' => Number::qty($withPo), 'meta' => 'dalam periode'],
+            ['label' => 'Customer dengan OEF', 'value' => Number::qty($withPo), 'meta' => 'dalam periode'],
             ['label' => 'Aktivitas', 'value' => Number::qty(self::sumInt($rows, 'activities')), 'meta' => 'dalam periode'],
             ['label' => 'Qty order', 'value' => Number::qty(self::sumInt($rows, 'order_qty')), 'meta' => 'terkirim ' . Number::qty(self::sumInt($rows, 'delivered_qty'))],
-            ['label' => 'Outstanding PO open', 'value' => Number::qty(self::sumInt($rows, 'outstanding_qty')), 'meta' => 'pcs saat ini'],
+            ['label' => 'Outstanding OEF berjalan', 'value' => Number::qty(self::sumInt($rows, 'outstanding_qty')), 'meta' => 'pcs saat ini'],
         ];
-        if ($withFinance) {
-            $summary[] = ['label' => 'Piutang', 'value' => Number::money(self::sumMoney($rows, 'receivable')), 'meta' => 'dari invoice periode ini'];
-        }
         $byQty = [];
         foreach ($rows as $r) {
             $byQty[(string) $r['name']] = (int) $r['order_qty'];
@@ -375,7 +362,8 @@ final class ReportService
             $params['pic'] = (int) $f['pic'];
         }
         $rows = Database::fetchAll(
-            'SELECT p.id, p.code, COALESCE(p.po_number, p.code) AS po_number, c.name AS customer_name, u.name AS pic_name, p.po_date, p.status, p.payment_term,
+            'SELECT p.id, p.code, COALESCE(p.order_number, p.po_number, p.code) AS order_ref, p.order_number, p.po_number, c.name AS customer_name,
+                    u.name AS pic_name, p.sales_name, p.po_date, p.status, p.review_status, p.requested_delivery_date,
                     COALESCE(t.line_count, 0) AS line_count, COALESCE(t.total_qty, 0) AS total_qty, COALESCE(t.delivered_qty, 0) AS delivered_qty,
                     COALESCE(t.return_qty, 0) AS return_qty, COALESCE(t.outstanding_qty, 0) AS outstanding_qty,
                     COALESCE(t.open_outstanding_qty, 0) AS open_outstanding_qty, p.grand_total
@@ -384,33 +372,47 @@ final class ReportService
              WHERE ' . $where . ' ORDER BY p.po_date IS NULL, p.po_date DESC, p.id DESC LIMIT ' . self::MAX_ROWS,
             $params
         );
+        foreach ($rows as &$r) {
+            $r['review_label'] = \App\Models\PurchaseOrder::REVIEW_LABELS[$r['review_status']] ?? $r['review_status'];
+        }
+        unset($r);
         $open = array_values(array_filter($rows, static fn ($r) => in_array($r['status'], ['Open', 'On Process', 'Partial'], true)));
         $total = self::sumInt($rows, 'total_qty');
         $delivered = self::sumInt($rows, 'delivered_qty');
+        $pending = count(array_filter($rows, static fn ($r) => $r['review_status'] === 'Pending'));
+        $columns = [
+            ['key' => 'order_ref', 'label' => 'No. order', 'type' => 'text', 'link' => '/purchase-orders/{id}', 'perm' => 'purchase_orders.view', 'sub' => ['customer_name', 'po_number']],
+            ['key' => 'po_number', 'label' => 'No. PO customer', 'type' => 'text', 'hide' => 'xxl'],
+            ['key' => 'customer_name', 'label' => 'Customer', 'type' => 'text', 'hide' => 'md'],
+            ['key' => 'sales_name', 'label' => 'Sales', 'type' => 'text', 'hide' => 'xxl'],
+            ['key' => 'po_date', 'label' => 'Tanggal', 'type' => 'date', 'hide' => 'lg'],
+            ['key' => 'requested_delivery_date', 'label' => 'Permintaan kirim', 'type' => 'date', 'hide' => 'xxl'],
+            ['key' => 'review_label', 'label' => 'Review PPIC', 'type' => 'text', 'hide' => 'xl'],
+            ['key' => 'status', 'label' => 'Status', 'type' => 'status', 'hide' => 'sm'],
+            ['key' => 'total_qty', 'label' => 'Qty order', 'type' => 'qty', 'total' => true, 'hide' => 'sm'],
+            ['key' => 'delivered_qty', 'label' => 'Terkirim', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
+            ['key' => 'return_qty', 'label' => 'Retur', 'type' => 'qty', 'total' => true, 'hide' => 'xxl'],
+            ['key' => 'outstanding_qty', 'label' => 'Outstanding', 'type' => 'qty', 'total' => true],
+        ];
+        $summary = [
+            ['label' => 'OEF', 'value' => Number::qty(count($rows)), 'meta' => Number::qty(count($open)) . ' masih berjalan · ' . Number::qty($pending) . ' menunggu review'],
+            ['label' => 'Qty order', 'value' => Number::qty($total), 'meta' => 'retur ' . Number::qty(self::sumInt($rows, 'return_qty'))],
+            ['label' => 'Terkirim', 'value' => Number::qty($delivered), 'meta' => self::pct($delivered, $total) . ' dari order'],
+            ['label' => 'Outstanding OEF berjalan', 'value' => Number::qty(self::sumInt($open, 'open_outstanding_qty')), 'meta' => 'pcs belum terkirim'],
+        ];
+        // Nilai PO (hasil import dokumen PO) adalah data keuangan: hanya untuk role dengan po_values.view
+        if (Auth::can('po_values.view')) {
+            $columns[] = ['key' => 'grand_total', 'label' => 'Nilai PO (arsip)', 'type' => 'money', 'total' => true, 'hide' => 'xxl', 'empty' => '—'];
+            $summary[] = ['label' => 'Nilai PO (arsip import)', 'value' => Number::money(self::sumMoney(array_values(array_filter($rows, static fn ($r) => $r['status'] !== 'Cancelled')), 'grand_total')),
+                'meta' => 'grand total, tanpa Cancelled · ' . Number::qty(count(array_filter($rows, static fn ($r) => $r['grand_total'] === null))) . ' tanpa nilai'];
+        }
         return [
-            'columns' => [
-                ['key' => 'po_number', 'label' => 'No. PO', 'type' => 'text', 'link' => '/purchase-orders/{id}', 'perm' => 'purchase_orders.view', 'sub' => ['customer_name', 'status']],
-                ['key' => 'customer_name', 'label' => 'Customer', 'type' => 'text', 'hide' => 'md'],
-                ['key' => 'po_date', 'label' => 'Tanggal', 'type' => 'date', 'hide' => 'lg'],
-                ['key' => 'status', 'label' => 'Status', 'type' => 'status', 'hide' => 'sm'],
-                ['key' => 'payment_term', 'label' => 'Termin', 'type' => 'text', 'hide' => 'xxl'],
-                ['key' => 'total_qty', 'label' => 'Qty order', 'type' => 'qty', 'total' => true, 'hide' => 'sm'],
-                ['key' => 'delivered_qty', 'label' => 'Terkirim', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
-                ['key' => 'return_qty', 'label' => 'Retur', 'type' => 'qty', 'total' => true, 'hide' => 'xxl'],
-                ['key' => 'outstanding_qty', 'label' => 'Outstanding', 'type' => 'qty', 'total' => true],
-                ['key' => 'grand_total', 'label' => 'Nilai PO', 'type' => 'money', 'total' => true, 'hide' => 'lg', 'empty' => '—'],
-            ],
-            'rows'    => $rows,
-            'summary' => [
-                ['label' => 'PO', 'value' => Number::qty(count($rows)), 'meta' => Number::qty(count($open)) . ' masih terbuka'],
-                ['label' => 'Nilai PO', 'value' => Number::money(self::sumMoney(array_values(array_filter($rows, static fn ($r) => $r['status'] !== 'Cancelled')), 'grand_total')),
-                    'meta' => 'grand total, tanpa Cancelled · ' . Number::qty(count(array_filter($rows, static fn ($r) => $r['grand_total'] === null))) . ' PO belum bernilai'],
-                ['label' => 'Qty order', 'value' => Number::qty($total), 'meta' => 'retur ' . Number::qty(self::sumInt($rows, 'return_qty'))],
-                ['label' => 'Terkirim', 'value' => Number::qty($delivered), 'meta' => self::pct($delivered, $total) . ' dari order'],
-                ['label' => 'Outstanding PO terbuka', 'value' => Number::qty(self::sumInt($open, 'open_outstanding_qty')), 'meta' => 'pcs belum terkirim'],
-            ],
+            'columns'    => $columns,
+            'rows'       => $rows,
+            'summary'    => $summary,
             'breakdowns' => [
-                self::breakdown('PO per status', self::countBy($rows, 'status')),
+                self::breakdown('OEF per status', self::countBy($rows, 'status')),
+                self::breakdown('OEF per review PPIC', self::countBy($rows, 'review_label')),
                 self::breakdown('Qty order per customer', self::sumBy($rows, 'customer_name', 'total_qty', 'Customer belum terhubung'), 'qty', 8),
             ],
         ];
@@ -430,7 +432,7 @@ final class ReportService
         }
         $rows = Database::fetchAll(
             "SELECT d.id, d.code, COALESCE(d.sj_number, d.code) AS sj_number, d.delivery_date, d.status, d.delivered_qty, d.destination,
-                    COALESCE(p.po_number, p.code) AS po_number, d.po_id, c.name AS customer_name, pr.name AS product_name,
+                    COALESCE(p.order_number, p.po_number, p.code) AS po_number, d.po_id, c.name AS customer_name, pr.name AS product_name,
                     CASE WHEN d.po_line_id IS NULL THEN 'Belum terhubung' ELSE 'Terhubung' END AS link_status,
                     CASE WHEN d.status IN ('Delivered','Partial') THEN d.delivered_qty ELSE 0 END AS counted_qty
              FROM deliveries d LEFT JOIN purchase_orders p ON p.id = d.po_id LEFT JOIN customers c ON c.id = p.customer_id
@@ -458,11 +460,11 @@ final class ReportService
             'columns' => [
                 ['key' => 'sj_number', 'label' => 'Surat jalan', 'type' => 'text', 'link' => '/deliveries/{id}', 'perm' => 'deliveries.view', 'sub' => ['customer_name', 'product_name']],
                 ['key' => 'delivery_date', 'label' => 'Tanggal', 'type' => 'date'],
-                ['key' => 'po_number', 'label' => 'PO', 'type' => 'text', 'hide' => 'lg'],
+                ['key' => 'po_number', 'label' => 'OEF', 'type' => 'text', 'hide' => 'lg'],
                 ['key' => 'customer_name', 'label' => 'Customer', 'type' => 'text', 'hide' => 'md'],
                 ['key' => 'product_name', 'label' => 'Produk', 'type' => 'text', 'hide' => 'xxl'],
                 ['key' => 'status', 'label' => 'Status', 'type' => 'status', 'hide' => 'sm'],
-                ['key' => 'link_status', 'label' => 'Relasi PO line', 'type' => 'text', 'hide' => 'xxl'],
+                ['key' => 'link_status', 'label' => 'Relasi baris OEF', 'type' => 'text', 'hide' => 'xxl'],
                 ['key' => 'delivered_qty', 'label' => 'Qty', 'type' => 'qty', 'total' => true],
             ],
             'rows'    => $rows,
@@ -470,7 +472,7 @@ final class ReportService
                 ['label' => 'Delivery', 'value' => Number::qty(count($rows)), 'meta' => Number::qty($upcoming) . ' terjadwal / dalam perjalanan'],
                 ['label' => 'Qty diterima customer', 'value' => Number::qty(self::sumInt($rows, 'counted_qty')), 'meta' => 'status Delivered / Partial'],
                 ['label' => 'Qty retur', 'value' => Number::qty($returned), 'meta' => 'retur dalam periode'],
-                ['label' => 'Belum terhubung ke PO line', 'value' => Number::qty($unlinked), 'meta' => 'data legacy'],
+                ['label' => 'Belum terhubung ke baris OEF', 'value' => Number::qty($unlinked), 'meta' => 'data legacy'],
             ],
             'breakdowns' => [
                 self::breakdown('Delivery per status', self::countBy($rows, 'status')),
@@ -479,13 +481,12 @@ final class ReportService
         ];
     }
 
-    private static function financialReport(array $f, string $today): array
+    private static function complaintReport(array $f): array
     {
-        Invoice::refreshStatuses($today);
-        $params = ['today' => $today];
-        $where = '1=1' . self::period('i.invoice_date', 'iv', $f, $params);
+        $params = [];
+        $where = '1=1' . self::period('r.return_date', 'rt', $f, $params);
         if (!empty($f['customer_id'])) {
-            $where .= ' AND i.customer_id = :cid';
+            $where .= ' AND p.customer_id = :cid';
             $params['cid'] = (int) $f['customer_id'];
         }
         if (!empty($f['pic'])) {
@@ -493,56 +494,51 @@ final class ReportService
             $params['pic'] = (int) $f['pic'];
         }
         $rows = Database::fetchAll(
-            'SELECT i.id, i.code, COALESCE(i.invoice_number, i.code) AS invoice_number, c.name AS customer_name,
-                    COALESCE(p.po_number, i.po_number_legacy) AS po_number, i.invoice_date, i.due_date, i.invoice_amount, i.paid_amount,
-                    GREATEST(i.invoice_amount - i.paid_amount, 0) AS outstanding, i.status, i.payment_date,
-                    CASE WHEN i.due_date IS NULL THEN NULL ELSE DATEDIFF(:today, i.due_date) END AS days_past_due
-             FROM invoices_payments i LEFT JOIN customers c ON c.id = i.customer_id LEFT JOIN purchase_orders p ON p.id = i.po_id
-             WHERE ' . $where . ' ORDER BY i.invoice_date IS NULL, i.invoice_date DESC, i.id DESC LIMIT ' . self::MAX_ROWS,
+            "SELECT r.id, r.code, r.case_type, r.return_date, r.reason, r.return_qty, r.affected_qty,
+                    COALESCE(r.return_qty, r.affected_qty) AS qty, r.resolution_status, r.resolution_note, r.resolved_at, r.qc_email, r.note,
+                    COALESCE(p.order_number, p.po_number, p.code, r.po_number_legacy) AS order_ref, c.name AS customer_name,
+                    COALESCE(pr.name, r.product_legacy) AS product_name, ru.name AS resolved_by_name,
+                    (SELECT COUNT(*) FROM return_attachments ra WHERE ra.return_id = r.id) AS evidence_count,
+                    (SELECT el.status FROM email_logs el WHERE el.entity_type = 'return' AND el.entity_id = r.id ORDER BY el.id DESC LIMIT 1) AS email_status
+             FROM returns r LEFT JOIN purchase_orders p ON p.id = r.po_id LEFT JOIN customers c ON c.id = p.customer_id
+             LEFT JOIN products pr ON pr.id = r.product_id LEFT JOIN users ru ON ru.id = r.resolved_by
+             WHERE " . $where . ' ORDER BY r.return_date IS NULL, r.return_date DESC, r.id DESC LIMIT ' . self::MAX_ROWS,
             $params
         );
-        $invoiced = self::sumMoney($rows, 'invoice_amount');
-        $paid = self::sumMoney($rows, 'paid_amount');
-        $overdue = self::sumMoney(array_values(array_filter($rows, static fn ($r) => $r['status'] === 'Overdue')), 'outstanding');
-        $aging = ['Belum jatuh tempo' => 0, '1–30 hari' => 0, '31–60 hari' => 0, '61–90 hari' => 0, '> 90 hari' => 0, 'Tanpa jatuh tempo' => 0];
-        foreach ($rows as $r) {
-            $cents = Number::toCents($r['outstanding']) ?? 0;
-            if ($cents <= 0) {
-                continue;
-            }
-            $d = $r['days_past_due'];
-            $bucket = match (true) {
-                $d === null      => 'Tanpa jatuh tempo',
-                (int) $d <= 0    => 'Belum jatuh tempo',
-                (int) $d <= 30   => '1–30 hari',
-                (int) $d <= 60   => '31–60 hari',
-                (int) $d <= 90   => '61–90 hari',
-                default          => '> 90 hari',
-            };
-            $aging[$bucket] += $cents / 100;
+        foreach ($rows as &$r) {
+            $r['reason_label'] = $r['reason'] !== null ? (ProductReturn::REASON_LABELS[$r['reason']] ?? $r['reason']) : null;
+            $r['email_label'] = ProductReturn::EMAIL_LABELS[$r['email_status'] ?? ''] ?? 'Belum dikirim';
         }
+        unset($r);
+        $count = static fn (string $status): int => count(array_filter($rows, static fn ($r) => $r['resolution_status'] === $status));
+        $returns = array_values(array_filter($rows, static fn ($r) => $r['case_type'] === 'Retur'));
         return [
             'columns' => [
-                ['key' => 'invoice_number', 'label' => 'Invoice', 'type' => 'text', 'link' => '/invoices/{id}', 'perm' => 'finance.view', 'sub' => ['customer_name', 'po_number']],
-                ['key' => 'customer_name', 'label' => 'Customer', 'type' => 'text', 'hide' => 'md'],
-                ['key' => 'po_number', 'label' => 'PO', 'type' => 'text', 'hide' => 'xxl'],
-                ['key' => 'invoice_date', 'label' => 'Tanggal', 'type' => 'date', 'hide' => 'lg'],
-                ['key' => 'due_date', 'label' => 'Jatuh tempo', 'type' => 'date', 'hide' => 'xl'],
-                ['key' => 'status', 'label' => 'Status', 'type' => 'status', 'hide' => 'sm'],
-                ['key' => 'invoice_amount', 'label' => 'Nilai invoice', 'type' => 'money', 'total' => true, 'hide' => 'lg'],
-                ['key' => 'paid_amount', 'label' => 'Dibayar', 'type' => 'money', 'total' => true, 'hide' => 'xxl'],
-                ['key' => 'outstanding', 'label' => 'Sisa', 'type' => 'money', 'total' => true],
+                ['key' => 'code', 'label' => 'Kasus', 'type' => 'text', 'link' => '/returns/{id}', 'perm' => 'returns.view', 'sub' => ['customer_name', 'product_name']],
+                ['key' => 'return_date', 'label' => 'Tanggal', 'type' => 'date', 'hide' => 'sm'],
+                ['key' => 'case_type', 'label' => 'Jenis', 'type' => 'text', 'hide' => 'md'],
+                ['key' => 'reason_label', 'label' => 'Alasan', 'type' => 'text', 'hide' => 'lg'],
+                ['key' => 'customer_name', 'label' => 'Customer', 'type' => 'text', 'hide' => 'xl'],
+                ['key' => 'order_ref', 'label' => 'OEF', 'type' => 'text', 'hide' => 'xxl'],
+                ['key' => 'product_name', 'label' => 'Produk', 'type' => 'text', 'hide' => 'xxl'],
+                ['key' => 'qty', 'label' => 'Qty', 'type' => 'qty', 'total' => true, 'hide' => 'md'],
+                ['key' => 'resolution_status', 'label' => 'Hasil', 'type' => 'status'],
+                ['key' => 'resolution_note', 'label' => 'Catatan / alasan', 'type' => 'text', 'hide' => 'xxl'],
+                ['key' => 'evidence_count', 'label' => 'Bukti', 'type' => 'qty', 'hide' => 'xl'],
+                ['key' => 'email_label', 'label' => 'Email QC', 'type' => 'text', 'hide' => 'xxl'],
             ],
             'rows'    => $rows,
             'summary' => [
-                ['label' => 'Nilai invoice', 'value' => Number::money($invoiced), 'meta' => Number::qty(count($rows)) . ' invoice'],
-                ['label' => 'Dibayar', 'value' => Number::money($paid), 'meta' => self::pct((float) $paid, (float) $invoiced) . ' tertagih'],
-                ['label' => 'Sisa tagihan', 'value' => Number::money(self::sumMoney($rows, 'outstanding')), 'meta' => 'belum dibayar'],
-                ['label' => 'Overdue', 'value' => Number::money($overdue), 'meta' => 'lewat jatuh tempo'],
+                ['label' => 'Retur & komplain', 'value' => Number::qty(count($rows)), 'meta' => Number::qty(count($returns)) . ' retur · ' . Number::qty(count($rows) - count($returns)) . ' komplain'],
+                ['label' => 'Selesai', 'value' => Number::qty($count('Selesai')), 'meta' => self::pct($count('Selesai'), count($rows)) . ' dari semua kasus'],
+                ['label' => 'Tidak selesai', 'value' => Number::qty($count('Tidak selesai')), 'meta' => 'dengan alasan'],
+                ['label' => 'Masih open', 'value' => Number::qty($count('Open')), 'meta' => 'belum ada hasil'],
+                ['label' => 'Qty retur', 'value' => Number::qty(self::sumInt($returns, 'return_qty')), 'meta' => 'menambah outstanding OEF'],
             ],
             'breakdowns' => [
-                self::breakdown('Umur piutang (sisa tagihan)', $aging, 'money', null, false),
-                self::breakdown('Invoice per status', self::countBy($rows, 'status')),
+                self::breakdown('Kasus per hasil penyelesaian', self::countBy($rows, 'resolution_status')),
+                self::breakdown('Kasus per alasan', self::countBy($rows, 'reason_label', 'Tanpa alasan')),
+                self::breakdown('Kasus per customer', self::countBy($rows, 'customer_name', 'Customer tidak diketahui'), 'qty', 8),
             ],
         ];
     }

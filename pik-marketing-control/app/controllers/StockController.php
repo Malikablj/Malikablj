@@ -8,69 +8,104 @@ use App\Helpers\Auth;
 use App\Helpers\Request;
 use App\Helpers\Validator;
 use App\Models\MigrationIssue;
+use App\Helpers\Database;
 use App\Models\Product;
 use App\Models\Stock;
+use App\Services\MasterData;
 use DomainException;
 
 final class StockController extends Controller
 {
-    private const FIELDS = ['product_id', 'stock_type', 'box', 'qty_per_box', 'quantity', 'status', 'notes', 'confirm_qty_mismatch'];
+    private const FIELDS = ['product_name', 'stock_type', 'box', 'qty_per_box', 'quantity', 'status', 'notes', 'confirm_qty_mismatch'];
 
     public function index(): void
     {
         $filters = [
-            'q'    => Request::queryString('q'),
-            'type' => Request::queryString('type'),
-            'link' => Request::queryString('link'),
+            'q'     => Request::queryString('q'),
+            'type'  => Request::queryString('type'),
+            'link'  => Request::queryString('link'),
+            'group' => Request::queryString('group'),
         ];
         $mode = Request::queryString('view', 'product') === 'entries' || $filters['link'] === 'unlinked' ? 'entries' : 'product';
         $this->view('stock/index', [
-            'title'   => 'Stock',
-            'mode'    => $mode,
-            'rows'    => $mode === 'entries' ? Stock::paginate($filters, $this->page()) : Stock::paginateByProduct($filters, $this->page()),
-            'summary' => Stock::summary($filters),
-            'filters' => $filters,
+            'title'      => 'Stock',
+            'mode'       => $mode,
+            'rows'       => $mode === 'entries' ? Stock::paginate($filters, $this->page()) : Stock::paginateByProduct($filters, $this->page()),
+            'groups'     => $mode === 'product' ? Stock::groupTotals($filters) : [],
+            'groupList'  => Product::groups(),
+            'summary'    => Stock::summary($filters),
+            'filters'    => $filters,
             'canProduct' => Auth::can('products.view'),
         ]);
     }
 
     public function create(): void
     {
-        $preset = ['product_id' => Request::queryInt('product_id') ?: null, 'stock_type' => 'FG'];
-        $this->view('stock/form', $this->formData(null, $preset['product_id']) + ['errors' => [], 'preset' => $preset, 'askConfirm' => false]);
+        $productId = Request::queryInt('product_id') ?: null;
+        $preset = ['product_name' => $productId ? MasterData::productLabelFor($productId) : null, 'stock_type' => 'FG'];
+        $this->view('stock/form', $this->formData(null) + ['errors' => [], 'preset' => $preset, 'askConfirm' => false]);
     }
 
     public function store(): void
     {
-        [$v, $data, $askConfirm] = $this->validate(false);
+        [$v, $data, $askConfirm] = $this->validate(null);
         if ($v->fails()) {
-            $this->invalid('stock/form', $this->formData(null, (int) ($_POST['product_id'] ?? 0) ?: null) + ['preset' => [], 'askConfirm' => $askConfirm], $v->errors(), $this->old());
+            $this->invalid('stock/form', $this->formData(null) + ['preset' => [], 'askConfirm' => $askConfirm], $v->errors(), $this->old());
             return;
         }
-        $id = Stock::saveStock(null, $data);
-        $this->success('Entri stok tersimpan.', $this->returnTo($data['product_id'] && Auth::can('products.view') ? '/products/' . $data['product_id'] : '/stock?view=entries'));
+        $created = false;
+        try {
+            Database::transaction(function () use (&$data, &$created): void {
+                $product = MasterData::product((string) $data['product_name'], 'Stok');
+                $created = $product['created'];
+                $data['product_id'] = $product['id'];
+                unset($data['product_name']);
+                Stock::saveStock(null, $data);
+            });
+        } catch (DomainException $e) {
+            $this->invalid('stock/form', $this->formData(null) + ['preset' => [], 'askConfirm' => false], ['product_name' => $e->getMessage()], $this->old());
+            return;
+        }
+        $msg = 'Entri stok tersimpan.' . ($created ? ' Produk baru "' . trim((string) $_POST['product_name']) . '" otomatis ditambahkan dan dikelompokkan.' : '');
+        $this->success($msg, $this->returnTo('/stock'));
     }
 
     public function edit(int $id): void
     {
         $row = $this->found(Stock::findFull($id));
-        $this->view('stock/form', $this->formData($row, $row['product_id'] !== null ? (int) $row['product_id'] : null) + ['errors' => [], 'preset' => [], 'askConfirm' => false]);
+        $row['product_name'] = $row['product_id'] !== null ? MasterData::productLabelFor((int) $row['product_id']) : null;
+        $this->view('stock/form', $this->formData($row) + ['errors' => [], 'preset' => [], 'askConfirm' => false]);
     }
 
     public function update(int $id): void
     {
         $row = $this->found(Stock::findFull($id));
-        [$v, $data, $askConfirm] = $this->validate($row['product_id'] === null);
+        $row['product_name'] = $row['product_id'] !== null ? MasterData::productLabelFor((int) $row['product_id']) : null;
+        [$v, $data, $askConfirm] = $this->validate($row);
         if ($v->fails()) {
-            $this->invalid('stock/form', $this->formData($row, $row['product_id'] !== null ? (int) $row['product_id'] : null) + ['preset' => [], 'askConfirm' => $askConfirm], $v->errors(), $this->old());
+            $this->invalid('stock/form', $this->formData($row) + ['preset' => [], 'askConfirm' => $askConfirm], $v->errors(), $this->old());
             return;
         }
+        $created = false;
         try {
-            Stock::saveStock($id, $data);
+            Database::transaction(function () use (&$data, &$created, $row, $id): void {
+                $typed = (string) ($data['product_name'] ?? '');
+                if ($typed === '') {
+                    $data['product_id'] = null; // legacy yang belum dihubungkan
+                } elseif ($row['product_id'] !== null && MasterData::normalize($typed) === MasterData::normalize((string) $row['product_name'])) {
+                    $data['product_id'] = (int) $row['product_id'];
+                } else {
+                    $product = MasterData::product($typed, 'Stok');
+                    $created = $product['created'];
+                    $data['product_id'] = $product['id'];
+                }
+                unset($data['product_name']);
+                Stock::saveStock($id, $data);
+            });
         } catch (DomainException $e) {
             $this->failure($e->getMessage(), '/stock/' . $id . '/edit');
         }
-        $this->success('Entri stok diperbarui.', $this->returnTo('/stock?view=entries'));
+        $this->success('Entri stok diperbarui.' . ($created ? ' Produk baru otomatis ditambahkan dan dikelompokkan.' : ''), $this->returnTo('/stock?view=entries'));
     }
 
     public function destroy(int $id): void
@@ -91,10 +126,11 @@ final class StockController extends Controller
      *  - Qty berbeda dari Box × Qty/box → wajib dikonfirmasi (mis. ada sisa di luar box).
      * @return array{0:Validator,1:array<string,mixed>,2:bool}
      */
-    private function validate(bool $legacyUnlinked): array
+    private function validate(?array $row): array
     {
+        $legacyUnlinked = $row !== null && $row['product_id'] === null;
         $v = Validator::make($_POST, [
-            'product_id'  => ($legacyUnlinked ? 'nullable' : 'required') . '|integer|exists:products,id',
+            'product_name' => ($legacyUnlinked ? 'nullable' : 'required') . '|string|max:190',
             'stock_type'  => ['required', ['in', Stock::TYPES]],
             'box'         => 'nullable|integer|min:0',
             'qty_per_box' => 'nullable|integer|min:1',
@@ -102,11 +138,17 @@ final class StockController extends Controller
             'status'      => 'nullable|string|max:40',
             'notes'       => 'nullable|string|max:2000',
         ], [
-            'product_id' => 'Produk', 'stock_type' => 'Tipe stok', 'box' => 'Jumlah box', 'qty_per_box' => 'Qty per box',
+            'product_name' => 'Nama produk', 'stock_type' => 'Tipe stok', 'box' => 'Jumlah box', 'qty_per_box' => 'Qty per box',
             'quantity' => 'Qty', 'status' => 'Status', 'notes' => 'Catatan',
         ]);
         $data = $v->validated();
         $askConfirm = false;
+        if (!$v->fails() && $data['product_name'] !== null) {
+            $same = $row !== null && $row['product_id'] !== null && MasterData::normalize((string) $data['product_name']) === MasterData::normalize((string) $row['product_name']);
+            if (!$same && ($err = MasterData::findProduct((string) $data['product_name'])['error']) !== null) {
+                $v->addError('product_name', $err);
+            }
+        }
         if (!$v->fails()) {
             $box = $data['box'];
             $perBox = $data['qty_per_box'];
@@ -145,7 +187,7 @@ final class StockController extends Controller
     }
 
     /** @return array<string,mixed> */
-    private function formData(?array $row, ?int $productId): array
+    private function formData(?array $row): array
     {
         $types = [];
         foreach (Stock::TYPES as $t) {
@@ -154,7 +196,7 @@ final class StockController extends Controller
         return [
             'title'    => $row ? 'Edit Stok' : 'Catat Stok',
             'row'      => $row,
-            'products' => Product::selectOptions(true, $productId),
+            'products' => MasterData::productSuggestions(),
             'types'    => $types,
             'statuses' => Stock::statuses(),
             'issues'   => $row && Auth::can('migration.view') ? MigrationIssue::openForRecord('STOCK', (int) $row['id']) : [],

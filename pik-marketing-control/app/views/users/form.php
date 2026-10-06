@@ -22,7 +22,8 @@ $isEdit = $user !== null;
                 <div class="row g-3">
                     <?= Form::input('name', 'Nama lengkap', old('name', $user), $errors, ['required' => true, 'maxlength' => 120, 'col' => 'col-md-6']) ?>
                     <?= Form::input('email', 'Email (untuk login)', old('email', $user), $errors, ['type' => 'email', 'required' => true, 'maxlength' => 190, 'col' => 'col-md-6']) ?>
-                    <?= Form::select('role', 'Role', Form::list(Permission::ROLES), old('role', $user, 'Viewer'), $errors, ['required' => true, 'col' => 'col-md-6']) ?>
+                    <?php $roleOptions = []; foreach (Permission::ROLES as $r) { $roleOptions[$r] = $r . ' — ' . Permission::ROLE_HELP[$r]; } ?>
+                    <?= Form::select('role', 'Role', $roleOptions, old('role', $user, 'Viewer'), $errors, ['required' => true, 'col' => 'col-md-6']) ?>
                     <div class="col-md-6 d-flex align-items-end">
                         <?= Form::checkbox('is_active', 'User aktif (boleh login)', old('is_active', $user, '1') === '1', $errors, ['col' => 'w-100 pb-2']) ?>
                     </div>

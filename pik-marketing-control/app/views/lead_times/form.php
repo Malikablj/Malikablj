@@ -18,7 +18,7 @@ $cancel = $return !== '' ? to($return) : url('/lead-times');
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/lead-times')) ?>">Lead Time</a><i class="bi bi-chevron-right"></i><span><?= $isEdit ? e($row['code']) : 'Tambah' ?></span></div>
 <div class="page-header"><div><h1 class="page-title"><?= $isEdit ? 'Edit Lead Time' : 'Tambah Estimasi Lead Time' ?></h1>
-    <p class="page-subtitle">Estimasi tanggal barang siap dikirim ke customer untuk satu baris PO.</p></div></div>
+    <p class="page-subtitle">Estimasi tanggal barang siap dikirim ke customer untuk satu produk di OEF.</p></div></div>
 
 <div class="row">
     <div class="col-xl-9">
@@ -29,9 +29,9 @@ $cancel = $return !== '' ? to($return) : url('/lead-times');
                 <div class="form-section">
                     <?php if ($lineOptional): ?>
                         <div class="callout callout-warning small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>
-                            Lead time legacy ini belum terhubung ke baris PO
+                            Lead time legacy ini belum terhubung ke produk OEF
                             <?php if ($row['po_number_legacy'] || $row['product_legacy']): ?>(di spreadsheet: <strong><?= e(trim(($row['po_number_legacy'] ?? '') . ' · ' . ($row['product_legacy'] ?? ''), ' ·')) ?></strong>)<?php endif; ?>.
-                            Pilih baris PO bila diketahui.</div>
+                            Pilih produk OEF bila diketahui.</div>
                     <?php endif; ?>
                     <?php foreach ($issues as $i): ?>
                         <div class="small text-secondary"><?= status_badge($i['resolution_status']) ?> <strong><?= e($i['issue_type']) ?></strong> — <?= e(excerpt($i['description'] ?? '', 160)) ?></div>
@@ -40,7 +40,7 @@ $cancel = $return !== '' ? to($return) : url('/lead-times');
             <?php endif; ?>
             <div class="form-section">
                 <div class="row g-3">
-                    <?= Form::select('po_line_id', 'Baris PO (PO · produk)', $lineOptions, old('po_line_id', $record), $errors, [
+                    <?= Form::select('po_line_id', 'Produk OEF (OEF · produk)', $lineOptions, old('po_line_id', $record), $errors, [
                         'required' => !$lineOptional, 'placeholder' => '— Pilih PO & produk —', 'searchable' => 'Cari nomor PO, customer, atau produk…',
                         'help' => 'Hanya PO terbuka (Open, On Process, Partial) yang ditampilkan.',
                     ]) ?>

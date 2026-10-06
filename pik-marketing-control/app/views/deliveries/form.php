@@ -21,7 +21,7 @@ $cancel = $return !== '' ? to($return) : ($isEdit ? url('/deliveries/' . $delive
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/deliveries')) ?>">Deliveries</a><i class="bi bi-chevron-right"></i><span><?= $isEdit ? e($delivery['sj_number'] ?? $delivery['code']) : 'Catat' ?></span></div>
 <div class="page-header"><div><h1 class="page-title"><?= $isEdit ? 'Edit Delivery' : 'Catat Delivery' ?></h1>
-    <p class="page-subtitle">Delivery selalu terhubung ke baris PO sehingga outstanding terhitung otomatis.</p></div></div>
+    <p class="page-subtitle">Delivery selalu terhubung ke produk di OEF sehingga outstanding terhitung otomatis. Ubah tanggal bila jadwal kirim berubah.</p></div></div>
 
 <div class="row g-4">
     <div class="col-xl-8">
@@ -31,14 +31,18 @@ $cancel = $return !== '' ? to($return) : ($isEdit ? url('/deliveries/' . $delive
             <div class="form-section">
                 <div class="row g-3">
                     <?php if (!$lineOptions): ?>
-                        <div class="col-12"><div class="callout callout-warning small">Belum ada PO berjalan dengan baris produk. Buat PO terlebih dahulu.</div></div>
+                        <div class="col-12"><div class="callout callout-warning small">Belum ada OEF berjalan yang sudah disetujui PPIC.</div></div>
                     <?php endif; ?>
-                    <?= Form::select('po_line_id', 'Baris PO (PO · produk)', $lineOptions, old('po_line_id', $record), $errors, [
-                        'required' => !$isEdit || $delivery['po_line_id'] !== null, 'placeholder' => $isEdit && $delivery['po_line_id'] === null ? '— Belum terhubung (legacy) —' : '— Pilih PO & produk —',
-                        'searchable' => 'Cari nomor PO, customer, atau produk…', 'help' => 'Hanya PO berstatus Open, On Process, atau Partial.',
+                    <?= Form::select('po_line_id', 'Produk OEF (OEF · produk)', $lineOptions, old('po_line_id', $record), $errors, [
+                        'required' => !$isEdit || $delivery['po_line_id'] !== null, 'placeholder' => $isEdit && $delivery['po_line_id'] === null ? '— Belum terhubung (legacy) —' : '— Pilih OEF & produk —',
+                        'searchable' => 'Cari no order, no PO, customer, atau produk…', 'help' => 'Hanya OEF yang sudah disetujui PPIC dan masih berjalan.',
                     ]) ?>
                     <?= Form::input('delivery_date', 'Tanggal delivery', old('delivery_date', $record), $errors, ['type' => 'date', 'required' => true, 'col' => 'col-md-4']) ?>
-                    <?= Form::input('sj_number', 'Nomor surat jalan', old('sj_number', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-4', 'placeholder' => 'mis. PIK-SJ-03698']) ?>
+                    <?php if (can('deliveries.sj')): ?>
+                        <?= Form::input('sj_number', 'Nomor surat jalan', old('sj_number', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-4', 'placeholder' => 'mis. PIK-SJ-03698']) ?>
+                    <?php else: ?>
+                        <?= Form::input('sj_number_view', 'Nomor surat jalan', (string) ($record['sj_number'] ?? ''), [], ['col' => 'col-md-4', 'disabled' => true, 'placeholder' => 'Diisi PPIC', 'help' => 'Hanya PPIC yang dapat mengisi Surat Jalan.']) ?>
+                    <?php endif; ?>
                     <?= Form::input('delivered_qty', 'Qty (pcs)', old('delivered_qty', $record), $errors, ['type' => 'number', 'min' => 1, 'step' => 1, 'required' => true, 'col' => 'col-md-4', 'inputmode' => 'numeric']) ?>
                     <?= Form::select('status', 'Status', $statusOptions, old('status', $record, 'Delivered'), $errors, ['required' => true, 'col' => 'col-md-6']) ?>
                     <?= Form::input('destination', 'Tujuan pengiriman', old('destination', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-6']) ?>
@@ -60,15 +64,15 @@ $cancel = $return !== '' ? to($return) : ($isEdit ? url('/deliveries/' . $delive
             </div>
         </form>
         <?php if ($isEdit && can('deliveries.delete')): ?>
-            <form id="delete-delivery" method="post" action="<?= e(url('/deliveries/' . $delivery['id'] . '/delete')) ?>" data-confirm="Hapus delivery ini? Outstanding PO akan dihitung ulang."><?= csrf_field() ?></form>
+            <form id="delete-delivery" method="post" action="<?= e(url('/deliveries/' . $delivery['id'] . '/delete')) ?>" data-confirm="Hapus delivery ini? Outstanding OEF akan dihitung ulang."><?= csrf_field() ?></form>
         <?php endif; ?>
     </div>
     <?php if ($line): ?>
         <div class="col-xl-4">
             <div class="surface surface-pad">
-                <h2 class="surface-title mb-3">Baris PO terpilih</h2>
+                <h2 class="surface-title mb-3">Produk OEF terpilih</h2>
                 <dl class="dl-grid dl-single">
-                    <div><dt>PO</dt><dd><a href="<?= e(url('/purchase-orders/' . $line['po_id'])) ?>"><?= e($line['po_number'] ?? $line['po_code']) ?></a> · <?= e($line['customer_name'] ?? '') ?></dd></div>
+                    <div><dt>OEF</dt><dd><a href="<?= e(url('/purchase-orders/' . $line['po_id'])) ?>"><?= e($line['order_number'] ?: ($line['po_number'] ?? $line['po_code'])) ?></a> · <?= e($line['customer_name'] ?? '') ?></dd></div>
                     <div><dt>Produk</dt><dd><?= e($line['product_name']) ?></dd></div>
                     <div><dt>Order / Terkirim / Retur</dt><dd class="tabular"><?= e(fmt_qty($line['order_qty'])) ?> / <?= e(fmt_qty($line['delivered_qty'], '0')) ?> / <?= e(fmt_qty($line['return_qty'], '0')) ?></dd></div>
                     <div><dt>Outstanding</dt><dd class="fw-semibold fs-5"><?= e(fmt_qty($line['outstanding_qty'], '0')) ?> pcs</dd></div>

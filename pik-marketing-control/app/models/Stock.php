@@ -66,6 +66,10 @@ final class Stock extends Model
         if (($f['link'] ?? '') === 'unlinked') {
             $where[] = 's.product_id IS NULL';
         }
+        if (!empty($f['group'])) {
+            $where[] = 's.product_id IS NOT NULL AND (' . Product::groupSql('pr') . ') = :grp';
+            $params['grp'] = (string) $f['group'];
+        }
         return [implode(' AND ', $where), $params];
     }
 
@@ -90,6 +94,7 @@ final class Stock extends Model
         [$where, $params] = self::filters($f);
         return Paginator::query(
             "SELECT s.product_id, pr.code AS product_id_code, pr.name AS product_name, pr.variant, pr.product_code, pr.unit,
+                    " . Product::groupSql('pr') . " AS product_group,
                     SUM(CASE WHEN s.stock_type = 'FG' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS fg,
                     SUM(CASE WHEN s.stock_type = 'WIP' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS wip,
                     SUM(CASE WHEN s.stock_type = 'Ready' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS ready,
@@ -98,11 +103,38 @@ final class Stock extends Model
                     MAX(COALESCE(s.updated_at, s.created_at)) AS last_update
              FROM stock s JOIN products pr ON pr.id = s.product_id
              WHERE " . $where . '
-             GROUP BY s.product_id, pr.code, pr.name, pr.variant, pr.product_code, pr.unit',
+             GROUP BY s.product_id, pr.code, pr.name, pr.variant, pr.product_code, pr.unit, pr.category',
             $params,
-            'product_name, s.product_id',
+            'product_group, product_name, s.product_id',
             $page
         );
+    }
+
+    /**
+     * Total stok per kelompok produk (kelompok otomatis dari nama, lihat Product::GROUPS).
+     * @return array<string,array{products:int,fg:int,wip:int,ready:int,reserved:int}>
+     */
+    public static function groupTotals(array $f): array
+    {
+        $f['link'] = '';
+        [$where, $params] = self::filters($f);
+        // kelompok dihitung di subquery agar GROUP BY sah di MySQL & MariaDB (ONLY_FULL_GROUP_BY)
+        $rows = Database::fetchAll(
+            "SELECT x.product_group, COUNT(DISTINCT x.product_id) AS products,
+                    SUM(CASE WHEN x.stock_type = 'FG' THEN COALESCE(x.quantity, 0) ELSE 0 END) AS fg,
+                    SUM(CASE WHEN x.stock_type = 'WIP' THEN COALESCE(x.quantity, 0) ELSE 0 END) AS wip,
+                    SUM(CASE WHEN x.stock_type = 'Ready' THEN COALESCE(x.quantity, 0) ELSE 0 END) AS ready,
+                    SUM(CASE WHEN x.stock_type = 'Reserved' THEN COALESCE(x.quantity, 0) ELSE 0 END) AS reserved
+             FROM (SELECT s.product_id, s.stock_type, s.quantity, " . Product::groupSql('pr') . " AS product_group
+                   FROM stock s JOIN products pr ON pr.id = s.product_id WHERE " . $where . ") x
+             GROUP BY x.product_group ORDER BY x.product_group",
+            $params
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(string) $r['product_group']] = ['products' => (int) $r['products'], 'fg' => (int) $r['fg'], 'wip' => (int) $r['wip'], 'ready' => (int) $r['ready'], 'reserved' => (int) $r['reserved']];
+        }
+        return $out;
     }
 
     /** @return array<string,int> total per tipe untuk filter aktif + jumlah entri */

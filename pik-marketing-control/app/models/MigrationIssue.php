@@ -21,15 +21,14 @@ final class MigrationIssue
     public const RECORD_LINKS = [
         'CUSTOMERS'         => ['/customers/{id}', 'customers.view', 'Customer'],
         'PRODUCTS'          => ['/products/{id}', 'products.view', 'Produk'],
-        'PURCHASE_ORDERS'   => ['/purchase-orders/{id}', 'purchase_orders.view', 'Purchase order'],
-        'PO_LINES'          => ['/po-lines/{id}/edit', 'purchase_orders.edit', 'Baris PO'],
+        'PURCHASE_ORDERS'   => ['/purchase-orders/{id}', 'purchase_orders.view', 'OEF / PO'],
+        'PO_LINES'          => ['/po-lines/{id}/edit', 'purchase_orders.edit', 'Baris OEF'],
         'DELIVERIES'        => ['/deliveries/{id}', 'deliveries.view', 'Delivery'],
-        'RETURNS'           => ['/returns/{id}/edit', 'returns.edit', 'Retur'],
+        'RETURNS'           => ['/returns/{id}', 'returns.view', 'Retur & komplain'],
         'STOCK'             => ['/stock/{id}/edit', 'stock.edit', 'Stok'],
         'LEADTIME'          => ['/lead-times/{id}/edit', 'leadtime.edit', 'Lead time'],
         'INBOUND_MAKLON'    => ['/inbound/{id}', 'inbound.view', 'Inbound maklon'],
-        'INVOICES_PAYMENTS' => ['/invoices/{id}', 'finance.view', 'Invoice'],
-        'PO_FINANCIALS'     => ['/po-financials/{id}', 'finance.view', 'PO financial'],
+        // Menu Finance sudah dihapus: data keuangan legacy tetap tersimpan, tanpa halaman
     ];
 
     /**

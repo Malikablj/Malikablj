@@ -68,11 +68,8 @@ $base = '/customers/' . $id;
             <div class="x-small <?= $summary['followups_overdue'] > 0 ? 'is-negative fw-semibold' : 'text-secondary' ?>"><?= e($summary['followups_overdue']) ?> overdue</div></div>
     <?php endif; ?>
     <?php if (can('purchase_orders.view')): ?>
-        <div><div class="stat-label">Open PO</div><div class="stat-value"><?= e(fmt_qty($summary['po_open'], '0')) ?></div><div class="x-small text-secondary">dari <?= e(fmt_qty($summary['po_count'], '0')) ?> PO</div></div>
-        <div><div class="stat-label">Outstanding</div><div class="stat-value"><?= e(fmt_qty($summary['outstanding_qty'], '0')) ?></div><div class="x-small text-secondary">pcs di PO open</div></div>
-    <?php endif; ?>
-    <?php if (can('finance.view')): ?>
-        <div><div class="stat-label">Piutang</div><div class="stat-value"><?= e(fmt_money($summary['receivable'], 'Rp 0')) ?></div><div class="x-small text-secondary">dari <?= e(fmt_money($summary['invoiced'], 'Rp 0')) ?> invoice</div></div>
+        <div><div class="stat-label">OEF berjalan</div><div class="stat-value"><?= e(fmt_qty($summary['po_open'], '0')) ?></div><div class="x-small text-secondary">dari <?= e(fmt_qty($summary['po_count'], '0')) ?> OEF</div></div>
+        <div><div class="stat-label">Outstanding</div><div class="stat-value"><?= e(fmt_qty($summary['outstanding_qty'], '0')) ?></div><div class="x-small text-secondary">pcs di OEF berjalan</div></div>
     <?php endif; ?>
     <div><div class="stat-label">Aktivitas terakhir</div><div class="stat-value fs-6 mt-1"><?= e(fmt_date($summary['last_activity'], 'Belum ada')) ?></div><div class="x-small text-secondary"><?= e(relative_day($summary['last_activity'])) ?></div></div>
 </div>

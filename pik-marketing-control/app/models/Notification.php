@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Helpers\Database;
 use App\Helpers\Paginator;
+use App\Helpers\Permission;
 use PDOException;
 
 /** Notifikasi in-app per user. */
@@ -41,6 +42,26 @@ final class Notification
             }
             throw $e;
         }
+    }
+
+    /** @return list<int> user aktif yang role-nya punya permission tsb */
+    public static function usersWith(string $permission): array
+    {
+        $rows = Database::fetchAll('SELECT id, role FROM users WHERE is_active = 1');
+        return array_values(array_map(static fn ($r) => (int) $r['id'], array_filter($rows, static fn ($r) => Permission::allows((string) $r['role'], $permission))));
+    }
+
+    /**
+     * Kirim notifikasi ke sekumpulan user (id duplikat/null diabaikan).
+     * @param list<int|null> $userIds
+     */
+    public static function sendMany(array $userIds, string $type, string $title, ?string $message, ?string $link, ?string $entityType, ?int $entityId, ?string $dedupeKey = null): int
+    {
+        $sent = 0;
+        foreach (array_unique(array_filter(array_map('intval', $userIds))) as $uid) {
+            $sent += (int) self::send($uid, $type, $title, $message, $link, $entityType, $entityId, $dedupeKey);
+        }
+        return $sent;
     }
 
     public static function paginateForUser(int $userId, string $filter, int $page): Paginator

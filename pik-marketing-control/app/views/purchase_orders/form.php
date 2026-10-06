@@ -1,97 +1,104 @@
 <?php
 
 use App\Helpers\Form;
-use App\Helpers\Number;
 use App\Models\PurchaseOrder;
 
 /**
+ * Form Order Entry Form (OEF).
  * @var array<string,mixed>|null $po
  * @var array<string,string> $errors
  * @var array<string,mixed> $preset
  * @var list<array<string,string>> $lines
- * @var array<int,string> $products
+ * @var list<string> $customers saran nama customer
+ * @var list<string> $sales saran nama sales
+ * @var list<string> $suggestions saran nama produk
  */
 $isEdit = $po !== null;
 $record = $po ?? $preset;
-// Nilai uang dari database (mis. "71750000.00") ditampilkan berformat Indonesia ("71.750.000")
-$money = static fn (string $v): string => preg_match('/^-?\d+\.\d{2}$/', $v) ? Number::money($v, '', false) : $v;
-$lineRow = static function (int|string $i, array $line, array $errors, array $products): string {
+$legacy = $isEdit && trim((string) $po['order_number']) === '';
+$lineRow = static function (int|string $i, array $line, array $errors): string {
     $err = static fn (string $f) => $errors["lines.{$i}.{$f}"] ?? null;
-    $pid = (string) ($line['product_id'] ?? '');
-    $html = '<div class="po-line row g-2 align-items-start" data-line>';
-    $html .= '<div class="col-md-4"><label class="form-label d-md-none">Produk</label><select class="form-select' . ($err('product_id') ? ' is-invalid' : '') . '" name="lines[' . e((string) $i) . '][product_id]" aria-label="Produk">';
-    $html .= '<option value="">— Pilih produk —</option>' . Form::options($products, $pid) . '</select>';
-    $html .= $err('product_id') ? '<div class="invalid-feedback d-block">' . e($err('product_id')) . '</div>' : '';
-    $html .= '</div><div class="col-6 col-md-2"><label class="form-label d-md-none">Qty</label><input type="number" min="1" step="1" inputmode="numeric" class="form-control' . ($err('order_qty') ? ' is-invalid' : '') . '" name="lines[' . e((string) $i) . '][order_qty]" value="' . e($line['order_qty'] ?? '') . '" placeholder="Qty" aria-label="Qty order">';
-    $html .= $err('order_qty') ? '<div class="invalid-feedback d-block">' . e($err('order_qty')) . '</div>' : '';
-    $html .= '</div><div class="col-6 col-md-1"><label class="form-label d-md-none">Satuan</label><input type="text" maxlength="20" class="form-control" name="lines[' . e((string) $i) . '][unit]" value="' . e($line['unit'] ?? '') . '" placeholder="pcs" aria-label="Satuan"></div>';
-    $html .= '<div class="col-6 col-md-2"><label class="form-label d-md-none">Harga satuan</label><input type="text" inputmode="decimal" class="form-control' . ($err('unit_price') ? ' is-invalid' : '') . '" name="lines[' . e((string) $i) . '][unit_price]" value="' . e($line['unit_price'] ?? '') . '" placeholder="Harga" aria-label="Harga satuan">';
-    $html .= $err('unit_price') ? '<div class="invalid-feedback d-block">' . e($err('unit_price')) . '</div>' : '';
-    $html .= '</div><div class="col-6 col-md-2"><label class="form-label d-md-none">Catatan</label><input type="text" maxlength="500" class="form-control" name="lines[' . e((string) $i) . '][remark]" value="' . e($line['remark'] ?? '') . '" placeholder="Catatan" aria-label="Catatan baris"></div>';
-    $html .= '<div class="col-md-1 text-md-end"><button type="button" class="btn btn-light btn-icon" data-line-remove aria-label="Hapus baris"><i class="bi bi-x-lg"></i></button></div></div>';
-    return $html;
+    $name = static fn (string $f) => 'lines[' . e((string) $i) . '][' . $f . ']';
+    $field = static function (string $f, string $label, array $attrs, string $col) use ($line, $err, $name, $i): string {
+        $id = 'l_' . $i . '_' . $f;
+        $html = '<div class="' . $col . '"><label class="form-label small mb-1" for="' . e($id) . '">' . $label . '</label>'
+            . '<input class="form-control' . ($err($f) ? ' is-invalid' : '') . '" id="' . e($id) . '" name="' . $name($f) . '" value="' . e($line[$f] ?? '') . '"';
+        foreach ($attrs as $k => $v) {
+            $html .= ' ' . $k . '="' . e((string) $v) . '"';
+        }
+        return $html . '>' . ($err($f) ? '<div class="invalid-feedback d-block">' . e($err($f)) . '</div>' : '') . '</div>';
+    };
+    return '<div class="oef-line" data-line>'
+        . '<div class="oef-line-head"><span class="oef-line-no"></span><button type="button" class="btn btn-light btn-sm btn-icon" data-line-remove aria-label="Hapus produk"><i class="bi bi-x-lg"></i></button></div>'
+        . '<div class="row g-2">'
+        . $field('product_name', 'Nama produk<span class="req">*</span>', ['type' => 'text', 'maxlength' => 190, 'list' => 'product-suggestions', 'autocomplete' => 'off', 'placeholder' => 'Ketik nama produk'], 'col-md-6')
+        . $field('item_description', 'Spesifikasi produk', ['type' => 'text', 'maxlength' => 2000, 'placeholder' => 'mis. warna, bahan, ukuran, printing'], 'col-md-6')
+        . $field('order_qty', 'Qty<span class="req">*</span>', ['type' => 'number', 'min' => 1, 'step' => 1, 'inputmode' => 'numeric'], 'col-6 col-md-3')
+        . $field('unit', 'Satuan', ['type' => 'text', 'maxlength' => 20, 'placeholder' => 'pcs', 'list' => 'unit-suggestions'], 'col-6 col-md-3')
+        . $field('subcont_supplier', 'Supplier (jika subcont)', ['type' => 'text', 'maxlength' => 150, 'placeholder' => 'Kosongkan bila produksi sendiri'], 'col-md-6')
+        . '</div></div>';
 };
 ?>
-<div class="breadcrumb-lite"><a href="<?= e(url('/purchase-orders')) ?>">Purchase Orders</a><i class="bi bi-chevron-right"></i>
-    <?php if ($isEdit): ?><a href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e($po['po_number'] ?? $po['code']) ?></a><i class="bi bi-chevron-right"></i><span>Edit</span><?php else: ?><span>Buat</span><?php endif; ?></div>
-<div class="page-header"><div><h1 class="page-title"><?= $isEdit ? 'Edit PO' : 'Buat Purchase Order' ?></h1>
-    <?php if ($isEdit): ?><p class="page-subtitle">Baris produk diubah dari halaman detail PO.</p><?php endif; ?></div></div>
+<div class="breadcrumb-lite"><a href="<?= e(url('/purchase-orders')) ?>">Order Entry Form</a><i class="bi bi-chevron-right"></i>
+    <?php if ($isEdit): ?><a href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e(PurchaseOrder::label($po)) ?></a><i class="bi bi-chevron-right"></i><span>Edit</span><?php else: ?><span>Buat</span><?php endif; ?></div>
+<div class="page-header"><div><h1 class="page-title"><?= $isEdit ? 'Edit OEF' : 'Buat Order Entry Form' ?></h1>
+    <p class="page-subtitle"><?= $isEdit ? 'Produk diubah dari halaman detail OEF. Perubahan isi OEF membuatnya kembali menunggu review PPIC.' : 'Customer dan produk diketik manual. Bila belum ada, otomatis ditambahkan ke menu Customer dan Produk. Setelah disimpan, OEF direview oleh PPIC.' ?></p></div></div>
+
+<?php if ($isEdit && $po['review_status'] !== 'Pending'): ?>
+    <div class="callout callout-info section-gap small"><i class="bi bi-info-circle me-1"></i>OEF ini sudah direview PPIC (<?= e(PurchaseOrder::REVIEW_LABELS[$po['review_status']] ?? $po['review_status']) ?>).
+        Bila isinya diubah (selain status), OEF kembali <strong>menunggu review PPIC</strong>.</div>
+<?php endif; ?>
 
 <form class="surface" method="post" action="<?= e(url($isEdit ? '/purchase-orders/' . $po['id'] : '/purchase-orders')) ?>" novalidate>
     <?= csrf_field() ?>
     <div class="form-section">
-        <div class="form-section-title">Header PO</div>
+        <div class="form-section-title">Order</div>
         <div class="row g-3">
-            <?= Form::input('po_number', 'Nomor PO', old('po_number', $record), $errors, ['required' => true, 'maxlength' => 80, 'col' => 'col-md-4', 'placeholder' => 'mis. PO/SIT/260901420']) ?>
-            <?= Form::select('customer_id', 'Customer', $customers, old('customer_id', $record), $errors, ['required' => true, 'placeholder' => '— Pilih customer —', 'searchable' => 'Cari customer…', 'col' => 'col-md-8']) ?>
-            <?= Form::input('po_date', 'Tanggal PO', old('po_date', $record), $errors, ['type' => 'date', 'required' => true, 'col' => 'col-md-4']) ?>
-            <?= Form::input('payment_term', 'Termin pembayaran', old('payment_term', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-4', 'list' => 'payment-terms']) ?>
-            <?= Form::select('status', 'Status', Form::list(PurchaseOrder::STATUSES), old('status', $record, 'Open'), $errors, ['required' => true, 'col' => 'col-md-4', 'help' => 'Berubah otomatis ke Partial/Closed saat delivery dicatat.']) ?>
-            <?= Form::textarea('remark', 'Catatan', old('remark', $record), $errors, ['rows' => 2, 'maxlength' => 5000]) ?>
-            <datalist id="payment-terms"><?php foreach (PurchaseOrder::PAYMENT_TERMS as $t): ?><option value="<?= e($t) ?>"><?php endforeach; ?></datalist>
-        </div>
-    </div>
-    <div class="form-section">
-        <div class="form-section-title">Nilai PO</div>
-        <div class="form-section-desc">Subtotal (DPP) dihitung otomatis dari baris bila semua baris punya harga. Grand total = subtotal − diskon + PPN + ongkos kirim.</div>
-        <div class="row g-3">
-            <?= Form::input('currency', 'Mata uang', old('currency', $record, 'IDR'), $errors, ['maxlength' => 3, 'col' => 'col-6 col-md-2', 'placeholder' => 'IDR']) ?>
-            <?= Form::checkbox('price_includes_tax', 'Harga satuan sudah termasuk PPN', old('price_includes_tax', $record, '0') === '1', $errors, ['col' => 'col-md-4 align-self-end pb-2']) ?>
-            <?= Form::input('subtotal', 'Subtotal (DPP)', $money(old('subtotal', $record)), $errors, ['inputmode' => 'decimal', 'col' => 'col-md-6', 'prefix' => 'Rp', 'help' => 'Hanya dipakai bila ada baris tanpa harga.']) ?>
-            <?= Form::input('discount_amount', 'Diskon', $money(old('discount_amount', $record)), $errors, ['inputmode' => 'decimal', 'col' => 'col-md-4', 'prefix' => 'Rp']) ?>
-            <?= Form::input('tax_amount', 'PPN', $money(old('tax_amount', $record)), $errors, ['inputmode' => 'decimal', 'col' => 'col-md-4', 'prefix' => 'Rp', 'help' => 'Isi sesuai dokumen PO. Kosong = 0.']) ?>
-            <?= Form::input('shipping_cost', 'Ongkos kirim', $money(old('shipping_cost', $record)), $errors, ['inputmode' => 'decimal', 'col' => 'col-md-4', 'prefix' => 'Rp']) ?>
+            <?= Form::input('order_number', 'No order', old('order_number', $record), $errors, ['required' => !$legacy, 'maxlength' => 60, 'col' => 'col-md-4', 'placeholder' => 'mis. OEF/2610/001',
+                'help' => $legacy ? 'Data lama (sebelum OEF) boleh tanpa No order.' : 'Diisi manual, tidak boleh sama dengan OEF lain.']) ?>
+            <?= Form::input('po_date', 'Tanggal order', old('po_date', $record), $errors, ['type' => 'date', 'required' => true, 'col' => 'col-6 col-md-4']) ?>
+            <?= Form::input('sales_name', 'Nama sales', old('sales_name', $record), $errors, ['required' => !$legacy, 'maxlength' => 120, 'col' => 'col-6 col-md-4', 'list' => 'sales-suggestions', 'autocomplete' => 'off']) ?>
+            <?= Form::input('customer_name', 'Nama customer', old('customer_name', $record), $errors, ['required' => true, 'maxlength' => 190, 'col' => 'col-md-8', 'list' => 'customer-suggestions', 'autocomplete' => 'off',
+                'placeholder' => 'Ketik nama customer', 'help' => 'Pilih dari saran bila sudah ada. Nama baru otomatis ditambahkan ke menu Customer.']) ?>
+            <?= Form::input('po_number', 'No PO dari customer', old('po_number', $record), $errors, ['maxlength' => 80, 'col' => 'col-md-4', 'placeholder' => 'mis. PO/SIT/260901420']) ?>
             <?php if ($isEdit): ?>
-                <div class="col-12 small text-secondary">Grand total saat ini: <strong class="text-body"><?= e(fmt_money($po['grand_total'] ?? null, 'belum ada')) ?></strong> (dihitung ulang setelah disimpan)</div>
+                <?= Form::select('status', 'Status', Form::list(PurchaseOrder::STATUSES), old('status', $record, 'Open'), $errors, ['required' => true, 'col' => 'col-md-4',
+                    'help' => 'Berubah otomatis ke Partial/Closed saat delivery dicatat. Pakai Cancelled untuk membatalkan.']) ?>
             <?php endif; ?>
         </div>
+        <datalist id="customer-suggestions"><?php foreach ($customers as $c): ?><option value="<?= e($c) ?>"><?php endforeach; ?></datalist>
+        <datalist id="sales-suggestions"><?php foreach ($sales as $s): ?><option value="<?= e($s) ?>"><?php endforeach; ?></datalist>
     </div>
-    <div class="form-section">
-        <div class="form-section-title">Pengiriman &amp; kontak</div>
-        <div class="row g-3">
-            <?= Form::input('requested_delivery_date', 'Tanggal kirim diminta', old('requested_delivery_date', $record), $errors, ['type' => 'date', 'col' => 'col-md-4']) ?>
-            <?= Form::input('contact_person', 'Contact person customer', old('contact_person', $record), $errors, ['maxlength' => 150, 'col' => 'col-md-8']) ?>
-            <?= Form::textarea('delivery_address', 'Alamat kirim', old('delivery_address', $record), $errors, ['rows' => 2, 'maxlength' => 2000]) ?>
-        </div>
-    </div>
+
     <?php if (!$isEdit): ?>
         <div class="form-section">
             <div class="d-flex justify-content-between align-items-end mb-3 gap-2 flex-wrap">
-                <div><div class="form-section-title">Baris produk</div><div class="form-section-desc mb-0">Satu PO dapat berisi banyak produk. Baris kosong diabaikan.</div></div>
-                <button type="button" class="btn btn-light btn-sm" data-line-add><i class="bi bi-plus-lg"></i> Tambah baris</button>
+                <div><div class="form-section-title">Produk</div><div class="form-section-desc mb-0">Satu OEF dapat berisi beberapa produk. Produk baru otomatis masuk menu Produk.</div></div>
+                <button type="button" class="btn btn-light btn-sm" data-line-add><i class="bi bi-plus-lg"></i> Tambah produk</button>
             </div>
             <?php if (isset($errors['lines'])): ?><div class="alert alert-danger py-2"><?= e($errors['lines']) ?></div><?php endif; ?>
-            <div class="row g-2 d-none d-md-flex small text-secondary fw-semibold mb-1"><div class="col-md-4">Produk</div><div class="col-md-2">Qty order</div><div class="col-md-1">Satuan</div><div class="col-md-2">Harga satuan (Rp)</div><div class="col-md-2">Catatan</div></div>
-            <div class="d-grid gap-2" data-line-list>
+            <div class="d-grid gap-3 oef-lines" data-line-list>
                 <?php foreach ($lines as $i => $line): ?>
-                    <?= $lineRow($i, $line, $errors, $products) ?>
+                    <?= $lineRow($i, $line, $errors) ?>
                 <?php endforeach; ?>
             </div>
-            <template data-line-template><?= $lineRow('__INDEX__', [], [], $products) ?></template>
+            <template data-line-template><?= $lineRow('__INDEX__', [], []) ?></template>
+            <datalist id="product-suggestions"><?php foreach ($suggestions as $p): ?><option value="<?= e($p) ?>"><?php endforeach; ?></datalist>
+            <datalist id="unit-suggestions"><?php foreach (App\Models\Product::UNITS as $u): ?><option value="<?= e($u) ?>"><?php endforeach; ?></datalist>
         </div>
     <?php endif; ?>
+
+    <div class="form-section">
+        <div class="form-section-title">Pengiriman</div>
+        <div class="form-section-desc">Setelah PPIC menyetujui OEF, jadwal di menu Delivery dibuat otomatis pada tanggal permintaan ini (bisa diubah bila jadwal berubah).</div>
+        <div class="row g-3">
+            <?= Form::input('requested_delivery_date', 'Permintaan selesai/kirim', old('requested_delivery_date', $record), $errors, ['type' => 'date', 'required' => !$legacy, 'col' => 'col-md-4']) ?>
+            <?= Form::textarea('delivery_address', 'Tujuan kirim', old('delivery_address', $record), $errors, ['rows' => 2, 'maxlength' => 2000, 'required' => !$legacy, 'col' => 'col-md-8', 'placeholder' => 'Nama penerima / alamat gudang customer']) ?>
+            <?= Form::textarea('remark', 'Keterangan', old('remark', $record), $errors, ['rows' => 2, 'maxlength' => 5000]) ?>
+        </div>
+    </div>
     <div class="form-actions">
         <a href="<?= e(url($isEdit ? '/purchase-orders/' . $po['id'] : '/purchase-orders')) ?>" class="btn btn-light">Batal</a>
-        <button type="submit" class="btn btn-primary"><?= $isEdit ? 'Simpan perubahan' : 'Simpan PO' ?></button>
+        <button type="submit" class="btn btn-primary"><?= $isEdit ? 'Simpan perubahan' : 'Simpan &amp; kirim ke PPIC' ?></button>
     </div>
 </form>

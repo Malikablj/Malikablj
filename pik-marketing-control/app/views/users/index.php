@@ -83,10 +83,8 @@ use App\Helpers\Permission;
     <h2 class="surface-title mb-2">Hak akses per role</h2>
     <p class="text-secondary small mb-3">Diatur di <span class="code-chip">config/permissions.php</span> dan diverifikasi di backend untuk setiap halaman &amp; aksi.</p>
     <div class="row g-3 small">
-        <div class="col-md-6 col-xl-4"><strong>Admin</strong><div class="text-secondary">Akses penuh ke semua modul, user, audit log, import &amp; migration issues.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Marketing</strong><div class="text-secondary">Customers, Contacts, Leads, Activities, Follow Up, Purchase Orders, Delivery &amp; Return, Products.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Sales</strong><div class="text-secondary">Customers, Contacts, Leads, Activities, Follow Up.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Management</strong><div class="text-secondary">Dashboard, Reports (termasuk finansial), Customers, Purchase Orders, Delivery &amp; Return, Stock.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Viewer</strong><div class="text-secondary">Read-only untuk modul operasional &amp; laporan non-finansial.</div></div>
+        <?php foreach (Permission::ROLE_HELP as $roleName => $help): ?>
+            <div class="col-md-6 col-xl-4"><strong><?= e($roleName) ?></strong><div class="text-secondary"><?= e($help) ?>.</div></div>
+        <?php endforeach; ?>
     </div>
 </div>

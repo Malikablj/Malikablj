@@ -4,8 +4,8 @@ $icon = static fn (string $type): string => match (true) {
     str_starts_with($type, 'followup') => 'bi-calendar2-check',
     str_starts_with($type, 'lead') => 'bi-kanban',
     str_starts_with($type, 'delivery') => 'bi-truck',
-    str_starts_with($type, 'invoice') => 'bi-cash-coin',
-    str_starts_with($type, 'po') => 'bi-receipt',
+    str_starts_with($type, 'po'), str_starts_with($type, 'oef') => 'bi-receipt',
+    str_starts_with($type, 'complaint') => 'bi-chat-left-dots',
     default => 'bi-bell',
 };
 ?>
@@ -32,7 +32,7 @@ $icon = static fn (string $type): string => match (true) {
 
 <div class="surface">
     <?php if ($notifications->isEmpty()): ?>
-        <div class="empty-state"><i class="bi bi-bell-slash"></i><div class="empty-title">Tidak ada notifikasi</div><p>Pengingat follow up, delivery, dan invoice akan muncul di sini.</p></div>
+        <div class="empty-state"><i class="bi bi-bell-slash"></i><div class="empty-title">Tidak ada notifikasi</div><p>Pengingat follow up, OEF, delivery, dan komplain akan muncul di sini.</p></div>
     <?php else: ?>
         <ul class="list-lite">
             <?php foreach ($notifications->items as $n): $isUnread = (int) $n['is_read'] === 0; ?>

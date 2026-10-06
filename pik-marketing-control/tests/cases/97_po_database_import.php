@@ -389,7 +389,7 @@ test('halaman Import database PO: dry run lewat web, lalu import tanpa upload ul
     assert_status(403, client_as('Marketing')->post('/import/po', ['mode' => 'dry']));
 });
 
-test('PO: nilai tampil di list & detail; filter bulan & perlu review; sort nilai', function () {
+test('OEF: nilai PO hasil import hanya terlihat oleh role berakses keuangan; filter bulan & data import', function () {
     $ids = po_db_seed();
     $c = client_as('Marketing');
     $list = $c->get('/purchase-orders', ['month' => '2026-03', 'q' => 'UJI/ALV']);
@@ -397,69 +397,41 @@ test('PO: nilai tampil di list & detail; filter bulan & perlu review; sort nilai
     assert_contains('UJI/ALV/001', $list->body);
     assert_not_contains('UJI/ZEN/001', $list->body, 'bulan April tidak tampil');
     $grand = (string) Database::fetchValue('SELECT grand_total FROM purchase_orders WHERE id = :id', ['id' => $ids['po1']]);
-    assert_contains(App\Helpers\Number::money($grand), $list->body, 'grand total tampil sesuai database');
+    assert_not_contains(App\Helpers\Number::money($grand), $list->body, 'nilai PO (data keuangan) tidak tampil di daftar OEF');
     $review = $c->get('/purchase-orders', ['review' => 'needs_review', 'q' => 'UJI/']);
     assert_contains('UJI/ALV/011', $review->body);
     assert_not_contains('UJI/ALV/001<', $review->body);
     assert_status(200, $c->get('/purchase-orders', ['sort' => 'value', 'dir' => 'desc']));
-    $show = $c->get('/purchase-orders/' . $ids['po3']);
-    assert_contains('Nilai PO', $show->body);
-    assert_contains('harga satuan sudah termasuk PPN', $show->body);
-    assert_contains('Rp 1.110', $show->body);
+    assert_not_contains('Nilai PO', $c->get('/purchase-orders/' . $ids['po3'])->body, 'Marketing tidak melihat nilai PO');
+    $show = client_as('Admin')->get('/purchase-orders/' . $ids['po3']);
+    assert_contains('Nilai PO (arsip import)', $show->body);
     assert_contains('Rp 1.000.000', $show->body);
+    assert_same('Approved', Database::fetchValue('SELECT review_status FROM purchase_orders WHERE id = :id', ['id' => $ids['po1']]), 'PO hasil import tidak perlu review PPIC lagi');
 });
 
-test('PO: buat & edit dengan harga → subtotal, PPN, grand total dihitung benar', function () {
+test('OEF: ubah qty produk berharga (data import) → nilai arsip dihitung ulang; form OEF tanpa harga', function () {
     $ids = po_db_seed();
+    $po = Database::insert('purchase_orders', ['code' => 'PO-NILAI00001', 'po_number' => 'UJI/NILAI/001', 'customer_id' => $ids['custA'], 'po_date' => '2026-05-01', 'status' => 'Open',
+        'review_status' => 'Approved', 'price_includes_tax' => 0, 'tax_amount' => '33000.00', 'shipping_cost' => '10000.00']);
+    $l1 = Database::insert('po_lines', ['code' => 'POL-NILAI0001', 'po_id' => $po, 'product_id' => $ids['p1'], 'order_qty' => 1000, 'unit' => 'pcs', 'unit_price' => '250.00', 'line_subtotal' => '250000.00']);
+    Database::insert('po_lines', ['code' => 'POL-NILAI0002', 'po_id' => $po, 'product_id' => $ids['p2'], 'order_qty' => 1000, 'unit' => 'pcs', 'unit_price' => '50.00', 'line_subtotal' => '50000.00']);
+    App\Models\PurchaseOrder::recalcTotals($po);
+    assert_same('300000.00', (string) Database::fetchValue('SELECT subtotal FROM purchase_orders WHERE id = :id', ['id' => $po]), '1000×250 + 1000×50');
+    assert_same('343000.00', (string) Database::fetchValue('SELECT grand_total FROM purchase_orders WHERE id = :id', ['id' => $po]), '300.000 + 33.000 + 10.000');
     $c = client_as('Marketing');
-    $c->get('/purchase-orders/create');
-    $res = $c->post('/purchase-orders', [
-        'po_number' => 'UJI/NILAI/001', 'customer_id' => $ids['custA'], 'po_date' => '2026-05-01', 'status' => 'Open', 'currency' => 'idr',
-        'price_includes_tax' => '0', 'tax_amount' => '33.000', 'discount_amount' => '0', 'shipping_cost' => '10.000',
-        'lines' => [
-            ['product_id' => $ids['p1'], 'order_qty' => '1.000', 'unit' => 'pcs', 'unit_price' => '250'],
-            ['product_id' => $ids['p2'], 'order_qty' => '1000', 'unit' => 'pcs', 'unit_price' => '50'],
-        ],
-    ]);
-    $id = (int) Database::fetchValue("SELECT id FROM purchase_orders WHERE po_number = 'UJI/NILAI/001'");
-    assert_redirect($res, '/purchase-orders/' . $id);
-    $po = Database::fetch('SELECT * FROM purchase_orders WHERE id = :id', ['id' => $id]);
-    assert_same('IDR', $po['currency']);
-    assert_same('300000.00', (string) $po['subtotal'], '1000×250 + 1000×50');
-    assert_same('343000.00', (string) $po['grand_total'], '300.000 + 33.000 + 10.000');
-
-    // tambah baris → subtotal & grand total ikut berubah
-    $c->get('/purchase-orders/' . $id);
-    $c->post('/purchase-orders/' . $id . '/lines', ['product_id' => $ids['p3'], 'order_qty' => '10', 'unit' => 'pcs', 'unit_price' => '1.000']);
-    assert_same('310000.00', (string) Database::fetchValue('SELECT subtotal FROM purchase_orders WHERE id = :id', ['id' => $id]));
-    assert_same('353000.00', (string) Database::fetchValue('SELECT grand_total FROM purchase_orders WHERE id = :id', ['id' => $id]));
-
-    // harga termasuk PPN → subtotal baris = DPP
-    $c->get('/purchase-orders/' . $id . '/edit');
-    $res = $c->post('/purchase-orders/' . $id, ['po_number' => 'UJI/NILAI/001', 'customer_id' => $ids['custA'], 'po_date' => '2026-05-01', 'status' => 'Open',
-        'currency' => 'IDR', 'price_includes_tax' => '1', 'tax_amount' => '30.720,71', 'discount_amount' => '', 'shipping_cost' => '']);
-    assert_redirect($res, '/purchase-orders/' . $id);
-    $po = Database::fetch('SELECT * FROM purchase_orders WHERE id = :id', ['id' => $id]);
-    // DPP per baris dibulatkan: 225.225,23 + 45.045,05 + 9.009,01
-    assert_same('279279.29', (string) $po['subtotal'], 'jumlah DPP per baris');
-    assert_same('310000.00', (string) $po['grand_total'], 'DPP + PPN = total harga');
-
-    // hapus baris → dihitung ulang
-    $line = (int) Database::fetchValue('SELECT id FROM po_lines WHERE po_id = :id AND product_id = :p', ['id' => $id, 'p' => $ids['p3']]);
-    $c->get('/po-lines/' . $line . '/edit');
-    $c->post('/po-lines/' . $line . '/delete');
-    assert_same('270270.28', (string) Database::fetchValue('SELECT subtotal FROM purchase_orders WHERE id = :id', ['id' => $id]), '225.225,23 + 45.045,05');
-
-    // validasi angka & mata uang
-    $base = ['po_number' => 'UJI/NILAI/001', 'customer_id' => $ids['custA'], 'po_date' => '2026-05-01', 'status' => 'Open'];
-    $c->get('/purchase-orders/' . $id . '/edit');
-    $bad = $c->post('/purchase-orders/' . $id, $base + ['currency' => 'RP1']);
-    assert_status(422, $bad);
-    assert_contains('Mata uang harus kode 3 huruf', $bad->body);
-    $bad = $c->post('/purchase-orders/' . $id, $base + ['tax_amount' => 'abc', 'discount_amount' => '-5']);
-    assert_status(422, $bad);
-    assert_contains('PPN harus berupa angka', $bad->body);
-    assert_contains('Diskon minimal 0', $bad->body);
+    assert_not_contains('unit_price', $c->get('/purchase-orders/create')->body, 'form OEF tidak memuat harga');
+    $edit = $c->get('/po-lines/' . $l1 . '/edit');
+    assert_status(200, $edit);
+    assert_not_contains('unit_price', $edit->body);
+    $res = $c->post('/po-lines/' . $l1, ['product_name' => App\Services\MasterData::productLabelFor((int) $ids['p1']), 'order_qty' => '2000', 'unit' => 'pcs']);
+    assert_redirect($res, '/purchase-orders/' . $po);
+    $line = Database::fetch('SELECT * FROM po_lines WHERE id = :id', ['id' => $l1]);
+    assert_same('250.00', (string) $line['unit_price'], 'harga dari dokumen PO tidak terhapus');
+    assert_same('500000.00', (string) $line['line_subtotal']);
+    assert_same('550000.00', (string) Database::fetchValue('SELECT subtotal FROM purchase_orders WHERE id = :id', ['id' => $po]));
+    assert_same('593000.00', (string) Database::fetchValue('SELECT grand_total FROM purchase_orders WHERE id = :id', ['id' => $po]));
+    assert_not_contains('Rp 593.000', $c->get('/purchase-orders/' . $po)->body);
+    assert_contains('Rp 593.000', client_as('Admin')->get('/purchase-orders/' . $po)->body);
 });
 
 test('kode baru, database belum diperbarui: Admin diarahkan ke Pembaruan database, user lain melihat pesan pemeliharaan', function () {

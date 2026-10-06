@@ -55,6 +55,16 @@ final class Schema
         return $len === null || $len === false ? null : (int) $len;
     }
 
+    /** Tipe lengkap kolom (COLUMN_TYPE), mis. "enum('A','B')" atau "varchar(60)"; null bila tidak ada. */
+    public static function columnType(string $table, string $column): ?string
+    {
+        $type = Database::fetchValue(
+            'SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c',
+            ['t' => $table, 'c' => $column]
+        );
+        return $type === null || $type === false ? null : (string) $type;
+    }
+
     /** CREATE TABLE IF NOT EXISTS ... (SQL lengkap ditulis di file migrasi). */
     public static function createTable(string $sql): bool
     {

@@ -17,7 +17,7 @@ use DomainException;
 
 final class ProductController extends Controller
 {
-    private const FIELDS = ['name', 'product_code', 'variant', 'category', 'capacity_per_day', 'unit', 'is_active', 'notes'];
+    private const FIELDS = ['name', 'product_code', 'variant', 'category', 'unit', 'is_active', 'notes'];
 
     public function index(): void
     {
@@ -36,7 +36,7 @@ final class ProductController extends Controller
             'filters'    => $filters,
             'sort'       => $sort,
             'dir'        => $dir,
-            'categories' => Product::categories(),
+            'categories' => Product::groups(),
             'showStock'  => Auth::can('stock.view'),
         ]);
     }
@@ -113,13 +113,12 @@ final class ProductController extends Controller
             'product_code'     => 'nullable|string|max:60',
             'variant'          => 'nullable|string|max:255',
             'category'         => 'nullable|string|max:100',
-            'capacity_per_day' => 'nullable|integer|min:0',
             'unit'             => 'required|string|max:20',
             'is_active'        => 'boolean',
             'notes'            => 'nullable|string|max:5000',
         ], [
             'name' => 'Nama produk', 'product_code' => 'Kode produk', 'variant' => 'Varian', 'category' => 'Kategori',
-            'capacity_per_day' => 'Kapasitas per hari', 'unit' => 'Satuan', 'is_active' => 'Status aktif', 'notes' => 'Catatan',
+            'unit' => 'Satuan', 'is_active' => 'Status aktif', 'notes' => 'Catatan',
         ]);
         if (!$v->fails()) {
             $d = $v->validated();
@@ -147,7 +146,7 @@ final class ProductController extends Controller
         return [
             'title'      => $product ? 'Edit ' . $product['name'] : 'Tambah Produk',
             'product'    => $product,
-            'categories' => Product::categories(),
+            'categories' => Product::groups(),
             'units'      => Product::units(),
         ];
     }

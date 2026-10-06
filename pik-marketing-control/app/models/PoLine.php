@@ -116,7 +116,7 @@ final class PoLine extends Model
     public static function findFull(int $id): ?array
     {
         return Database::fetch(
-            'SELECT pl.*, p.po_number, p.code AS po_code, p.status AS po_status, p.customer_id, p.price_includes_tax, c.name AS customer_name, pr.name AS product_name,
+            'SELECT pl.*, p.po_number, p.order_number, p.code AS po_code, p.status AS po_status, p.review_status, p.customer_id, p.price_includes_tax, c.name AS customer_name, pr.name AS product_name,
                     t.delivered_qty, t.return_qty, t.outstanding_qty
              FROM po_lines pl JOIN purchase_orders p ON p.id = pl.po_id LEFT JOIN customers c ON c.id = p.customer_id
              JOIN products pr ON pr.id = pl.product_id JOIN (' . self::totalsSql() . ') t ON t.line_id = pl.id

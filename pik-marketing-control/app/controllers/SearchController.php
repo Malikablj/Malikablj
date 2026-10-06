@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Helpers\Auth;
 use App\Helpers\Database;
+use App\Models\PurchaseOrder;
 use App\Helpers\Request;
 
 /** Pencarian global lintas modul (hanya modul yang boleh dilihat user). */
@@ -39,9 +40,18 @@ final class SearchController extends Controller
                 ], Database::fetchAll('SELECT l.id, l.code, l.lead_name, l.company_name, l.status, c.name AS customer_name FROM leads l LEFT JOIN customers c ON c.id = l.customer_id WHERE l.lead_name LIKE :q1 OR l.company_name LIKE :q2 OR l.code LIKE :q3 OR l.product_interest LIKE :q4 ORDER BY l.created_at DESC LIMIT ' . self::LIMIT, $p(4)));
             }
             if (Auth::can('purchase_orders.view')) {
-                $sections['Purchase Orders'] = array_map(static fn ($r) => [
-                    'url' => '/purchase-orders/' . $r['id'], 'title' => $r['po_number'] ?? $r['code'], 'sub' => ($r['customer_name'] ?? 'Customer belum terhubung') . ' · ' . fmt_date($r['po_date']), 'badge' => $r['status'], 'icon' => 'bi-receipt',
-                ], Database::fetchAll('SELECT p.id, p.code, p.po_number, p.po_date, p.status, c.name AS customer_name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id WHERE p.po_number LIKE :q1 OR p.code LIKE :q2 OR c.name LIKE :q3 ORDER BY p.po_date DESC LIMIT ' . self::LIMIT, $p(3)));
+                $sections['Order Entry Form'] = array_map(static fn ($r) => [
+                    'url' => '/purchase-orders/' . $r['id'], 'title' => PurchaseOrder::label($r),
+                    'sub' => ($r['customer_name'] ?? 'Customer belum terhubung') . ($r['order_number'] && $r['po_number'] ? ' · PO ' . $r['po_number'] : '') . ' · ' . fmt_date($r['po_date']), 'badge' => $r['status'], 'icon' => 'bi-receipt',
+                ], Database::fetchAll('SELECT p.id, p.code, p.order_number, p.po_number, p.po_date, p.status, c.name AS customer_name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
+                    WHERE p.po_number LIKE :q1 OR p.code LIKE :q2 OR c.name LIKE :q3 OR p.order_number LIKE :q4 OR p.sales_name LIKE :q5 ORDER BY p.po_date DESC LIMIT ' . self::LIMIT, $p(5)));
+            }
+            if (Auth::can('returns.view')) {
+                $sections['Retur & Komplain'] = array_map(static fn ($r) => [
+                    'url' => '/returns/' . $r['id'], 'title' => $r['case_type'] . ' ' . $r['code'], 'sub' => trim(($r['customer_name'] ?? '') . ' · ' . fmt_date($r['return_date']), ' ·'),
+                    'badge' => $r['resolution_status'], 'icon' => 'bi-chat-left-dots',
+                ], Database::fetchAll('SELECT r.id, r.code, r.case_type, r.return_date, r.resolution_status, c.name AS customer_name FROM returns r LEFT JOIN purchase_orders p ON p.id = r.po_id
+                    LEFT JOIN customers c ON c.id = p.customer_id WHERE r.code LIKE :q1 OR r.note LIKE :q2 OR c.name LIKE :q3 ORDER BY r.return_date DESC LIMIT ' . self::LIMIT, $p(3)));
             }
             if (Auth::can('deliveries.view')) {
                 $sections['Deliveries'] = array_map(static fn ($r) => [
@@ -53,10 +63,10 @@ final class SearchController extends Controller
                     'url' => '/products/' . $r['id'], 'title' => $r['name'], 'sub' => trim(($r['product_code'] ?? '') . ' ' . ($r['variant'] ?? '')) ?: $r['code'], 'badge' => null, 'icon' => 'bi-box-seam',
                 ], Database::fetchAll('SELECT id, code, name, product_code, variant FROM products WHERE name LIKE :q1 OR code LIKE :q2 OR product_code LIKE :q3 OR variant LIKE :q4 ORDER BY name LIMIT ' . self::LIMIT, $p(4)));
             }
-            if (Auth::can('finance.view')) {
-                $sections['Invoices'] = array_map(static fn ($r) => [
-                    'url' => '/invoices/' . $r['id'], 'title' => $r['invoice_number'] ?? $r['code'], 'sub' => fmt_money($r['invoice_amount']) . ' · ' . fmt_date($r['invoice_date']), 'badge' => $r['status'], 'icon' => 'bi-cash-coin',
-                ], Database::fetchAll('SELECT id, code, invoice_number, invoice_amount, invoice_date, status FROM invoices_payments WHERE invoice_number LIKE :q1 OR code LIKE :q2 OR po_number_legacy LIKE :q3 ORDER BY invoice_date DESC LIMIT ' . self::LIMIT, $p(3)));
+            if (Auth::can('inbound_supplier.view')) {
+                $sections['Inbound Supplier'] = array_map(static fn ($r) => [
+                    'url' => '/inbound-supplier/' . $r['id'], 'title' => $r['item_name'], 'sub' => $r['supplier'] . ' · ' . fmt_date($r['receive_date']), 'badge' => null, 'icon' => 'bi-truck-flatbed',
+                ], Database::fetchAll('SELECT id, item_name, supplier, receive_date FROM inbound_supplier WHERE item_name LIKE :q1 OR supplier LIKE :q2 OR purchase_number LIKE :q3 OR sj_number LIKE :q4 ORDER BY receive_date DESC LIMIT ' . self::LIMIT, $p(4)));
             }
             $sections = array_filter($sections);
         }

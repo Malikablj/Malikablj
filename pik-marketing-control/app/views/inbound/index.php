@@ -15,7 +15,7 @@ $hasFilter = $filters['q'] !== '' || $filters['vendor'] !== '' || $filters['rece
     <div>
         <div class="page-eyebrow">Inventory</div>
         <h1 class="page-title">Inbound Maklon</h1>
-        <p class="page-subtitle">Penerimaan barang/komponen dari vendor maklon. Total masuk = Qty diterima − Qty reject.</p>
+        <p class="page-subtitle">Penerimaan barang/komponen dari vendor maklon, diinput manual oleh Gudang. Total masuk = Qty diterima − Qty reject.</p>
     </div>
     <?php if (can('inbound.create')): ?>
         <div class="page-actions"><a href="<?= e(url('/inbound/create')) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Catat Inbound</a></div>
@@ -64,7 +64,7 @@ $hasFilter = $filters['q'] !== '' || $filters['vendor'] !== '' || $filters['rece
                             <div class="cell-sub d-sm-none"><?= e(fmt_date($r['actual_inbound_date'], 'Tanpa tanggal')) ?> · <?= e($r['vendor'] ?? '') ?></div>
                             <div class="cell-sub d-md-none">Qty <?= e(fmt_qty($r['quantity'])) ?><?= (int) ($r['reject_qty'] ?? 0) > 0 ? ' · reject ' . e(fmt_qty($r['reject_qty'])) : '' ?></div></td>
                         <td class="d-none d-md-table-cell small"><?= e($r['vendor'] ?? '—') ?><?= $r['receiver'] ? ' → ' . e($r['receiver']) : '' ?></td>
-                        <td class="d-none d-lg-table-cell small"><?php if ($r['po_id']): ?><a href="<?= e(url('/purchase-orders/' . $r['po_id'])) ?>"><?= e($r['po_number'] ?? $r['po_code']) ?></a><?php else: ?><span class="text-secondary"><?= e($r['po_number_legacy'] ?? '—') ?></span><?php endif; ?></td>
+                        <td class="d-none d-lg-table-cell small"><?php if ($r['po_id']): ?><?= can('purchase_orders.view') ? '<a href="' . e(url('/purchase-orders/' . $r['po_id'])) . '">' . e($r['po_number'] ?? $r['po_code']) . '</a>' : e($r['po_number'] ?? $r['po_code']) ?><?php else: ?><span class="text-secondary"><?= e($r['po_number_legacy'] ?? '—') ?></span><?php endif; ?></td>
                         <td class="num d-none d-md-table-cell"><?= e(fmt_qty($r['quantity'])) ?></td>
                         <td class="num d-none d-md-table-cell<?= (int) ($r['reject_qty'] ?? 0) > 0 ? ' text-warning-ink fw-semibold' : '' ?>"><?= e(fmt_qty($r['reject_qty'], '0')) ?></td>
                         <td class="num fw-semibold"><?= e(fmt_qty($total)) ?></td>

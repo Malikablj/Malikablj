@@ -27,7 +27,8 @@ $today = today();
             <div class="detail-meta">
                 <span class="code-chip"><?= e($product['code']) ?></span>
                 <?php if ($product['product_code']): ?><span><i class="bi bi-upc"></i><?= e($product['product_code']) ?></span><?php endif; ?>
-                <?php if ($product['category']): ?><span><i class="bi bi-tag"></i><?= e($product['category']) ?></span><?php endif; ?>
+                <span title="<?= $product['category'] ? 'Kategori manual' : 'Kelompok otomatis dari nama produk' ?>"><i class="bi bi-tag"></i><?= e($product['product_group']) ?></span>
+                <?php if ($product['source'] === 'OEF' || $product['source'] === 'Stok'): ?><span><i class="bi bi-magic"></i>Dibuat otomatis dari <?= e($product['source']) ?></span><?php endif; ?>
                 <span><i class="bi bi-rulers"></i>Satuan <?= e($product['unit']) ?></span>
             </div>
         </div>
@@ -39,7 +40,7 @@ $today = today();
             <div class="dropdown">
                 <button class="btn btn-light btn-icon" type="button" data-bs-toggle="dropdown" aria-label="Aksi lain"><i class="bi bi-three-dots"></i></button>
                 <div class="dropdown-menu dropdown-menu-end">
-                    <form method="post" action="<?= e(url($base . '/delete')) ?>" data-confirm="Hapus produk ini? Produk yang sudah dipakai di PO/stok/delivery tidak dapat dihapus.">
+                    <form method="post" action="<?= e(url($base . '/delete')) ?>" data-confirm="Hapus produk ini? Produk yang sudah dipakai di OEF/stok/delivery tidak dapat dihapus.">
                         <?= csrf_field() ?><button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Hapus produk</button>
                     </form>
                 </div>
@@ -53,17 +54,14 @@ $today = today();
 <?php endif; ?>
 
 <div class="stat-strip section-gap">
+    <div><div class="stat-label">Qty (arsip OEF)</div><div class="stat-value"><?= e(fmt_qty($product['oef_qty'], '0')) ?></div><div class="x-small text-secondary"><?= e($product['unit']) ?> · <?= (int) $product['oef_count'] ?> OEF, tanpa Cancelled</div></div>
     <?php if ($canPo): ?>
-        <div><div class="stat-label">Outstanding PO terbuka</div><div class="stat-value"><?= e(fmt_qty($product['open_outstanding'], '0')) ?></div><div class="x-small text-secondary"><?= e($product['unit']) ?></div></div>
-        <div><div class="stat-label">Baris PO</div><div class="stat-value"><?= e(fmt_qty($product['line_count'], '0')) ?></div></div>
+        <div><div class="stat-label">Outstanding OEF berjalan</div><div class="stat-value"><?= e(fmt_qty($product['open_outstanding'], '0')) ?></div><div class="x-small text-secondary"><?= e($product['unit']) ?></div></div>
         <div><div class="stat-label">Total terkirim</div><div class="stat-value"><?= e(fmt_qty($product['delivered_qty'], '0')) ?></div><div class="x-small text-secondary">delivery Delivered/Partial</div></div>
     <?php endif; ?>
     <?php if ($canStock): ?>
         <div><div class="stat-label">Stok FG</div><div class="stat-value"><?= e(fmt_qty($product['stock_fg'], '0')) ?></div>
             <div class="x-small text-secondary">Ready <?= e(fmt_qty($product['stock_ready'], '0')) ?> · WIP <?= e(fmt_qty($product['stock_wip'], '0')) ?> · Reserved <?= e(fmt_qty($product['stock_reserved'], '0')) ?></div></div>
-    <?php endif; ?>
-    <?php if ($product['capacity_per_day'] !== null): ?>
-        <div><div class="stat-label">Kapasitas / hari</div><div class="stat-value"><?= e(fmt_qty($product['capacity_per_day'], '0')) ?></div><div class="x-small text-secondary"><?= e($product['unit']) ?></div></div>
     <?php endif; ?>
 </div>
 
@@ -71,19 +69,20 @@ $today = today();
     <div class="col-xl-8 min-w-0">
         <?php if ($canPo): ?>
             <section class="surface section-gap">
-                <div class="surface-header"><div><h2 class="surface-title">Baris PO <span class="tab-count"><?= count($lines) ?></span></h2>
-                    <p class="surface-subtitle">PO terbuka ditampilkan lebih dulu. Outstanding = Order − Terkirim + Retur.</p></div></div>
+                <div class="surface-header"><div><h2 class="surface-title">Arsip OEF <span class="tab-count"><?= count($lines) ?></span></h2>
+                    <p class="surface-subtitle">OEF berjalan ditampilkan lebih dulu. Outstanding = Order − Terkirim + Retur.</p></div></div>
                 <?php if (!$lines): ?>
-                    <div class="empty-inline">Produk ini belum pernah dipesan di PO.</div>
+                    <div class="empty-inline">Produk ini belum pernah dipesan di OEF.</div>
                 <?php else: ?>
                     <div class="table-wrap">
                         <table class="table-pik table-compact">
-                            <thead><tr><th>PO · Customer</th><th class="d-none d-sm-table-cell">Status</th><th class="num d-none d-md-table-cell">Order</th><th class="num d-none d-md-table-cell">Terkirim</th><th class="num">Outstanding</th></tr></thead>
+                            <thead><tr><th>OEF · Customer</th><th class="d-none d-sm-table-cell">Status</th><th class="num d-none d-md-table-cell">Qty</th><th class="num d-none d-md-table-cell">Terkirim</th><th class="num">Outstanding</th></tr></thead>
                             <tbody>
                             <?php foreach ($lines as $l): $out = (int) $l['outstanding_qty']; ?>
                                 <tr>
-                                    <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $l['po_id'])) ?>"><?= e($l['po_number'] ?? $l['po_code']) ?></a>
+                                    <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $l['po_id'])) ?>"><?= e($l['order_number'] ?: ($l['po_number'] ?? $l['po_code'])) ?></a>
                                         <div class="cell-sub"><?= e($l['customer_name'] ?? 'Customer belum terhubung') ?> · <?= e(fmt_date($l['po_date'], 'Tanpa tanggal')) ?></div>
+                                        <?php if ($l['item_description']): ?><div class="cell-sub"><?= e(excerpt($l['item_description'], 80)) ?></div><?php endif; ?>
                                         <div class="cell-sub d-md-none">Order <?= e(fmt_qty($l['order_qty'])) ?> · Terkirim <?= e(fmt_qty($l['delivered_qty'])) ?></div>
                                         <div class="cell-sub d-sm-none"><?= status_badge($l['po_status']) ?></div></td>
                                     <td class="d-none d-sm-table-cell"><?= status_badge($l['po_status']) ?></td>

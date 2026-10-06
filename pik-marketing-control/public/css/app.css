@@ -425,6 +425,8 @@ textarea.form-control { min-height: 96px; }
 .is-negative { color: var(--pik-danger-ink); }
 .is-positive { color: var(--pik-success-ink); }
 .text-warning-ink { color: var(--pik-warning-ink) !important; }
+.text-success-ink { color: var(--pik-success-ink) !important; }
+.text-danger-ink { color: var(--pik-danger-ink) !important; }
 
 .list-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--pik-border); flex-wrap: wrap; font-size: .8125rem; color: var(--pik-muted); }
 .pagination { --bs-pagination-border-radius: 9px; --bs-pagination-font-size: .8125rem; --bs-pagination-color: var(--pik-text); --bs-pagination-border-color: var(--pik-border); --bs-pagination-active-bg: var(--pik-text); --bs-pagination-active-border-color: var(--pik-text); --bs-pagination-hover-bg: #F2F2F4; --bs-pagination-focus-box-shadow: 0 0 0 4px rgba(0, 113, 227, .12); margin: 0; gap: 4px; }
@@ -618,6 +620,33 @@ textarea.form-control { min-height: 96px; }
   .table-wrap { overflow: visible !important; }
 }
 .print-only { display: none; }
-.finance-card { color: inherit; transition: box-shadow .15s ease; }
-.finance-card:hover { color: inherit; box-shadow: 0 4px 18px rgba(0, 0, 0, .06); }
 .report-table td:first-child { overflow-wrap: anywhere; }
+
+/* Order Entry Form: blok produk */
+.oef-lines { counter-reset: oefline; }
+.oef-line { counter-increment: oefline; border: 1px solid var(--pik-border); border-radius: var(--pik-radius); padding: 10px 14px 14px; background: var(--pik-surface-2); }
+.oef-line-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.oef-line-no::before { content: "Produk " counter(oefline); font-weight: 600; font-size: .8125rem; color: var(--pik-muted); }
+
+/* Panel keputusan (review PPIC, penyelesaian komplain) */
+.decision-panel { border-radius: var(--pik-radius-lg); border: 1px solid var(--pik-border); background: var(--pik-surface); padding: 18px 20px; }
+.decision-panel.is-pending { border-color: rgba(255, 159, 10, .45); background: rgba(255, 159, 10, .05); }
+.decision-panel.is-approved { border-color: rgba(52, 199, 89, .45); background: rgba(52, 199, 89, .06); }
+.decision-panel.is-rejected { border-color: rgba(255, 59, 48, .4); background: rgba(255, 59, 48, .05); }
+.decision-title { font-weight: 650; font-size: 1rem; margin-bottom: 2px; }
+.decision-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.decision-actions .btn { min-width: 170px; font-weight: 600; }
+.btn-success { --bs-btn-bg: #1E8E3E; --bs-btn-border-color: #1E8E3E; --bs-btn-hover-bg: #187A34; --bs-btn-hover-border-color: #187A34; --bs-btn-active-bg: #146B2D; --bs-btn-active-border-color: #146B2D; }
+.btn-danger { --bs-btn-bg: #D92D20; --bs-btn-border-color: #D92D20; --bs-btn-hover-bg: #BF261A; --bs-btn-hover-border-color: #BF261A; --bs-btn-active-bg: #A82016; --bs-btn-active-border-color: #A82016; }
+
+/* Bukti komplain */
+.evidence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.evidence-item { border: 1px solid var(--pik-border); border-radius: var(--pik-radius); overflow: hidden; background: var(--pik-surface-2); display: flex; flex-direction: column; min-width: 0; }
+.evidence-thumb { display: block; aspect-ratio: 4 / 3; background: #EFEFF2; overflow: hidden; }
+.evidence-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.evidence-thumb.is-pdf { display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--pik-danger-ink); }
+.evidence-meta { padding: 6px 8px; font-size: .75rem; display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.evidence-meta .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* Stok per kelompok */
+.group-row td { background: var(--pik-surface-2); font-weight: 650; font-size: .8125rem; color: var(--pik-muted); text-transform: none; }

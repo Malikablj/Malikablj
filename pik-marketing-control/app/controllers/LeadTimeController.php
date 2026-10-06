@@ -110,7 +110,7 @@ final class LeadTimeController extends Controller
             'status'        => ['required', ['in', LeadTime::STATUSES]],
             'notes'         => 'nullable|string|max:2000',
         ], [
-            'po_line_id' => 'Baris PO', 'quantity' => 'Qty', 'delivery_date' => 'Estimasi tanggal delivery', 'status' => 'Status', 'notes' => 'Catatan',
+            'po_line_id' => 'Produk OEF', 'quantity' => 'Qty', 'delivery_date' => 'Estimasi tanggal delivery', 'status' => 'Status', 'notes' => 'Catatan',
         ]);
     }
 

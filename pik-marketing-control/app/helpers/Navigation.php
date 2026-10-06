@@ -22,19 +22,16 @@ final class Navigation
                 ['label' => 'Follow Up', 'icon' => 'bi-calendar2-check', 'path' => '/follow-ups', 'permission' => 'followups.view'],
             ]],
             ['label' => 'Operations', 'items' => [
-                ['label' => 'Purchase Orders', 'icon' => 'bi-receipt', 'path' => '/purchase-orders', 'permission' => 'purchase_orders.view'],
+                ['label' => 'Order Entry Form', 'icon' => 'bi-receipt', 'path' => '/purchase-orders', 'permission' => 'purchase_orders.view'],
                 ['label' => 'Deliveries', 'icon' => 'bi-truck', 'path' => '/deliveries', 'permission' => 'deliveries.view'],
-                ['label' => 'Returns', 'icon' => 'bi-arrow-return-left', 'path' => '/returns', 'permission' => 'returns.view'],
+                ['label' => 'Retur & Komplain', 'icon' => 'bi-chat-left-dots', 'path' => '/returns', 'permission' => 'returns.view'],
             ]],
             ['label' => 'Inventory', 'items' => [
                 ['label' => 'Products', 'icon' => 'bi-box-seam', 'path' => '/products', 'permission' => 'products.view'],
                 ['label' => 'Stock', 'icon' => 'bi-boxes', 'path' => '/stock', 'permission' => 'stock.view'],
                 ['label' => 'Lead Time', 'icon' => 'bi-hourglass-split', 'path' => '/lead-times', 'permission' => 'leadtime.view'],
                 ['label' => 'Inbound Maklon', 'icon' => 'bi-box-arrow-in-down', 'path' => '/inbound', 'permission' => 'inbound.view'],
-            ]],
-            ['label' => 'Finance', 'items' => [
-                ['label' => 'Invoice & Payment', 'icon' => 'bi-cash-coin', 'path' => '/invoices', 'permission' => 'finance.view'],
-                ['label' => 'PO Financials', 'icon' => 'bi-graph-up-arrow', 'path' => '/po-financials', 'permission' => 'finance.view'],
+                ['label' => 'Inbound Supplier', 'icon' => 'bi-truck-flatbed', 'path' => '/inbound-supplier', 'permission' => 'inbound_supplier.view'],
             ]],
             ['label' => 'Insight', 'items' => [
                 ['label' => 'Reports', 'icon' => 'bi-bar-chart-line', 'path' => '/reports', 'permission' => 'reports.view'],
@@ -82,7 +79,12 @@ final class Navigation
             ['label' => 'Customers', 'icon' => 'bi-buildings', 'path' => '/customers', 'permission' => 'customers.view'],
             ['label' => 'Leads', 'icon' => 'bi-kanban', 'path' => '/leads', 'permission' => 'leads.view'],
             ['label' => 'Follow Up', 'icon' => 'bi-calendar2-check', 'path' => '/follow-ups', 'permission' => 'followups.view'],
-            ['label' => 'PO', 'icon' => 'bi-receipt', 'path' => '/purchase-orders', 'permission' => 'purchase_orders.view'],
+            ['label' => 'OEF', 'icon' => 'bi-receipt', 'path' => '/purchase-orders', 'permission' => 'purchase_orders.view'],
+            ['label' => 'Delivery', 'icon' => 'bi-truck', 'path' => '/deliveries', 'permission' => 'deliveries.view'],
+            ['label' => 'Komplain', 'icon' => 'bi-chat-left-dots', 'path' => '/returns', 'permission' => 'returns.view'],
+            ['label' => 'Stok', 'icon' => 'bi-boxes', 'path' => '/stock', 'permission' => 'stock.view'],
+            ['label' => 'Inbound', 'icon' => 'bi-box-arrow-in-down', 'path' => '/inbound', 'permission' => 'inbound.view'],
+            ['label' => 'Supplier', 'icon' => 'bi-truck-flatbed', 'path' => '/inbound-supplier', 'permission' => 'inbound_supplier.view'],
             ['label' => 'Reports', 'icon' => 'bi-bar-chart-line', 'path' => '/reports', 'permission' => 'reports.view'],
         ];
         $items = array_values(array_filter($candidates, static fn ($i) => Auth::can($i['permission'])));

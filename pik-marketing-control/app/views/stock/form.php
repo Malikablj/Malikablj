@@ -6,7 +6,7 @@ use App\Helpers\Form;
  * @var array<string,mixed>|null $row
  * @var array<string,string> $errors
  * @var array<string,mixed> $preset
- * @var array<int,string> $products
+ * @var list<string> $products saran nama produk
  * @var array<string,string> $types
  * @var list<string> $statuses
  * @var list<array<string,mixed>> $issues
@@ -32,7 +32,7 @@ $cancel = $return !== '' ? to($return) : url('/stock');
                     <?php if ($legacyUnlinked): ?>
                         <div class="callout callout-warning small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>
                             Entri stok legacy ini belum terhubung ke master produk<?= $row['product_legacy'] ? ' (nama di spreadsheet: <strong>' . e($row['product_legacy']) . '</strong>)' : '' ?>.
-                            Pilih produk yang sesuai agar stok ikut dihitung per produk.</div>
+                            Ketik nama produk yang sesuai agar stok ikut dihitung per produk.</div>
                     <?php endif; ?>
                     <?php foreach ($issues as $i): ?>
                         <div class="small text-secondary"><?= status_badge($i['resolution_status']) ?> <strong><?= e($i['issue_type']) ?></strong> — <?= e(excerpt($i['description'] ?? '', 160)) ?></div>
@@ -41,8 +41,9 @@ $cancel = $return !== '' ? to($return) : url('/stock');
             <?php endif; ?>
             <div class="form-section">
                 <div class="row g-3">
-                    <?= Form::select('product_id', 'Produk', $products, old('product_id', $record), $errors, [
-                        'required' => !$legacyUnlinked, 'placeholder' => '— Pilih produk —', 'searchable' => 'Cari nama atau kode produk…',
+                    <?= Form::input('product_name', 'Nama produk', old('product_name', $record), $errors, [
+                        'required' => !$legacyUnlinked, 'maxlength' => 190, 'list' => 'product-suggestions', 'autocomplete' => 'off', 'placeholder' => 'Ketik nama produk',
+                        'help' => 'Pilih dari saran bila sudah ada. Nama baru otomatis ditambahkan ke daftar produk dan dikelompokkan (mis. Botol, Pot / Jar, Cap / Tutup).',
                     ]) ?>
                     <?= Form::select('stock_type', 'Tipe stok', $types, old('stock_type', $record, 'FG'), $errors, ['required' => true, 'col' => 'col-md-6']) ?>
                     <?= Form::input('status', 'Status / lokasi', old('status', $record), $errors, ['maxlength' => 40, 'col' => 'col-md-6', 'list' => 'stock-status-list', 'placeholder' => 'mis. Ready, QC, Gudang A']) ?>
@@ -56,6 +57,7 @@ $cancel = $return !== '' ? to($return) : url('/stock');
                     <?= Form::textarea('notes', 'Catatan', old('notes', $record), $errors, ['rows' => 2, 'maxlength' => 2000]) ?>
                 </div>
                 <datalist id="stock-status-list"><?php foreach ($statuses as $s): ?><option value="<?= e($s) ?>"><?php endforeach; ?></datalist>
+                <datalist id="product-suggestions"><?php foreach ($products as $p): ?><option value="<?= e($p) ?>"><?php endforeach; ?></datalist>
             </div>
             <div class="form-actions">
                 <?php if ($isEdit && can('stock.delete')): ?>

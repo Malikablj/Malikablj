@@ -34,16 +34,16 @@ $cancel = $isEdit ? url('/products/' . $product['id']) : url('/products');
                     <?= Form::input('name', 'Nama produk', old('name', $product), $errors, ['required' => true, 'maxlength' => 190, 'autofocus' => !$isEdit]) ?>
                     <?= Form::input('product_code', 'Kode produk', old('product_code', $product), $errors, ['maxlength' => 60, 'col' => 'col-md-4', 'placeholder' => 'mis. [BTNEA80]']) ?>
                     <?= Form::input('variant', 'Varian', old('variant', $product), $errors, ['maxlength' => 255, 'col' => 'col-md-8', 'placeholder' => 'mis. warna, ukuran, finishing']) ?>
-                    <?= Form::input('category', 'Kategori', old('category', $product), $errors, ['maxlength' => 100, 'col' => 'col-md-4', 'list' => 'category-list', 'placeholder' => 'mis. Botol, Cap, Pump']) ?>
-                    <?= Form::input('unit', 'Satuan', old('unit', $product, 'pcs'), $errors, ['required' => true, 'maxlength' => 20, 'col' => 'col-md-4', 'list' => 'unit-list']) ?>
-                    <?= Form::input('capacity_per_day', 'Kapasitas produksi per hari', old('capacity_per_day', $product), $errors, ['type' => 'number', 'min' => 0, 'step' => 1, 'col' => 'col-md-4', 'suffix' => 'pcs/hari']) ?>
+                    <?= Form::input('category', 'Kelompok / kategori', old('category', $product), $errors, ['maxlength' => 100, 'col' => 'col-md-6', 'list' => 'category-list',
+                        'placeholder' => 'Kosongkan = otomatis dari nama', 'help' => 'Bila kosong, kelompok ditentukan otomatis dari nama produk (mis. Botol, Pot / Jar, Cap / Tutup).']) ?>
+                    <?= Form::input('unit', 'Satuan', old('unit', $product, 'pcs'), $errors, ['required' => true, 'maxlength' => 20, 'col' => 'col-md-6', 'list' => 'unit-list']) ?>
                 </div>
                 <datalist id="category-list"><?php foreach ($categories as $c): ?><option value="<?= e($c) ?>"><?php endforeach; ?></datalist>
                 <datalist id="unit-list"><?php foreach ($units as $u): ?><option value="<?= e($u) ?>"><?php endforeach; ?></datalist>
             </div>
             <div class="form-section">
                 <div class="row g-3">
-                    <?= Form::checkbox('is_active', 'Produk aktif (tampil di pilihan PO baru)', old('is_active', $product, '1') === '1', $errors, ['help' => 'Nonaktifkan produk yang tidak dijual lagi. Data historis tetap tersimpan.']) ?>
+                    <?= Form::checkbox('is_active', 'Produk aktif (tampil di saran OEF & stok)', old('is_active', $product, '1') === '1', $errors, ['help' => 'Nonaktifkan produk yang tidak dijual lagi. Data historis tetap tersimpan.']) ?>
                     <?= Form::textarea('notes', 'Catatan', old('notes', $product), $errors, ['rows' => 3, 'maxlength' => 5000]) ?>
                 </div>
             </div>

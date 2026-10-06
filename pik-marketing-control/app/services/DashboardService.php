@@ -36,7 +36,42 @@ final class DashboardService
              WHERE po.status IN ('Open','On Process','Partial')"
         ) ?? [];
 
+        $oef = Database::fetch("SELECT COALESCE(SUM(review_status = 'Pending' AND status <> 'Cancelled'), 0) AS pending FROM purchase_orders") ?? [];
+        $week = date('Y-m-d', strtotime($today . ' +7 days'));
+        $deliveries = Database::fetch(
+            "SELECT COALESCE(SUM(status IN ('Scheduled','On Delivery') AND delivery_date BETWEEN :d1 AND :d2), 0) AS week,
+                    COALESCE(SUM(status IN ('Scheduled','On Delivery') AND (sj_number IS NULL OR sj_number = '')), 0) AS without_sj
+             FROM deliveries",
+            ['d1' => $today, 'd2' => $week]
+        ) ?? [];
+        $complaints = (int) Database::fetchValue("SELECT COUNT(*) FROM returns WHERE resolution_status = 'Open'");
+        $stock = Database::fetch(
+            "SELECT COALESCE(SUM(CASE WHEN stock_type = 'Ready' THEN quantity END), 0) AS ready, COALESCE(SUM(CASE WHEN stock_type = 'FG' THEN quantity END), 0) AS fg,
+                    COALESCE(SUM(CASE WHEN stock_type = 'WIP' THEN quantity END), 0) AS wip
+             FROM stock WHERE product_id IS NOT NULL"
+        ) ?? [];
+        $monthFrom = date('Y-m-01', strtotime($today));
+        $inbound = Database::fetch(
+            'SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE(total_in, quantity - COALESCE(reject_qty, 0))), 0) AS qty FROM inbound_maklon WHERE actual_inbound_date >= :m',
+            ['m' => $monthFrom]
+        ) ?? [];
+        $supplier = Database::fetch(
+            'SELECT COUNT(*) AS n, COALESCE(SUM(quantity - reject_qty), 0) AS qty FROM inbound_supplier WHERE receive_date >= :m',
+            ['m' => $monthFrom]
+        ) ?? [];
+
         return [
+            'oef_pending'        => (int) ($oef['pending'] ?? 0),
+            'deliveries_week'    => (int) ($deliveries['week'] ?? 0),
+            'deliveries_no_sj'   => (int) ($deliveries['without_sj'] ?? 0),
+            'complaints_open'    => $complaints,
+            'stock_ready'        => (int) ($stock['ready'] ?? 0),
+            'stock_fg'           => (int) ($stock['fg'] ?? 0),
+            'stock_wip'          => (int) ($stock['wip'] ?? 0),
+            'inbound_month'      => (int) ($inbound['n'] ?? 0),
+            'inbound_month_qty'  => (int) ($inbound['qty'] ?? 0),
+            'supplier_month'     => (int) ($supplier['n'] ?? 0),
+            'supplier_month_qty' => (int) ($supplier['qty'] ?? 0),
             'customers_total'    => (int) ($customers['total'] ?? 0),
             'customers_active'   => (int) ($customers['active'] ?? 0),
             'leads_open'         => (int) ($leads['open_count'] ?? 0),
@@ -83,11 +118,44 @@ final class DashboardService
     public static function recentOrders(int $limit = 6): array
     {
         return Database::fetchAll(
-            'SELECT p.id, p.code, p.po_number, p.po_date, p.status, c.name AS customer_name,
+            'SELECT p.id, p.code, p.order_number, p.po_number, p.po_date, p.status, p.review_status, p.requested_delivery_date, c.name AS customer_name,
                     COALESCE(t.total_qty, 0) AS total_qty, COALESCE(t.outstanding_qty, 0) AS outstanding_qty
              FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN (' . PoLine::poTotalsSql() . ') t ON t.po_id = p.id
              ORDER BY p.po_date IS NULL, p.po_date DESC, p.id DESC LIMIT ' . max(1, $limit)
+        );
+    }
+
+    /** @return list<array<string,mixed>> OEF menunggu review PPIC (paling lama dulu) */
+    public static function pendingOef(int $limit = 8): array
+    {
+        return Database::fetchAll(
+            "SELECT p.id, p.code, p.order_number, p.po_number, p.po_date, p.requested_delivery_date, p.sales_name, p.created_at, c.name AS customer_name,
+                    COALESCE(t.total_qty, 0) AS total_qty, COALESCE(t.line_count, 0) AS line_count
+             FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
+             LEFT JOIN (" . PoLine::poTotalsSql() . ") t ON t.po_id = p.id
+             WHERE p.review_status = 'Pending' AND p.status <> 'Cancelled'
+             ORDER BY p.created_at ASC, p.id ASC LIMIT " . max(1, $limit)
+        );
+    }
+
+    /** @return list<array<string,mixed>> retur & komplain yang belum ada hasilnya */
+    public static function openComplaints(int $limit = 5): array
+    {
+        return Database::fetchAll(
+            "SELECT r.id, r.code, r.case_type, r.return_date, r.reason, c.name AS customer_name, pr.name AS product_name
+             FROM returns r LEFT JOIN purchase_orders p ON p.id = r.po_id LEFT JOIN customers c ON c.id = p.customer_id
+             LEFT JOIN products pr ON pr.id = r.product_id
+             WHERE r.resolution_status = 'Open' ORDER BY r.return_date IS NULL, r.return_date DESC, r.id DESC LIMIT " . max(1, $limit)
+        );
+    }
+
+    /** @return list<array<string,mixed>> penerimaan inbound maklon terakhir */
+    public static function recentInbound(int $limit = 5): array
+    {
+        return Database::fetchAll(
+            'SELECT id, code, sj_number, vendor, component_name, actual_inbound_date, COALESCE(total_in, quantity - COALESCE(reject_qty, 0)) AS total_in
+             FROM inbound_maklon ORDER BY actual_inbound_date IS NULL, actual_inbound_date DESC, id DESC LIMIT ' . max(1, $limit)
         );
     }
 }

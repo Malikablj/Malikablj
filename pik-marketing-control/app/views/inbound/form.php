@@ -40,7 +40,7 @@ $cancel = $isEdit ? url('/inbound/' . $row['id']) : url('/inbound');
                 <div class="form-section-title">Barang</div>
                 <div class="form-section-desc">Isi nama komponen, atau pilih produk bila barang ada di master produk.</div>
                 <div class="row g-3">
-                    <?= Form::select('po_id', 'PO terkait (opsional)', $pos, old('po_id', $record), $errors, ['placeholder' => '— Tanpa PO —', 'searchable' => 'Cari nomor PO atau customer…', 'col' => 'col-md-6']) ?>
+                    <?= Form::select('po_id', 'OEF / PO terkait (opsional)', $pos, old('po_id', $record), $errors, ['placeholder' => '— Tanpa OEF —', 'searchable' => 'Cari nomor PO atau customer…', 'col' => 'col-md-6']) ?>
                     <?= Form::select('product_id', 'Produk (opsional)', $products, old('product_id', $record), $errors, ['placeholder' => '— Tidak dipilih —', 'searchable' => 'Cari produk…', 'col' => 'col-md-6']) ?>
                     <?= Form::input('component_name', 'Nama komponen', old('component_name', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-8']) ?>
                     <?= Form::input('type', 'Tipe', old('type', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-4', 'list' => 'type-list']) ?>

@@ -56,7 +56,7 @@ $today = today();
     <?php if ($rows->isEmpty()): ?>
         <div class="empty-state"><i class="bi bi-hourglass-split"></i>
             <div class="empty-title"><?= $hasFilter ? 'Tidak ada lead time yang cocok' : 'Belum ada estimasi lead time' ?></div>
-            <p>Estimasi dibuat per baris PO (PO + produk) dari menu ini atau halaman PO.</p></div>
+            <p>Estimasi dibuat per produk OEF dari menu ini atau halaman OEF.</p></div>
     <?php else: ?>
         <div class="table-wrap">
             <table class="table-pik">
