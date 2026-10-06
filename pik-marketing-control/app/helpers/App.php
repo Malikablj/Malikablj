@@ -22,6 +22,9 @@ final class App
 
         try {
             Session::start();
+            if (!self::databaseReady()) {
+                return;
+            }
             self::runAutomation();
             $router = new Router();
             (require APP_ROOT . '/app/routes.php')($router);
@@ -35,6 +38,33 @@ final class App
             Logger::error(get_class($e) . ': ' . $e->getMessage(), ['file' => $e->getFile() . ':' . $e->getLine(), 'path' => Request::path()]);
             self::renderError(500, 'Terjadi kesalahan pada server. Kejadian ini sudah dicatat di log.', $e);
         }
+    }
+
+    /**
+     * Kode baru sudah di-upload tetapi migrasi database belum dijalankan: jangan
+     * biarkan halaman gagal dengan error SQL. Admin diarahkan ke halaman
+     * Pembaruan database; user lain melihat pesan pemeliharaan.
+     */
+    private static function databaseReady(): bool
+    {
+        try {
+            if (Migrator::isCurrent()) {
+                return true;
+            }
+        } catch (PDOException) {
+            return true; // koneksi/skema bermasalah: biarkan alur biasa menampilkan errornya
+        }
+        if (in_array(Request::path(), ['/login', '/logout', '/setup', '/settings/database'], true)) {
+            return true;
+        }
+        if (!Auth::check()) {
+            redirect('/login');
+        }
+        if (Auth::can('settings.edit')) {
+            redirect('/settings/database');
+        }
+        self::renderError(503, 'Aplikasi sedang diperbarui oleh Admin. Silakan coba lagi beberapa menit lagi.');
+        return false;
     }
 
     /**

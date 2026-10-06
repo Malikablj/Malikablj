@@ -25,6 +25,8 @@ foreach ($lines as $l) {
 }
 $unlinked = array_filter($deliveries, static fn ($d) => $d['po_line_id'] === null);
 $canProduct = can('products.view');
+$hasPrices = array_filter($lines, static fn ($l) => $l['unit_price'] !== null) !== [];
+$hasValues = $po['grand_total'] !== null || $po['subtotal'] !== null || $hasPrices;
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/purchase-orders')) ?>">Purchase Orders</a><i class="bi bi-chevron-right"></i><span><?= e($po['po_number'] ?? $po['code']) ?></span></div>
 <div class="detail-hero">
@@ -39,6 +41,8 @@ $canProduct = can('products.view');
                 <span><i class="bi bi-calendar3"></i><?= e(fmt_date($po['po_date'], 'Tanpa tanggal')) ?></span>
                 <?php if ($po['payment_term']): ?><span><i class="bi bi-credit-card"></i><?= e($po['payment_term']) ?></span><?php endif; ?>
                 <?php if ($po['legacy_status'] && $po['legacy_status'] !== $po['status']): ?><span title="Status di spreadsheet asli"><i class="bi bi-clock-history"></i>Legacy: <?= e($po['legacy_status']) ?></span><?php endif; ?>
+                <?php if ($po['import_status'] === 'NEEDS_REVIEW'): ?><span class="badge-soft badge-soft-warning no-dot" title="Data dari import database PO masih punya catatan yang perlu ditinjau"><i class="bi bi-exclamation-triangle me-1"></i>Perlu review</span><?php endif; ?>
+                <?php if ($po['doc_url']): ?><span><i class="bi bi-file-earmark-pdf"></i><?= external_link($po['doc_url'], 'Dokumen PO') ?></span><?php endif; ?>
             </div>
         </div>
     </div>
@@ -70,6 +74,27 @@ $canProduct = can('products.view');
         <div class="x-small text-secondary">Order − Terkirim + Retur</div></div>
 </div>
 
+<?php if ($hasValues): ?>
+    <section class="surface section-gap">
+        <div class="surface-header"><div><h2 class="surface-title">Nilai PO</h2>
+            <p class="surface-subtitle"><?= e($po['currency'] ?? 'IDR') ?><?= $po['price_includes_tax'] ? ' · harga satuan sudah termasuk PPN' : '' ?><?= $po['data_confidence'] ? ' · confidence digitalisasi ' . e($po['data_confidence']) : '' ?></p></div></div>
+        <div class="stat-strip stat-strip-flat">
+            <div><div class="stat-label">Subtotal (DPP)</div><div class="stat-value stat-value-sm"><?= e(fmt_money($po['subtotal'])) ?></div></div>
+            <?php if ((float) ($po['discount_amount'] ?? 0) > 0): ?><div><div class="stat-label">Diskon</div><div class="stat-value stat-value-sm">− <?= e(fmt_money($po['discount_amount'])) ?></div></div><?php endif; ?>
+            <div><div class="stat-label">PPN</div><div class="stat-value stat-value-sm"><?= e(fmt_money($po['tax_amount'], $po['subtotal'] !== null ? 'tidak tertulis' : '—')) ?></div></div>
+            <?php if ((float) ($po['shipping_cost'] ?? 0) > 0): ?><div><div class="stat-label">Ongkos kirim</div><div class="stat-value stat-value-sm"><?= e(fmt_money($po['shipping_cost'])) ?></div></div><?php endif; ?>
+            <div><div class="stat-label">Grand total</div><div class="stat-value stat-value-sm"><?= e(fmt_money($po['grand_total'], 'belum ada')) ?></div></div>
+        </div>
+        <?php if ($po['requested_delivery_date'] || $po['contact_person'] || $po['delivery_address']): ?>
+            <dl class="dl-single small surface-pad border-top mb-0">
+                <?php if ($po['requested_delivery_date']): ?><dt>Tanggal kirim diminta</dt><dd><?= e(fmt_date($po['requested_delivery_date'])) ?></dd><?php endif; ?>
+                <?php if ($po['contact_person']): ?><dt>Contact person</dt><dd><?= e($po['contact_person']) ?></dd><?php endif; ?>
+                <?php if ($po['delivery_address']): ?><dt>Alamat kirim</dt><dd class="text-break"><?= nl2br(e($po['delivery_address'])) ?></dd><?php endif; ?>
+            </dl>
+        <?php endif; ?>
+    </section>
+<?php endif; ?>
+
 <?php if ($unlinked || $issues): ?>
     <div class="callout callout-warning section-gap small">
         <i class="bi bi-exclamation-triangle me-1"></i>
@@ -83,7 +108,9 @@ $canProduct = can('products.view');
     <div class="surface-header"><div><h2 class="surface-title">Baris produk</h2><p class="surface-subtitle">Delivered hanya menghitung delivery berstatus Delivered/Partial yang terhubung ke baris.</p></div></div>
     <div class="table-wrap">
         <table class="table-pik">
-            <thead><tr><th>Produk</th><th class="num d-none d-md-table-cell">Order</th><th class="num d-none d-md-table-cell">Terkirim</th><th class="num d-none d-md-table-cell">Retur</th><th class="num">Outstanding</th>
+            <thead><tr><th>Produk</th><th class="num d-none d-md-table-cell">Order</th>
+                <?php if ($hasPrices): ?><th class="num d-none d-lg-table-cell">Harga satuan</th><th class="num d-none d-lg-table-cell">Subtotal</th><?php endif; ?>
+                <th class="num d-none d-md-table-cell">Terkirim</th><th class="num d-none d-md-table-cell">Retur</th><th class="num">Outstanding</th>
                 <?php if ($hasLegacy): ?><th class="num d-none d-xl-table-cell" title="Nilai di spreadsheet asli">Outstanding legacy</th><?php endif; ?>
                 <th class="col-actions"></th></tr></thead>
             <tbody>
@@ -92,8 +119,14 @@ $canProduct = can('products.view');
                     <td><?php if ($canProduct): ?><a class="cell-title" href="<?= e(url('/products/' . $l['product_id'])) ?>"><?= e($l['product_name']) ?></a><?php else: ?><span class="cell-title"><?= e($l['product_name']) ?></span><?php endif; ?>
                         <div class="cell-sub"><?= e(trim(($l['product_code'] ?? '') . ' ' . ($l['variant'] ?? ''))) ?: '<span class="code-chip">' . e($l['code']) . '</span>' ?>
                             <?= $l['remark'] ? ' · ' . e($l['remark']) : '' ?></div>
-                        <div class="cell-sub d-md-none">Order <?= e(fmt_qty($l['order_qty'])) ?> · Terkirim <?= e(fmt_qty($l['delivered_qty'])) ?><?= (int) $l['return_qty'] > 0 ? ' · Retur ' . e(fmt_qty($l['return_qty'])) : '' ?></div></td>
-                    <td class="num d-none d-md-table-cell"><?= e(fmt_qty($l['order_qty'])) ?></td>
+                        <?php if ($l['item_code'] && $l['item_code'] !== ($l['product_code'] ?? null)): ?><div class="cell-sub">Kode di PO: <?= e($l['item_code']) ?></div><?php endif; ?>
+                        <div class="cell-sub d-md-none">Order <?= e(fmt_qty($l['order_qty'])) ?> · Terkirim <?= e(fmt_qty($l['delivered_qty'])) ?><?= (int) $l['return_qty'] > 0 ? ' · Retur ' . e(fmt_qty($l['return_qty'])) : '' ?></div>
+                        <?php if ($l['unit_price'] !== null): ?><div class="cell-sub d-lg-none"><?= e(fmt_money($l['unit_price'])) ?> / <?= e($l['unit'] ?? 'pcs') ?> · subtotal <?= e(fmt_money($l['line_subtotal'])) ?></div><?php endif; ?></td>
+                    <td class="num d-none d-md-table-cell"><?= e(fmt_qty($l['order_qty'])) ?><?= $l['unit'] ? '<div class="x-small text-secondary">' . e($l['unit']) . '</div>' : '' ?></td>
+                    <?php if ($hasPrices): ?>
+                        <td class="num d-none d-lg-table-cell nowrap"><?= e(fmt_money($l['unit_price'])) ?></td>
+                        <td class="num d-none d-lg-table-cell nowrap"><?= e(fmt_money($l['line_subtotal'])) ?></td>
+                    <?php endif; ?>
                     <td class="num d-none d-md-table-cell"><?= e(fmt_qty($l['delivered_qty'])) ?></td>
                     <td class="num d-none d-md-table-cell"><?= e(fmt_qty($l['return_qty'])) ?></td>
                     <td class="num fw-semibold<?= $out < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($out)) ?><?= $out < 0 ? '<div class="x-small">over delivery</div>' : '' ?></td>
@@ -113,10 +146,12 @@ $canProduct = can('products.view');
         <form class="surface-footer" method="post" action="<?= e(url($base . '/lines')) ?>">
             <?= csrf_field() ?>
             <div class="row g-2 align-items-center">
-                <div class="col-md-6"><select class="form-select" name="product_id" required aria-label="Produk" data-searchable="Cari produk…"><option value="">+ Tambah produk ke PO…</option><?= Form::options($products, null) ?></select></div>
+                <div class="col-md-4"><select class="form-select" name="product_id" required aria-label="Produk" data-searchable="Cari produk…"><option value="">+ Tambah produk ke PO…</option><?= Form::options($products, null) ?></select></div>
                 <div class="col-6 col-md-2"><input type="number" class="form-control" name="order_qty" min="1" step="1" placeholder="Qty" required aria-label="Qty"></div>
+                <div class="col-6 col-md-1"><input type="text" class="form-control" name="unit" maxlength="20" placeholder="pcs" aria-label="Satuan"></div>
+                <div class="col-6 col-md-2"><input type="text" class="form-control" name="unit_price" inputmode="decimal" placeholder="Harga satuan" aria-label="Harga satuan"></div>
                 <div class="col-6 col-md-2"><input type="text" class="form-control" name="remark" maxlength="500" placeholder="Catatan" aria-label="Catatan"></div>
-                <div class="col-md-2 d-grid"><button class="btn btn-light" type="submit"><i class="bi bi-plus-lg"></i> Tambah</button></div>
+                <div class="col-md-1 d-grid"><button class="btn btn-light" type="submit" aria-label="Tambah baris"><i class="bi bi-plus-lg"></i></button></div>
             </div>
         </form>
     <?php endif; ?>
@@ -206,7 +241,7 @@ $canProduct = can('products.view');
         <div class="surface-header"><h2 class="surface-title">Finance</h2>
             <?php if (can('finance.create')): ?><div class="d-flex gap-2 flex-wrap">
                 <a class="btn btn-light btn-sm" href="<?= e(url('/invoices/create', ['po_id' => $id])) ?>"><i class="bi bi-plus-lg"></i> Invoice</a>
-                <a class="btn btn-light btn-sm" href="<?= e(url('/po-financials/create', ['po_id' => $id])) ?>"><i class="bi bi-plus-lg"></i> Nilai PO</a></div><?php endif; ?></div>
+                <a class="btn btn-light btn-sm" href="<?= e(url('/po-financials/create', ['po_id' => $id])) ?>"><i class="bi bi-plus-lg"></i> PO Financial</a></div><?php endif; ?></div>
         <?php if (!$invoices && !$financials): ?><div class="empty-inline">Belum ada invoice atau nilai PO untuk PO ini.</div><?php endif; ?>
         <?php if ($financials): ?>
             <div class="table-wrap">

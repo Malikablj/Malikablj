@@ -150,6 +150,8 @@ function reset_database(): void
     $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
     SqlFile::run(APP_ROOT . '/database/schema.sql');
     SqlFile::run(APP_ROOT . '/database/seed.sql');
+    App\Helpers\Migrator::reset();
+    App\Helpers\Migrator::run();
 }
 
 final class HttpResponse

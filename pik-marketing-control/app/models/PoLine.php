@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Helpers\Database;
+use App\Helpers\Number;
 
 /**
  * Baris PO (produk + qty order).
@@ -57,6 +58,33 @@ final class PoLine extends Model
                 FROM (' . self::totalsSql() . ') t GROUP BY t.po_id';
     }
 
+    /**
+     * Subtotal (DPP) baris: qty × harga satuan; bila harga sudah termasuk PPN,
+     * dibagi (1 + tarif PPN). Tarif = tarif baris, atau Settings › Tarif PPN.
+     */
+    public static function subtotalFor(int $qty, ?string $unitPrice, bool $includesTax, ?string $taxRate): ?string
+    {
+        if ($unitPrice === null || $unitPrice === '') {
+            return null;
+        }
+        $gross = $qty * Number::toCents($unitPrice);
+        if ($includesTax) {
+            $rate = $taxRate !== null && $taxRate !== '' ? (float) $taxRate : ((float) (Setting::get('ppn_rate') ?? '11')) / 100;
+            $gross = (int) round($gross / (1 + $rate));
+        }
+        return Number::fromCents($gross);
+    }
+
+    /** Hitung ulang subtotal semua baris berharga di PO (mis. setelah status "termasuk PPN" diubah). */
+    public static function recalcSubtotals(int $poId): void
+    {
+        $includesTax = (bool) Database::fetchValue('SELECT price_includes_tax FROM purchase_orders WHERE id = :id', ['id' => $poId]);
+        foreach (Database::fetchAll('SELECT id, order_qty, unit_price, tax_rate FROM po_lines WHERE po_id = :id AND unit_price IS NOT NULL', ['id' => $poId]) as $l) {
+            Database::update('po_lines', ['line_subtotal' => self::subtotalFor((int) $l['order_qty'], (string) $l['unit_price'], $includesTax, $l['tax_rate'] !== null ? (string) $l['tax_rate'] : null)],
+                'id = :id', ['id' => $l['id']]);
+        }
+    }
+
     /** Jumlah delivery & retur yang merujuk line ini. */
     public static function dependents(int $id): int
     {
@@ -88,7 +116,7 @@ final class PoLine extends Model
     public static function findFull(int $id): ?array
     {
         return Database::fetch(
-            'SELECT pl.*, p.po_number, p.code AS po_code, p.status AS po_status, p.customer_id, c.name AS customer_name, pr.name AS product_name,
+            'SELECT pl.*, p.po_number, p.code AS po_code, p.status AS po_status, p.customer_id, p.price_includes_tax, c.name AS customer_name, pr.name AS product_name,
                     t.delivered_qty, t.return_qty, t.outstanding_qty
              FROM po_lines pl JOIN purchase_orders p ON p.id = pl.po_id LEFT JOIN customers c ON c.id = p.customer_id
              JOIN products pr ON pr.id = pl.product_id JOIN (' . self::totalsSql() . ') t ON t.line_id = pl.id

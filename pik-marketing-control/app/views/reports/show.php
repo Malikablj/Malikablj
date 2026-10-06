@@ -26,7 +26,7 @@ $format = static function (array $col, mixed $value): string {
         'date'     => e(fmt_date($value, '—')),
         'datetime' => e(fmt_datetime($value, '—')),
         'qty'      => e(fmt_qty($value, '0')),
-        'money'    => e(fmt_money($value, 'Rp 0')),
+        'money'    => e(fmt_money($value, $col['empty'] ?? 'Rp 0')),
         'status'   => status_badge($value !== null ? (string) $value : null),
         default    => e($value === null || $value === '' ? '—' : (string) $value),
     };

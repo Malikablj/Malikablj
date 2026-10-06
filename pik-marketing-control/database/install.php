@@ -16,6 +16,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 use App\Helpers\Database;
+use App\Helpers\Migrator;
 use App\Helpers\Requirements;
 use App\Helpers\SqlFile;
 
@@ -45,6 +46,8 @@ try {
     echo "schema.sql: {$n} statement dijalankan\n";
     $n = SqlFile::run(__DIR__ . '/seed.sql');
     echo "seed.sql  : {$n} statement dijalankan\n";
+    $ran = Migrator::run();
+    echo 'migrasi   : ' . ($ran === [] ? 'sudah versi terbaru' : count($ran) . ' dijalankan (' . implode(', ', $ran) . ')') . "\n";
     $users = (int) Database::fetchValue('SELECT COUNT(*) FROM users');
     echo "\nSelesai. Jumlah user saat ini: {$users}\n";
     if ($users === 0) {

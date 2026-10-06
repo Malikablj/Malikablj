@@ -310,6 +310,9 @@ a.kpi:hover { transform: translateY(-1px); box-shadow: var(--pik-shadow); color:
 .stat-strip > div:last-child { border-right: 0; }
 .stat-strip .stat-label { font-size: .75rem; color: var(--pik-muted); }
 .stat-strip .stat-value { font-size: 1.2rem; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+/* Strip di dalam surface (mis. Nilai PO): tanpa bingkai ganda */
+.stat-strip-flat { border: 0; border-top: 1px solid var(--pik-border); border-radius: 0; background: transparent; }
+.stat-strip .stat-value-sm { font-size: 1.05rem; overflow-wrap: anywhere; }
 @media (max-width: 575.98px) {
   .stat-strip > div { border-right: 0; border-bottom: 1px solid var(--pik-border); }
   .kpi { padding: 14px 15px; }

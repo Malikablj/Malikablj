@@ -100,8 +100,20 @@ Pengaturan bisnis (nama perusahaan, jatuh tempo default invoice, tarif PPN, peng
 
 - `database/schema.sql` — seluruh tabel (users, customers, contacts, products, purchase_orders, po_lines, deliveries, returns, stock, leadtime, inbound_maklon, invoices_payments, po_financials, leads, activities, follow_up + notifications, audit_logs, migration_issues, settings, login_attempts). Aman dijalankan ulang (`CREATE TABLE IF NOT EXISTS`).
 - `database/seed.sql` — **hanya** pengaturan awal (nama perusahaan, jatuh tempo default 30 hari, PPN 11%, dll.). Tidak berisi data bisnis maupun akun.
-- `php database/install.php` menjalankan keduanya memakai kredensial `.env`.
-- Tanpa akses SSH (mis. hosting dengan phpMyAdmin): impor `schema.sql` lalu `seed.sql` lewat tab *Import* phpMyAdmin.
+- `php database/install.php` menjalankan keduanya memakai kredensial `.env`, lalu semua **migrasi**.
+- Tanpa akses SSH (mis. hosting dengan phpMyAdmin): impor `schema.sql` lalu `seed.sql` lewat tab *Import* phpMyAdmin, login sebagai Admin, lalu jalankan **Settings › Pembaruan database**.
+
+### Pembaruan database (migrasi)
+
+Perubahan struktur setelah `schema.sql` ditulis sebagai migrasi di `database/migrations/` (tercatat di tabel `schema_migrations`). Migrasi hanya **menambah** tabel/kolom/index — tidak ada DROP/TRUNCATE — dan setiap langkah dicek dulu sehingga aman dijalankan ulang di MySQL maupun MariaDB.
+
+Saat meng-update aplikasi di server:
+
+1. Backup seluruh database (bagian 10).
+2. Upload kode versi baru.
+3. Jalankan `php database/migrate.php` (atau login Admin → **Settings › Pembaruan database** → *Jalankan pembaruan*). Tabel terkait otomatis dibackup ke `storage/backups/` sebelum migrasi.
+
+Selama migrasi belum dijalankan, Admin otomatis diarahkan ke halaman Pembaruan database dan user lain melihat pesan "Aplikasi sedang diperbarui" (tidak ada error SQL). `php database/migrate.php --status` hanya menampilkan status.
 
 ## 5. Import data awal (migrasi)
 
@@ -139,6 +151,32 @@ Setelah import, tinjau **Settings › Migration Issues**:
 - Issue tanggal/angka: pilih **Pakai nilai master** atau **Pakai nilai spreadsheet legacy** — kolom record diperbarui dan tercatat di audit log.
 - **Tinjau delivery legacy**: delivery tanpa baris PO yang PO-nya hanya punya satu baris ditampilkan berdampingan (nama produk di spreadsheet vs produk baris PO). Hanya yang dicentang yang dihubungkan; outstanding & status PO dihitung ulang.
 - Banyak issue selesai otomatis saat datanya dilengkapi (mis. menghubungkan delivery/retur/stok/lead time ke PO/produk, mengisi jatuh tempo invoice).
+
+### Import database PO (`PIK_PO_DATABASE_*.xlsx`)
+
+File hasil digitalisasi dokumen PO (sheet `PO_MASTER`, `PO_ITEMS`, `CUSTOMERS`, `PRODUCTS`, `VALIDATION`) **boleh** diimport ke database yang sudah berisi data: PO yang sudah ada dilengkapi (nilai, PPN, harga satuan, termin, alamat kirim, link dokumen), bukan dibuat ulang.
+
+| Excel | Tabel aplikasi |
+|---|---|
+| PO_MASTER | `purchase_orders` (nomor PO, tanggal, customer, subtotal, diskon, PPN, ongkir, grand total, termin, alamat & tanggal kirim, contact, link dokumen; `import_ref` = PO_ID) |
+| PO_ITEMS | `po_lines` (qty, satuan, harga satuan, subtotal/DPP, kode item, spesifikasi; `import_ref` = ITEM_ID) |
+| CUSTOMERS / PRODUCTS | `customers` / `products` (dicocokkan dulu; dibuat hanya bila benar-benar baru) |
+| VALIDATION | `migration_issues` (satu issue per temuan, terhubung ke PO-nya) |
+
+Langkah aman (web: **Settings › Import Data › Import database PO**; atau CLI):
+
+```bash
+php database/migrate.php                                                   # struktur terbaru
+php database/import_po_database.php --file="/path/PIK_PO_DATABASE.xlsx"    # DRY RUN: tidak mengubah data
+php database/import_po_database.php --file="/path/PIK_PO_DATABASE.xlsx" --import   # konfirmasi "IMPORT"
+```
+
+- **Dry run wajib** untuk file yang sama (SHA-256) dalam 24 jam sebelum import nyata.
+- Import nyata: backup otomatis tabel terkait ke `storage/backups/`, lalu semua ditulis dalam **satu transaksi** (gagal = rollback, status `ROLLED_BACK`). Setiap proses tercatat di `import_logs` (RUNNING / COMPLETED / COMPLETED_WITH_WARNING / FAILED / ROLLED_BACK) dengan rekonsiliasi jumlah PO, jumlah item, dan total grand total (Excel vs database), beserta penyebab setiap selisih.
+- Pencocokan: `import_ref` → nomor PO persis → nomor PO beda tanda baca (customer sama) → PO tanpa nomor dengan customer + tanggal + qty sama. Customer: nama ternormalisasi persis, atau ≥ 2 nomor PO yang sama. Produk: kode, lalu nama persis. **Tidak ada fuzzy matching.**
+- Yang ragu **ditahan** dan masuk Migration Issues, mis. *POSSIBLE EXISTING PO* (nomor tidak lengkap) dan *PO MATCH AMBIGUOUS* (nomor PO dipakai beberapa PO yang tidak bisa dibedakan): pilih PO yang benar dengan tombol **Hubungkan**, lalu jalankan import lagi.
+- Nilai yang sudah ada tidak pernah ditimpa; perbedaan (tanggal, nilai, item, status) menjadi issue. Nilai yang ditulis import sebelumnya dan belum diubah user boleh diperbarui oleh file versi baru (dicek lewat `import_snapshot`).
+- Aman dijalankan ulang: import kedua dengan file yang sama tidak menambah atau mengubah apa pun.
 
 ## 6. Seed & login development
 
@@ -316,13 +354,16 @@ pik-marketing-control/
 │   ├── install.php         # jalankan schema + seed
 │   ├── create_admin.php    # buat Admin dari CLI
 │   ├── seed_dev_users.php  # user contoh per role (development)
-│   └── import_workbook.php # import data dari workbook
+│   ├── import_workbook.php # import data dari workbook AppSheet
+│   ├── import_po_database.php # import database PO (dry run / import)
+│   ├── migrate.php         # jalankan pembaruan struktur database
+│   └── migrations/         # migrasi (hanya menambah tabel/kolom)
 ├── public/                 # satu-satunya folder yang perlu diakses browser
 │   ├── index.php           # front controller
 │   ├── css/app.css
 │   ├── js/app.js
 │   └── assets/             # Bootstrap, ikon, font, gambar (lokal)
-├── storage/                # log, file import sementara (tidak di-commit)
+├── storage/                # log, file import sementara, backup otomatis (tidak di-commit)
 └── tests/                  # test runner + skenario per fase
 ```
 
@@ -340,6 +381,7 @@ pik-marketing-control/
 
 | Gejala | Penyebab & solusi |
 |---|---|
+| "Aplikasi sedang diperbarui" / Admin diarahkan ke Pembaruan database | Kode baru sudah di-upload tetapi migrasi belum dijalankan. Backup database, lalu Settings › Pembaruan database › Jalankan pembaruan (atau `php database/migrate.php`). |
 | Pesan "membutuhkan ekstensi PHP zip/xmlreader/..." | Ekstensi belum aktif. Buka `php.ini` (lokasinya tampil saat `php database/install.php`), hapus tanda `;` di depan `extension=zip` (atau ekstensi yang disebut), simpan, restart Apache. |
 | Halaman 503 "Tidak dapat terhubung ke database" | Cek `DB_*` di `.env`, pastikan MySQL berjalan dan `schema.sql` sudah diimpor (`php database/install.php`). |
 | Semua halaman 404 kecuali beranda | `mod_rewrite` belum aktif atau `AllowOverride All` belum diset. Alternatif: `APP_PRETTY_URLS=false`. |

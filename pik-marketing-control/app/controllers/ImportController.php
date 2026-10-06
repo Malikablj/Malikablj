@@ -6,9 +6,14 @@ namespace App\Controllers;
 
 use App\Helpers\Audit;
 use App\Helpers\Auth;
+use App\Helpers\Database;
+use App\Helpers\HttpException;
+use App\Helpers\Paginator;
 use App\Helpers\Logger;
 use App\Helpers\Requirements;
 use App\Models\Setting;
+use App\Services\Migration\ImportFailed;
+use App\Services\Migration\PoDatabaseImporter;
 use App\Services\Migration\WorkbookImporter;
 use DomainException;
 use RuntimeException;
@@ -95,6 +100,116 @@ final class ImportController extends Controller
             'maxUpload'   => ini_get('upload_max_filesize') ?: '2M',
             'excelProblem' => $missing !== [] ? Requirements::message($missing, 'Import Excel') : null,
         ];
+    }
+
+    // =====================================================================
+    // Import database PO (PIK_PO_DATABASE_*.xlsx) — boleh untuk database berisi data
+    // =====================================================================
+
+    public function poShow(): void
+    {
+        $this->cleanupPoFiles();
+        $this->view('import/po', $this->poData());
+    }
+
+    /** mode=dry: upload + dry run (file disimpan sementara). mode=import: import file hasil dry run. */
+    public function poRun(): void
+    {
+        $this->cleanupPoFiles();
+        $data = $this->poData();
+        if ($data['excelProblem'] !== null) {
+            $this->view('import/po', $data, 422);
+            return;
+        }
+        @set_time_limit(300);
+        $mode = ($_POST['mode'] ?? '') === 'import' ? 'import' : 'dry';
+        $tmp = [];
+        try {
+            if ($mode === 'dry') {
+                $upload = $this->storeUpload($_FILES['file'] ?? null, $tmp);
+                if ($upload === null) {
+                    throw new DomainException('Pilih file database PO (.xlsx).');
+                }
+                $keep = $this->poFilePath((string) hash_file('sha256', $upload['path']));
+                if (!@rename($upload['path'], $keep)) {
+                    throw new RuntimeException('File tidak dapat disimpan sementara di storage/imports.');
+                }
+                $tmp = [];
+                $report = (new PoDatabaseImporter($keep, $upload['name']))->dryRun(Auth::id());
+            } else {
+                $log = Database::fetch(
+                    "SELECT * FROM import_logs WHERE id = :id AND import_type = :t AND mode = 'DRY_RUN' AND status IN ('COMPLETED','COMPLETED_WITH_WARNING')",
+                    ['id' => (int) ($_POST['log_id'] ?? 0), 't' => PoDatabaseImporter::TYPE]
+                );
+                if ($log === null) {
+                    throw new DomainException('Dry run tidak ditemukan. Jalankan "Cek dulu" terlebih dahulu.');
+                }
+                $keep = $this->poFilePath((string) $log['file_sha256']);
+                if (!is_file($keep)) {
+                    throw new DomainException('File hasil dry run sudah tidak tersedia (disimpan maksimal 24 jam). Upload dan jalankan "Cek dulu" lagi.');
+                }
+                $report = (new PoDatabaseImporter($keep, (string) $log['filename']))->import(Auth::id());
+                @unlink($keep);
+            }
+            $this->view('import/po', array_merge($this->poData(), ['report' => $report]));
+        } catch (ImportFailed $e) {
+            Logger::error('Import database PO gagal: ' . $e->getMessage());
+            $this->view('import/po', array_merge($this->poData(), ['uploadError' => ($e->status === 'ROLLED_BACK'
+                ? 'Import gagal dan semua perubahan dibatalkan (rollback): ' : 'Import gagal, tidak ada data yang diubah: ') . $e->getMessage(), 'failedLog' => $e->logId]), 422);
+        } catch (DomainException | RuntimeException $e) {
+            $this->view('import/po', array_merge($this->poData(), ['uploadError' => $e->getMessage()]), 422);
+        } finally {
+            foreach ($tmp as $path) {
+                @unlink($path);
+            }
+        }
+    }
+
+    /** Detail satu log import (ringkasan, rekonsiliasi, temuan). */
+    public function logShow(int $id): void
+    {
+        $log = Database::fetch('SELECT l.*, u.name AS user_name FROM import_logs l LEFT JOIN users u ON u.id = l.created_by WHERE l.id = :id', ['id' => $id]);
+        if ($log === null) {
+            throw new HttpException(404);
+        }
+        $report = json_decode((string) ($log['summary'] ?? ''), true);
+        $this->view('import/log', ['title' => 'Log import #' . $id, 'log' => $log, 'report' => is_array($report) ? $report : null]);
+    }
+
+    /** @return array<string,mixed> */
+    private function poData(): array
+    {
+        $missing = Requirements::excelMissing();
+        return [
+            'title'        => 'Import Database PO',
+            'logs'         => Paginator::query(
+                'SELECT l.*, u.name AS user_name FROM import_logs l LEFT JOIN users u ON u.id = l.created_by WHERE l.import_type = :t',
+                ['t' => PoDatabaseImporter::TYPE], 'l.id DESC', 1, 10
+            ),
+            'report'       => null,
+            'uploadError'  => null,
+            'failedLog'    => null,
+            'maxUpload'    => ini_get('upload_max_filesize') ?: '2M',
+            'excelProblem' => $missing !== [] ? Requirements::message($missing, 'Import Excel') : null,
+        ];
+    }
+
+    private function poFilePath(string $sha): string
+    {
+        if (!preg_match('/^[a-f0-9]{64}$/', $sha)) {
+            throw new DomainException('Referensi file tidak valid.');
+        }
+        return APP_ROOT . '/storage/imports/po-database-' . $sha . '.xlsx';
+    }
+
+    /** File dry run disimpan maksimal 24 jam. */
+    private function cleanupPoFiles(): void
+    {
+        foreach (glob(APP_ROOT . '/storage/imports/po-database-*.xlsx') ?: [] as $file) {
+            if (filemtime($file) < time() - PoDatabaseImporter::DRY_RUN_VALID_HOURS * 3600) {
+                @unlink($file);
+            }
+        }
     }
 
     /**

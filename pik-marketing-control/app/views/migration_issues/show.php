@@ -35,8 +35,8 @@ $canEdit = can('migration.edit');
             <dl class="dl-single mb-0 small">
                 <?php if ($issue['field_name']): ?>
                     <dt>Kolom</dt><dd><span class="code-chip"><?= e($issue['field_name']) ?></span></dd>
-                    <dt>Nilai di master workbook</dt><dd><?= e($issue['master_value'] ?? '—') ?></dd>
-                    <dt>Nilai di spreadsheet legacy</dt><dd><?= e($issue['suggested_value'] ?? '—') ?></dd>
+                    <dt><?= e($labels['master']) ?></dt><dd><?= e($issue['master_value'] ?? '—') ?></dd>
+                    <dt><?= e($labels['suggested']) ?></dt><dd><?= e($issue['suggested_value'] ?? '—') ?></dd>
                 <?php endif; ?>
                 <?php if ($issue['legacy_po']): ?><dt>PO di spreadsheet</dt><dd><?= e($issue['legacy_po']) ?></dd><?php endif; ?>
                 <?php if ($issue['legacy_product']): ?><dt>Produk di spreadsheet</dt><dd><?= e($issue['legacy_product']) ?></dd><?php endif; ?>
@@ -56,7 +56,7 @@ $canEdit = can('migration.edit');
                     <div class="surface-header"><div><h2 class="surface-title">Pilih nilai yang benar</h2>
                         <p class="surface-subtitle">Kolom <?= e($target['column']) ?> pada record akan diisi nilai yang dipilih, lalu issue ditandai selesai.</p></div></div>
                     <div class="surface-pad d-grid gap-2">
-                        <?php foreach (['master' => ['Pakai nilai master', $issue['master_value']], 'suggested' => ['Pakai nilai spreadsheet legacy', $issue['suggested_value']]] as $which => [$label, $value]): ?>
+                        <?php foreach (['master' => [$labels['use_master'], $issue['master_value']], 'suggested' => [$labels['use_suggested'], $issue['suggested_value']]] as $which => [$label, $value]): ?>
                             <?php if ($value !== null && $value !== ''): ?>
                                 <form method="post" action="<?= e(url('/migration-issues/' . $id . '/apply')) ?>" data-confirm="<?= e($label . ': ' . $value . '?') ?>">
                                     <?= csrf_field() ?><input type="hidden" name="which" value="<?= e($which) ?>">
@@ -66,6 +66,29 @@ $canEdit = can('migration.edit');
                             <?php endif; ?>
                         <?php endforeach; ?>
                     </div>
+                </section>
+            <?php endif; ?>
+            <?php if ($open && $linkPos !== []): ?>
+                <section class="surface section-gap">
+                    <div class="surface-header"><div><h2 class="surface-title">PO mana yang sama dengan dokumen ini?</h2>
+                        <p class="surface-subtitle">Pilih PO di aplikasi yang sesuai dengan dokumen <?= e((string) ($issue['legacy_po'] ?? '')) ?>; import berikutnya akan melengkapi data PO tersebut.
+                            <?= $issue['issue_type'] === 'POSSIBLE EXISTING PO' ? '"Abaikan" bila tidak ada yang sama; import berikutnya membuat PO baru.' : '' ?></p></div></div>
+                    <form class="surface-pad" method="post" action="<?= e(url('/migration-issues/' . $id . '/link-po')) ?>" data-confirm="Hubungkan dokumen ini ke PO yang dipilih?">
+                        <?= csrf_field() ?>
+                        <?php if ($return !== ''): ?><input type="hidden" name="return" value="<?= e($return) ?>"><?php endif; ?>
+                        <div class="d-grid gap-2 mb-3">
+                            <?php foreach ($linkPos as $i => $cand): ?>
+                                <label class="form-check border rounded-3 p-2 ps-5 mb-0">
+                                    <input class="form-check-input" type="radio" name="po_code" value="<?= e($cand['code']) ?>"<?= $i === 0 ? ' checked' : '' ?><?= $cand['import_ref'] !== null ? ' disabled' : '' ?>>
+                                    <span class="fw-semibold"><?= e($cand['po_number'] ?? '(tanpa nomor)') ?></span> <span class="code-chip"><?= e($cand['code']) ?></span>
+                                    <span class="d-block small text-secondary"><?= e(fmt_date($cand['po_date'], 'tanpa tanggal')) ?> · <?= e($cand['customer_name'] ?? '-') ?> · <?= e($cand['status']) ?>
+                                        <?= $cand['import_ref'] !== null ? ' · sudah terhubung ke ' . e($cand['import_ref']) : '' ?>
+                                        · <a href="<?= e(url('/purchase-orders/' . $cand['id'])) ?>" target="_blank" rel="noopener">buka</a></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <button class="btn btn-primary w-100" type="submit"><i class="bi bi-link-45deg"></i> Hubungkan</button>
+                    </form>
                 </section>
             <?php endif; ?>
             <form class="surface section-gap" method="post" action="<?= e(url('/migration-issues/' . $id . '/status')) ?>">

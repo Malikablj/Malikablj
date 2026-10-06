@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Helpers\Audit;
+use App\Helpers\DbBackup;
+use App\Helpers\Logger;
+use App\Helpers\Migrator;
 use App\Helpers\Validator;
 use App\Models\Setting;
 use App\Services\Automation;
+use Throwable;
 
 final class SettingsController extends Controller
 {
@@ -53,6 +58,34 @@ final class SettingsController extends Controller
         $total = array_sum($result['notifications']);
         $this->success('Otomasi selesai: ' . $total . ' notifikasi baru, ' . $result['followups_overdue'] . ' follow up ditandai Overdue, '
             . $result['invoices_updated'] . ' status invoice diperbarui.', '/settings');
+    }
+
+    /** Status pembaruan struktur database (migrasi). */
+    public function database(): void
+    {
+        $this->view('settings/database', [
+            'title'   => 'Pembaruan database',
+            'all'     => Migrator::all(),
+            'pending' => Migrator::pending(),
+        ]);
+    }
+
+    /** Backup tabel terkait, lalu jalankan migrasi yang belum jalan. */
+    public function migrate(): void
+    {
+        if (Migrator::pending() === []) {
+            $this->success('Struktur database sudah versi terbaru.', '/settings/database');
+        }
+        @set_time_limit(300);
+        try {
+            $backup = DbBackup::tables(['purchase_orders', 'po_lines', 'customers', 'migration_issues'], 'before-migrate');
+            $ran = Migrator::run();
+        } catch (Throwable $e) {
+            Logger::error('Migrasi gagal: ' . $e->getMessage());
+            $this->failure('Pembaruan database gagal: ' . $e->getMessage() . ' Pembaruan aman dijalankan ulang setelah penyebabnya diperbaiki.', '/settings/database');
+        }
+        Audit::log('migrate', 'database', null, implode(', ', $ran), ['backup' => ['old' => null, 'new' => basename($backup)]]);
+        $this->success(count($ran) . ' pembaruan database dijalankan. Backup tabel sebelum pembaruan: storage/backups/' . basename($backup) . '.', '/settings/database');
     }
 
     /** @return array<string,mixed> */

@@ -42,6 +42,8 @@ final class MigrationIssueController extends Controller
             'issue'  => $issue,
             'link'   => MigrationIssue::recordLink($issue),
             'target' => MigrationIssue::valueTarget($issue),
+            'labels' => MigrationIssue::valueLabels($issue),
+            'linkPos' => self::linkPos($issue),
             'return' => $this->returnTo(''),
         ]);
     }
@@ -79,10 +81,39 @@ final class MigrationIssueController extends Controller
         $this->success('Nilai diterapkan dan issue ditandai selesai.', $this->returnTo('/migration-issues/' . $id));
     }
 
+    /** @return list<array<string,mixed>> PO kandidat (kode, nomor, tanggal, customer, status) untuk tombol Hubungkan */
+    private static function linkPos(array $issue): array
+    {
+        $out = [];
+        foreach (MigrationIssue::linkCandidates($issue) as $code) {
+            $po = \App\Helpers\Database::fetch('SELECT p.id, p.code, p.po_number, p.po_date, p.status, p.import_ref, c.name AS customer_name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id WHERE p.code = :c', ['c' => $code]);
+            if ($po !== null) {
+                $out[] = $po;
+            }
+        }
+        return $out;
+    }
+
+    /** PO di file dipastikan sama dengan PO di aplikasi (issue POSSIBLE EXISTING PO / PO MATCH AMBIGUOUS). */
+    public function linkPo(int $id): void
+    {
+        $this->found(MigrationIssue::find($id));
+        $v = Validator::make($_POST, ['note' => 'nullable|string|max:1000', 'po_code' => 'nullable|string|max:20'], ['note' => 'Catatan', 'po_code' => 'PO']);
+        try {
+            MigrationIssue::linkPo($id, $v->validated()['note'] ?? null, $v->validated()['po_code'] ?? null);
+        } catch (DomainException $e) {
+            $this->failure($e->getMessage(), '/migration-issues/' . $id);
+        }
+        $this->success('PO dihubungkan. Jalankan import database PO lagi untuk melengkapi datanya.', $this->returnTo('/migration-issues/' . $id));
+    }
+
     /** Tandai beberapa issue sekaligus (dari daftar). */
     public function bulk(): void
     {
         $ids = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['ids'] ?? [])))));
+        if (($_POST['status'] ?? '') === 'apply_suggested') {
+            $this->bulkApply($ids);
+        }
         $v = $this->validateNote(['required', ['in', ['Resolved', 'Ignored']]]);
         if ($ids === [] || $v->fails()) {
             $this->failure($ids === [] ? 'Pilih minimal satu issue.' : implode(' ', $v->errors()), $this->returnTo('/migration-issues'));
@@ -96,6 +127,30 @@ final class MigrationIssueController extends Controller
             }
         }
         $this->success($done . ' issue ' . ($d['status'] === 'Resolved' ? 'ditandai selesai.' : 'diabaikan.'), $this->returnTo('/migration-issues'));
+    }
+
+    /** Terapkan nilai usulan (dokumen PO / spreadsheet legacy) untuk beberapa issue nilai sekaligus. */
+    private function bulkApply(array $ids): never
+    {
+        if ($ids === []) {
+            $this->failure('Pilih minimal satu issue.', $this->returnTo('/migration-issues'));
+        }
+        $done = 0;
+        $skipped = 0;
+        foreach (array_slice($ids, 0, 200) as $id) {
+            $issue = MigrationIssue::find($id);
+            if ($issue === null || $issue['resolution_status'] !== 'Needs Review' || MigrationIssue::valueTarget($issue) === null || ($issue['suggested_value'] ?? '') === '') {
+                $skipped++;
+                continue;
+            }
+            try {
+                MigrationIssue::applyValue($id, 'suggested', 'massal');
+                $done++;
+            } catch (DomainException) {
+                $skipped++;
+            }
+        }
+        $this->success($done . ' nilai usulan diterapkan' . ($skipped > 0 ? ', ' . $skipped . ' issue dilewati (bukan issue nilai / sudah selesai)' : '') . '.', $this->returnTo('/migration-issues'));
     }
 
     /** Tinjau delivery legacy yang PO-nya hanya punya satu baris (konfirmasi manual per baris). */

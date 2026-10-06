@@ -204,6 +204,68 @@ final class MigrationIssue
         return ['table' => $target[0], 'type' => $target[1], 'entity' => $target[2], 'column' => (string) $issue['field_name']];
     }
 
+    /**
+     * Label pasangan nilai: issue dari import database PO membandingkan nilai di
+     * aplikasi (master_value) dengan dokumen PO (suggested_value); issue workbook
+     * AppSheet membandingkan master workbook dengan spreadsheet legacy.
+     * @return array{master:string,suggested:string,use_master:string,use_suggested:string}
+     */
+    public static function valueLabels(array $issue): array
+    {
+        return !empty($issue['import_log_id'])
+            ? ['master' => 'Nilai di aplikasi', 'suggested' => 'Nilai di dokumen PO', 'use_master' => 'Pakai nilai di aplikasi', 'use_suggested' => 'Pakai nilai dokumen PO']
+            : ['master' => 'Nilai di master workbook', 'suggested' => 'Nilai di spreadsheet legacy', 'use_master' => 'Pakai nilai master', 'use_suggested' => 'Pakai nilai spreadsheet legacy'];
+    }
+
+    /**
+     * Issue "POSSIBLE EXISTING PO": admin memastikan PO di file sama dengan PO di
+     * aplikasi → PO aplikasi diberi import_ref, sehingga import berikutnya
+     * melengkapinya (bukan membuat PO baru).
+     */
+    public const LINK_PO_TYPES = ['POSSIBLE EXISTING PO', 'PO MATCH AMBIGUOUS'];
+
+    /** @return list<string> kode PO kandidat yang boleh dipilih untuk issue "Hubungkan" */
+    public static function linkCandidates(array $issue): array
+    {
+        if (!in_array($issue['issue_type'], self::LINK_PO_TYPES, true)) {
+            return [];
+        }
+        $codes = array_values(array_filter(array_map('trim', explode(',', (string) ($issue['master_value'] ?? '')))));
+        if ($codes === [] && !empty($issue['record_code'])) {
+            $codes = [(string) $issue['record_code']];
+        }
+        return $codes;
+    }
+
+    public static function linkPo(int $id, ?string $note, ?string $poCode = null): void
+    {
+        $issue = self::find($id);
+        if ($issue === null || !in_array($issue['issue_type'], self::LINK_PO_TYPES, true) || $issue['resolution_status'] !== 'Needs Review') {
+            throw new DomainException('Issue ini tidak dapat dihubungkan ke PO.');
+        }
+        $ref = trim((string) $issue['suggested_value']);
+        $candidates = self::linkCandidates($issue);
+        $poCode ??= $candidates[0] ?? null;
+        if (!preg_match('/^[A-Za-z0-9_-]{1,40}$/', $ref) || $poCode === null || !in_array($poCode, $candidates, true)) {
+            throw new DomainException('Pilih salah satu PO kandidat.');
+        }
+        Database::transaction(function () use ($ref, $note, $id, $poCode): void {
+            $po = Database::fetch('SELECT id, code, po_number, import_ref FROM purchase_orders WHERE code = :c FOR UPDATE', ['c' => $poCode]);
+            if ($po === null) {
+                throw new DomainException('PO tujuan sudah tidak ada.');
+            }
+            if ($po['import_ref'] !== null && $po['import_ref'] !== $ref) {
+                throw new DomainException('PO ' . $po['code'] . ' sudah terhubung ke data lain dari file (' . $po['import_ref'] . ').');
+            }
+            if (Database::fetchValue('SELECT 1 FROM purchase_orders WHERE import_ref = :r AND id <> :id', ['r' => $ref, 'id' => (int) $po['id']])) {
+                throw new DomainException('Data ' . $ref . ' dari file sudah terhubung ke PO lain.');
+            }
+            Database::update('purchase_orders', ['import_ref' => $ref, 'updated_by' => Auth::id()], 'id = :id', ['id' => (int) $po['id']]);
+            Audit::log('update', 'purchase_order', (int) $po['id'], (string) ($po['po_number'] ?? $po['code']), ['import_ref' => ['old' => $po['import_ref'], 'new' => $ref]]);
+            self::setStatus($id, 'Resolved', trim('Dihubungkan ke ' . $po['code'] . '; jalankan import database PO lagi untuk melengkapi data.' . ($note ? ' ' . $note : '')));
+        });
+    }
+
     /** Ubah status satu issue (Resolved / Ignored / Needs Review) + catatan, tercatat di audit log. */
     public static function setStatus(int $id, string $status, ?string $note): void
     {
@@ -223,6 +285,22 @@ final class MigrationIssue
         ], 'id = :id', ['id' => $id]);
         Audit::log(match ($status) { 'Resolved' => 'resolve_issue', 'Ignored' => 'ignore_issue', default => 'reopen_issue' },
             'migration_issue', $id, (string) $issue['code'], ['resolution_status' => ['old' => $issue['resolution_status'], 'new' => $status], 'note' => ['old' => null, 'new' => $note]]);
+        if ($issue['table_name'] === 'PURCHASE_ORDERS' && !empty($issue['record_id'])) {
+            self::refreshPoReviewStatus((int) $issue['record_id']);
+        }
+    }
+
+    /** PO hasil import: NEEDS_REVIEW selama masih ada issue terbuka, selain itu OK. */
+    public static function refreshPoReviewStatus(int $poId): void
+    {
+        $open = (bool) Database::fetchValue(
+            "SELECT 1 FROM migration_issues WHERE table_name = 'PURCHASE_ORDERS' AND record_id = :id AND resolution_status = 'Needs Review' LIMIT 1",
+            ['id' => $poId]
+        );
+        Database::query(
+            'UPDATE purchase_orders SET import_status = :s WHERE id = :id AND import_status IS NOT NULL AND import_status <> :s2',
+            ['s' => $open ? 'NEEDS_REVIEW' : 'OK', 's2' => $open ? 'NEEDS_REVIEW' : 'OK', 'id' => $poId]
+        );
     }
 
     /**
@@ -253,7 +331,8 @@ final class MigrationIssue
             }
             Database::update($target['table'], [$target['column'] => $value, 'updated_by' => Auth::id()], 'id = :id', ['id' => (int) $issue['record_id']]);
             Audit::log('update', $target['entity'], (int) $issue['record_id'], (string) ($issue['record_code'] ?? ''), [$target['column'] => ['old' => $record['v'], 'new' => $value]]);
-            self::setStatus($id, 'Resolved', trim(($which === 'master' ? 'Nilai master diterapkan' : 'Nilai spreadsheet legacy diterapkan') . ($note ? ': ' . $note : '')));
+            $labels = self::valueLabels($issue);
+            self::setStatus($id, 'Resolved', trim($labels[$which] . ' diterapkan' . ($note ? ': ' . $note : '')));
         });
     }
 

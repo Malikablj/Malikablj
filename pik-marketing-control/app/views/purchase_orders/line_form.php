@@ -16,8 +16,11 @@ use App\Helpers\Form;
             <div class="form-section">
                 <div class="row g-3">
                     <?= Form::select('product_id', 'Produk', $products, old('product_id', $line), $errors, ['required' => true, 'searchable' => 'Cari produk…', 'disabled' => false, 'help' => $locked ? 'Produk dikunci karena baris ini sudah memiliki delivery/retur.' : null]) ?>
-                    <?= Form::input('order_qty', 'Qty order (pcs)', old('order_qty', $line), $errors, ['type' => 'number', 'min' => 1, 'step' => 1, 'required' => true, 'col' => 'col-md-6']) ?>
-                    <?= Form::input('remark', 'Catatan', old('remark', $line), $errors, ['maxlength' => 500, 'col' => 'col-md-6']) ?>
+                    <?= Form::input('order_qty', 'Qty order', old('order_qty', $line), $errors, ['type' => 'number', 'min' => 1, 'step' => 1, 'required' => true, 'col' => 'col-md-4']) ?>
+                    <?= Form::input('unit', 'Satuan', old('unit', $line), $errors, ['maxlength' => 20, 'col' => 'col-md-3', 'placeholder' => 'pcs']) ?>
+                    <?= Form::input('unit_price', 'Harga satuan', ($v = old('unit_price', $line)) !== '' && preg_match('/^\d+\.\d{2}$/', $v) ? App\Helpers\Number::money($v, '', false) : $v, $errors, ['inputmode' => 'decimal', 'col' => 'col-md-5', 'prefix' => 'Rp',
+                        'help' => $line['price_includes_tax'] ? 'Harga PO ini sudah termasuk PPN; subtotal (DPP) dihitung otomatis.' : 'Subtotal = qty × harga satuan.']) ?>
+                    <?= Form::input('remark', 'Catatan', old('remark', $line), $errors, ['maxlength' => 500]) ?>
                 </div>
             </div>
             <div class="form-actions">
@@ -38,6 +41,8 @@ use App\Helpers\Form;
                 <div><dt>Terkirim</dt><dd><?= e(fmt_qty($line['delivered_qty'], '0')) ?></dd></div>
                 <div><dt>Retur</dt><dd><?= e(fmt_qty($line['return_qty'], '0')) ?></dd></div>
                 <div><dt>Outstanding saat ini</dt><dd class="fw-semibold"><?= e(fmt_qty($line['outstanding_qty'], '0')) ?></dd></div>
+                <div><dt>Subtotal (DPP)</dt><dd><?= e(fmt_money($line['line_subtotal'])) ?></dd></div>
+                <?php if ($line['item_code'] || $line['item_description']): ?><div><dt>Item di dokumen PO</dt><dd class="small"><?= e(trim(($line['item_code'] ?? '') . ' ' . ($line['item_description'] ?? ''))) ?></dd></div><?php endif; ?>
                 <?php if ($line['product_name_legacy']): ?><div><dt>Nama produk di spreadsheet</dt><dd class="small"><?= e($line['product_name_legacy']) ?><?= $line['variant_legacy'] ? ' — ' . e($line['variant_legacy']) : '' ?></dd></div><?php endif; ?>
             </dl>
         </div>

@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Helpers\Auth;
 use App\Helpers\Database;
+use App\Helpers\Number;
 use App\Helpers\Request;
 use App\Helpers\Validator;
 use App\Models\Customer;
@@ -21,7 +22,11 @@ use DomainException;
 
 final class PurchaseOrderController extends Controller
 {
-    private const HEADER_FIELDS = ['po_number', 'customer_id', 'po_date', 'payment_term', 'status', 'remark'];
+    private const HEADER_FIELDS = [
+        'po_number', 'customer_id', 'po_date', 'payment_term', 'status', 'remark',
+        'currency', 'price_includes_tax', 'subtotal', 'discount_amount', 'tax_amount', 'shipping_cost',
+        'requested_delivery_date', 'contact_person', 'delivery_address',
+    ];
 
     /** @return array<string,mixed> */
     private function filters(): array
@@ -33,6 +38,8 @@ final class PurchaseOrderController extends Controller
             'from'        => Validator::parseDate(Request::queryString('from')) ?? '',
             'to'          => Validator::parseDate(Request::queryString('to')) ?? '',
             'issue'       => Request::queryString('issue'),
+            'month'       => preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', Request::queryString('month')) ? Request::queryString('month') : '',
+            'review'      => Request::queryString('review') === 'needs_review' ? 'needs_review' : '',
         ];
     }
 
@@ -74,7 +81,7 @@ final class PurchaseOrderController extends Controller
             $this->invalid('purchase_orders/form', $this->formData(null) + ['preset' => [], 'lines' => $this->postedLines()], $errors, $this->oldHeader());
             return;
         }
-        $header = $v->validated();
+        $header = $this->headerData($v->validated(), null);
         $id = PurchaseOrder::createWithLines($header, $lines);
         $this->success('PO ' . $header['po_number'] . ' dibuat dengan ' . count($lines) . ' baris produk.', '/purchase-orders/' . $id);
     }
@@ -112,7 +119,14 @@ final class PurchaseOrderController extends Controller
             $this->invalid('purchase_orders/form', $this->formData($po) + ['preset' => [], 'lines' => []], $v->errors(), $this->oldHeader());
             return;
         }
-        PurchaseOrder::update($id, $v->validated());
+        $data = $this->headerData($v->validated(), $po);
+        Database::transaction(function () use ($id, $data, $po): void {
+            PurchaseOrder::update($id, $data);
+            if ((int) ($data['price_includes_tax'] ?? 0) !== (int) ($po['price_includes_tax'] ?? 0)) {
+                PoLine::recalcSubtotals($id); // harga termasuk/tidak termasuk PPN berubah
+            }
+            PurchaseOrder::recalcTotals($id);
+        });
         $this->success('PO diperbarui.', '/purchase-orders/' . $id);
     }
 
@@ -135,9 +149,12 @@ final class PurchaseOrderController extends Controller
             $this->failure('Baris gagal ditambahkan: ' . implode(' ', $v->errors()), '/purchase-orders/' . $id);
         }
         $data = $v->validated();
-        Database::transaction(function () use ($id, $data): void {
-            PoLine::create(['po_id' => $id, 'product_id' => $data['product_id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark']]);
+        Database::transaction(function () use ($id, $data, $po): void {
+            PoLine::create(['po_id' => $id, 'product_id' => $data['product_id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark'],
+                'unit' => $data['unit'], 'unit_price' => $data['unit_price'],
+                'line_subtotal' => PoLine::subtotalFor((int) $data['order_qty'], $data['unit_price'], (bool) $po['price_includes_tax'], null)]);
             PurchaseOrder::syncStatus($id);
+            PurchaseOrder::recalcTotals($id);
         });
         $this->success('Baris produk ditambahkan ke PO ' . ($po['po_number'] ?? $po['code']) . '.', '/purchase-orders/' . $id);
     }
@@ -166,12 +183,17 @@ final class PurchaseOrderController extends Controller
         if ($v->fails()) {
             $this->invalid('purchase_orders/line_form', [
                 'title' => 'Edit Baris PO', 'line' => $line, 'products' => Product::selectOptions(true, (int) $line['product_id']), 'locked' => $locked,
-            ], $v->errors(), ['product_id' => $_POST['product_id'] ?? '', 'order_qty' => $_POST['order_qty'] ?? '', 'remark' => $_POST['remark'] ?? '']);
+            ], $v->errors(), ['product_id' => $_POST['product_id'] ?? '', 'order_qty' => $_POST['order_qty'] ?? '', 'remark' => $_POST['remark'] ?? '',
+                'unit' => $_POST['unit'] ?? '', 'unit_price' => $_POST['unit_price'] ?? '']);
             return;
         }
         Database::transaction(function () use ($id, $data, $line): void {
-            PoLine::update($id, ['product_id' => $data['product_id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark']]);
+            $includesTax = (bool) Database::fetchValue('SELECT price_includes_tax FROM purchase_orders WHERE id = :id', ['id' => $line['po_id']]);
+            PoLine::update($id, ['product_id' => $data['product_id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark'],
+                'unit' => $data['unit'], 'unit_price' => $data['unit_price'],
+                'line_subtotal' => PoLine::subtotalFor((int) $data['order_qty'], $data['unit_price'], $includesTax, $line['tax_rate'] !== null ? (string) $line['tax_rate'] : null)]);
             PurchaseOrder::syncStatus((int) $line['po_id']);
+            PurchaseOrder::recalcTotals((int) $line['po_id']);
         });
         $this->success('Baris PO diperbarui.', '/purchase-orders/' . $line['po_id']);
     }
@@ -181,6 +203,7 @@ final class PurchaseOrderController extends Controller
         $line = $this->found(PoLine::find($id));
         try {
             PoLine::removeLine($id);
+            PurchaseOrder::recalcTotals((int) $line['po_id']);
         } catch (DomainException $e) {
             $this->failure($e->getMessage(), '/purchase-orders/' . $line['po_id']);
         }
@@ -193,10 +216,30 @@ final class PurchaseOrderController extends Controller
             'po_number'    => 'required|string|max:80',
             'customer_id'  => 'required|integer|exists:customers,id',
             'po_date'      => 'required|date',
-            'payment_term' => 'nullable|string|max:60',
+            'payment_term' => 'nullable|string|max:255',
             'status'       => ['required', ['in', PurchaseOrder::STATUSES]],
             'remark'       => 'nullable|string|max:5000',
-        ], ['po_number' => 'Nomor PO', 'customer_id' => 'Customer', 'po_date' => 'Tanggal PO', 'payment_term' => 'Termin pembayaran', 'status' => 'Status', 'remark' => 'Catatan']);
+            'currency'                => 'nullable|string|max:3',
+            'price_includes_tax'      => 'boolean',
+            'subtotal'                => 'nullable|numeric|min:0',
+            'discount_amount'         => 'nullable|numeric|min:0',
+            'tax_amount'              => 'nullable|numeric|min:0',
+            'shipping_cost'           => 'nullable|numeric|min:0',
+            'requested_delivery_date' => 'nullable|date',
+            'contact_person'          => 'nullable|string|max:150',
+            'delivery_address'        => 'nullable|string|max:2000',
+        ], ['po_number' => 'Nomor PO', 'customer_id' => 'Customer', 'po_date' => 'Tanggal PO', 'payment_term' => 'Termin pembayaran', 'status' => 'Status', 'remark' => 'Catatan',
+            'currency' => 'Mata uang', 'price_includes_tax' => 'Harga termasuk PPN', 'subtotal' => 'Subtotal', 'discount_amount' => 'Diskon', 'tax_amount' => 'PPN',
+            'shipping_cost' => 'Ongkos kirim', 'requested_delivery_date' => 'Tanggal kirim diminta', 'contact_person' => 'Contact person', 'delivery_address' => 'Alamat kirim']);
+        if (!$v->fails()) {
+            $d = $v->validated();
+            if ($d['currency'] !== null && !preg_match('/^[A-Za-z]{3}$/', (string) $d['currency'])) {
+                $v->addError('currency', 'Mata uang harus kode 3 huruf, mis. IDR.');
+            }
+            if ($d['discount_amount'] !== null && $d['subtotal'] !== null && Number::toCents((string) $d['discount_amount']) > Number::toCents((string) $d['subtotal'])) {
+                $v->addError('discount_amount', 'Diskon tidak boleh melebihi subtotal.');
+            }
+        }
         if (!$v->fails()) {
             $number = (string) $v->validated()['po_number'];
             $current = $id !== null ? PurchaseOrder::find($id) : null;
@@ -213,8 +256,22 @@ final class PurchaseOrderController extends Controller
         return Validator::make($input, [
             'product_id' => 'required|integer|exists:products,id',
             'order_qty'  => 'required|integer|min:1',
+            'unit'       => 'nullable|string|max:20',
+            'unit_price' => 'nullable|numeric|min:0',
             'remark'     => 'nullable|string|max:500',
-        ], ['product_id' => 'Produk', 'order_qty' => 'Qty order', 'remark' => 'Catatan baris']);
+        ], ['product_id' => 'Produk', 'order_qty' => 'Qty order', 'unit' => 'Satuan', 'unit_price' => 'Harga satuan', 'remark' => 'Catatan baris']);
+    }
+
+    /**
+     * Data header untuk disimpan. Subtotal & grand total dihitung ulang oleh
+     * PurchaseOrder::recalcTotals (subtotal dari baris bila semua baris berharga).
+     * @param array<string,mixed> $d
+     */
+    private function headerData(array $d, ?array $po): array
+    {
+        $d['currency'] = $d['currency'] !== null ? strtoupper((string) $d['currency']) : null;
+        $d['price_includes_tax'] = (int) $d['price_includes_tax'];
+        return $d;
     }
 
     /**
@@ -240,10 +297,12 @@ final class PurchaseOrderController extends Controller
             $product = trim((string) ($row['product_id'] ?? ''));
             $qty = trim((string) ($row['order_qty'] ?? ''));
             $remark = trim((string) ($row['remark'] ?? ''));
-            if ($product === '' && $qty === '' && $remark === '') {
+            $unit = trim((string) ($row['unit'] ?? ''));
+            $price = trim((string) ($row['unit_price'] ?? ''));
+            if ($product === '' && $qty === '' && $remark === '' && $price === '') {
                 continue;
             }
-            $v = $this->validateLine(['product_id' => $product, 'order_qty' => $qty, 'remark' => $remark]);
+            $v = $this->validateLine(['product_id' => $product, 'order_qty' => $qty, 'remark' => $remark, 'unit' => $unit, 'unit_price' => $price]);
             if ($v->fails()) {
                 foreach ($v->errors() as $field => $msg) {
                     $errors["lines.{$i}.{$field}"] = 'Baris ' . ($i + 1) . ': ' . $msg;
@@ -251,7 +310,8 @@ final class PurchaseOrderController extends Controller
                 continue;
             }
             $data = $v->validated();
-            $lines[] = ['product_id' => (int) $data['product_id'], 'order_qty' => (int) $data['order_qty'], 'remark' => $data['remark']];
+            $lines[] = ['product_id' => (int) $data['product_id'], 'order_qty' => (int) $data['order_qty'], 'remark' => $data['remark'],
+                'unit' => $data['unit'], 'unit_price' => $data['unit_price'] !== null ? (string) $data['unit_price'] : null];
         }
         return [$lines, $errors];
     }
@@ -264,7 +324,8 @@ final class PurchaseOrderController extends Controller
         if (is_array($raw)) {
             foreach (array_values($raw) as $row) {
                 if (is_array($row)) {
-                    $out[] = ['product_id' => (string) ($row['product_id'] ?? ''), 'order_qty' => (string) ($row['order_qty'] ?? ''), 'remark' => (string) ($row['remark'] ?? '')];
+                    $out[] = ['product_id' => (string) ($row['product_id'] ?? ''), 'order_qty' => (string) ($row['order_qty'] ?? ''), 'remark' => (string) ($row['remark'] ?? ''),
+                        'unit' => (string) ($row['unit'] ?? ''), 'unit_price' => (string) ($row['unit_price'] ?? '')];
                 }
             }
         }

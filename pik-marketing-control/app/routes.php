@@ -186,8 +186,13 @@ return static function (Router $r): void {
     $r->get('/settings', [SettingsController::class, 'show'], 'settings.view');
     $r->post('/settings', [SettingsController::class, 'update'], 'settings.edit');
     $r->post('/settings/automation/run', [SettingsController::class, 'runAutomation'], 'settings.edit');
+    $r->get('/settings/database', [SettingsController::class, 'database'], 'settings.edit');
+    $r->post('/settings/database', [SettingsController::class, 'migrate'], 'settings.edit');
     $r->get('/import', [ImportController::class, 'show'], 'import.view');
     $r->post('/import', [ImportController::class, 'run'], 'import.create');
+    $r->get('/import/po', [ImportController::class, 'poShow'], 'import.view');
+    $r->post('/import/po', [ImportController::class, 'poRun'], 'import.create');
+    $r->get('/import/logs/{id}', [ImportController::class, 'logShow'], 'import.view');
     $r->get('/migration-issues', [MigrationIssueController::class, 'index'], 'migration.view');
     $r->post('/migration-issues/bulk', [MigrationIssueController::class, 'bulk'], 'migration.edit');
     $r->get('/migration-issues/deliveries', [MigrationIssueController::class, 'deliveries'], 'migration.edit');
@@ -195,6 +200,7 @@ return static function (Router $r): void {
     $r->get('/migration-issues/{id}', [MigrationIssueController::class, 'show'], 'migration.view');
     $r->post('/migration-issues/{id}/status', [MigrationIssueController::class, 'status'], 'migration.edit');
     $r->post('/migration-issues/{id}/apply', [MigrationIssueController::class, 'apply'], 'migration.edit');
+    $r->post('/migration-issues/{id}/link-po', [MigrationIssueController::class, 'linkPo'], 'migration.edit');
     $r->get('/audit-log', [AuditLogController::class, 'index'], 'audit.view');
     $r->get('/audit-log/{id}', [AuditLogController::class, 'show'], 'audit.view');
 };

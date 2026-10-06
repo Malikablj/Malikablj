@@ -100,6 +100,7 @@ $canEdit = can('migration.edit');
                     <input type="text" class="form-control form-control-sm w-auto" name="note" maxlength="1000" placeholder="Catatan (opsional)" aria-label="Catatan">
                     <button class="btn btn-light btn-sm" type="submit" name="status" value="Resolved" data-confirm="Tandai issue yang dicentang sebagai selesai?"><i class="bi bi-check2"></i> Tandai selesai</button>
                     <button class="btn btn-light btn-sm" type="submit" name="status" value="Ignored" data-confirm="Abaikan issue yang dicentang?"><i class="bi bi-eye-slash"></i> Abaikan</button>
+                    <button class="btn btn-light btn-sm" type="submit" name="status" value="apply_suggested" data-confirm="Terapkan nilai usulan (dokumen PO / spreadsheet legacy) untuk issue nilai yang dicentang?" title="Hanya untuk issue tanggal/angka"><i class="bi bi-arrow-left-right"></i> Pakai nilai usulan</button>
                 </div>
             <?php endif; ?>
         </form>

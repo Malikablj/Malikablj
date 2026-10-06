@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Helpers\Audit;
 use App\Helpers\Database;
+use App\Helpers\Number;
 use App\Helpers\Paginator;
 use DomainException;
 
@@ -21,8 +22,11 @@ final class PurchaseOrder extends Model
 
     private const SORTS = [
         'date' => 'p.po_date', 'number' => 'p.po_number', 'customer' => 'c.name', 'status' => 'p.status',
-        'qty' => 't.total_qty', 'outstanding' => 't.outstanding_qty',
+        'qty' => 't.total_qty', 'outstanding' => 't.outstanding_qty', 'value' => 'p.grand_total',
     ];
+
+    /** Kolom nilai dokumen PO (diisi import database PO atau form PO). */
+    public const VALUE_FIELDS = ['currency', 'price_includes_tax', 'subtotal', 'discount_amount', 'tax_amount', 'shipping_cost', 'grand_total'];
 
     /** @return array{0:string,1:array<string,mixed>} */
     private static function filters(array $f): array
@@ -30,8 +34,8 @@ final class PurchaseOrder extends Model
         $where = ['1=1'];
         $params = [];
         if (!empty($f['q'])) {
-            $where[] = '(p.po_number LIKE :q1 OR p.code LIKE :q2 OR c.name LIKE :q3 OR EXISTS (SELECT 1 FROM po_lines pl2 JOIN products pr2 ON pr2.id = pl2.product_id WHERE pl2.po_id = p.id AND (pr2.name LIKE :q4 OR pl2.product_name_legacy LIKE :q5)))';
-            foreach (['q1', 'q2', 'q3', 'q4', 'q5'] as $k) {
+            $where[] = '(p.po_number LIKE :q1 OR p.code LIKE :q2 OR c.name LIKE :q3 OR EXISTS (SELECT 1 FROM po_lines pl2 JOIN products pr2 ON pr2.id = pl2.product_id WHERE pl2.po_id = p.id AND (pr2.name LIKE :q4 OR pl2.product_name_legacy LIKE :q5 OR pl2.item_code LIKE :q6)))';
+            foreach (['q1', 'q2', 'q3', 'q4', 'q5', 'q6'] as $k) {
                 $params[$k] = Database::like((string) $f['q']);
             }
         }
@@ -56,6 +60,15 @@ final class PurchaseOrder extends Model
         }
         if (($f['issue'] ?? '') === 'outstanding') {
             $where[] = 'COALESCE(t.open_outstanding_qty, 0) > 0';
+        }
+        // Bulan PO (YYYY-MM)
+        if (!empty($f['month']) && preg_match('/^(\d{4})-(0[1-9]|1[0-2])$/', (string) $f['month'], $m)) {
+            $where[] = 'p.po_date BETWEEN :m_from AND :m_to';
+            $params['m_from'] = $m[1] . '-' . $m[2] . '-01';
+            $params['m_to'] = date('Y-m-t', (int) strtotime($params['m_from']));
+        }
+        if (($f['review'] ?? '') === 'needs_review') {
+            $where[] = "p.import_status = 'NEEDS_REVIEW'";
         }
         return [implode(' AND ', $where), $params];
     }
@@ -84,10 +97,13 @@ final class PurchaseOrder extends Model
     {
         [$where, $params] = self::filters($f);
         return Database::fetch(
-            'SELECT COUNT(*) AS po_count, COALESCE(SUM(t.total_qty), 0) AS total_qty, COALESCE(SUM(t.delivered_qty), 0) AS delivered_qty,
-                    COALESCE(SUM(t.open_outstanding_qty), 0) AS outstanding_qty
+            "SELECT COUNT(*) AS po_count, COALESCE(SUM(t.total_qty), 0) AS total_qty, COALESCE(SUM(t.delivered_qty), 0) AS delivered_qty,
+                    COALESCE(SUM(t.open_outstanding_qty), 0) AS outstanding_qty,
+                    COALESCE(SUM(CASE WHEN p.status <> 'Cancelled' THEN p.grand_total END), 0) AS total_value,
+                    SUM(CASE WHEN p.status <> 'Cancelled' AND p.grand_total IS NULL THEN 1 ELSE 0 END) AS without_value,
+                    SUM(CASE WHEN p.import_status = 'NEEDS_REVIEW' THEN 1 ELSE 0 END) AS needs_review
              FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
-             LEFT JOIN (' . PoLine::poTotalsSql() . ') t ON t.po_id = p.id WHERE ' . $where,
+             LEFT JOIN (" . PoLine::poTotalsSql() . ') t ON t.po_id = p.id WHERE ' . $where,
             $params
         ) ?? [];
     }
@@ -113,7 +129,7 @@ final class PurchaseOrder extends Model
     public static function lines(int $poId): array
     {
         return Database::fetchAll(
-            'SELECT pl.*, pr.name AS product_name, pr.code AS product_code_id, pr.product_code, pr.variant, pr.unit,
+            'SELECT pl.*, pr.name AS product_name, pr.code AS product_code_id, pr.product_code, pr.variant, pr.unit AS product_unit,
                     t.delivered_qty, t.return_qty, t.outstanding_qty,
                     (SELECT COUNT(*) FROM deliveries d WHERE d.po_line_id = pl.id) AS delivery_count
              FROM po_lines pl
@@ -137,7 +153,7 @@ final class PurchaseOrder extends Model
     /**
      * Buat PO beserta baris-barisnya dalam satu transaksi.
      * @param array<string,mixed> $header
-     * @param list<array{product_id:int,order_qty:int,remark:?string}> $lines
+     * @param list<array{product_id:int,order_qty:int,remark:?string,unit?:?string,unit_price?:?string}> $lines
      */
     public static function createWithLines(array $header, array $lines): int
     {
@@ -146,11 +162,52 @@ final class PurchaseOrder extends Model
         }
         return Database::transaction(function () use ($header, $lines): int {
             $id = self::create($header);
+            $includesTax = !empty($header['price_includes_tax']);
             foreach ($lines as $line) {
-                PoLine::create(['po_id' => $id, 'product_id' => $line['product_id'], 'order_qty' => $line['order_qty'], 'remark' => $line['remark'] ?? null]);
+                PoLine::create([
+                    'po_id' => $id, 'product_id' => $line['product_id'], 'order_qty' => $line['order_qty'], 'remark' => $line['remark'] ?? null,
+                    'unit' => $line['unit'] ?? null, 'unit_price' => $line['unit_price'] ?? null,
+                    'line_subtotal' => PoLine::subtotalFor((int) $line['order_qty'], $line['unit_price'] ?? null, $includesTax, null),
+                ]);
             }
+            self::recalcTotals($id);
             return $id;
         });
+    }
+
+    /**
+     * Hitung ulang nilai PO setelah baris/header berubah:
+     *   subtotal    = jumlah subtotal (DPP) baris — hanya bila SEMUA baris punya harga;
+     *                 selain itu subtotal yang tersimpan (mis. dari dokumen PO) dipertahankan
+     *   grand total = subtotal − diskon + PPN + ongkir (nilai kosong dihitung 0)
+     */
+    public static function recalcTotals(int $poId): void
+    {
+        $po = Database::fetch('SELECT id, code, po_number, subtotal, discount_amount, tax_amount, shipping_cost, grand_total FROM purchase_orders WHERE id = :id', ['id' => $poId]);
+        if ($po === null) {
+            return;
+        }
+        $agg = Database::fetch('SELECT COUNT(*) AS n, SUM(CASE WHEN line_subtotal IS NULL THEN 1 ELSE 0 END) AS missing, SUM(line_subtotal) AS total FROM po_lines WHERE po_id = :id', ['id' => $poId]);
+        $subtotal = $po['subtotal'];
+        if ((int) $agg['n'] > 0 && (int) $agg['missing'] === 0) {
+            $subtotal = Number::fromCents(Number::toCents((string) $agg['total']));
+        }
+        $grand = $po['grand_total'];
+        if ($subtotal !== null) {
+            $grand = Number::fromCents(Number::toCents((string) $subtotal) - Number::toCents((string) ($po['discount_amount'] ?? '0'))
+                + Number::toCents((string) ($po['tax_amount'] ?? '0')) + Number::toCents((string) ($po['shipping_cost'] ?? '0')));
+        }
+        $changes = [];
+        foreach (['subtotal' => $subtotal, 'grand_total' => $grand] as $col => $value) {
+            $old = $po[$col] !== null ? Number::fromCents(Number::toCents((string) $po[$col])) : null;
+            if ($old !== $value) {
+                $changes[$col] = ['old' => $po[$col], 'new' => $value];
+            }
+        }
+        if ($changes !== []) {
+            Database::update('purchase_orders', array_map(static fn (array $c) => $c['new'], $changes), 'id = :id', ['id' => $poId]);
+            Audit::log('auto_total', self::ENTITY, $poId, (string) ($po['po_number'] ?? $po['code']), $changes);
+        }
     }
 
     /** @return array<string,int> data yang masih merujuk PO */

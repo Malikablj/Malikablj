@@ -18,6 +18,7 @@ $hasData = $existing !== [];
         <h1 class="page-title">Import Data</h1>
         <p class="page-subtitle">Muat data awal dari <span class="code-chip">PIK_Master_Database_AppSheet.xlsx</span>. File spreadsheet asli (legacy) opsional, dipakai untuk memverifikasi tanggal & angka.</p>
     </div>
+    <div class="page-actions"><a class="btn btn-light" href="<?= e(url('/import/po')) ?>"><i class="bi bi-receipt"></i> Import database PO</a></div>
 </div>
 
 <?php if ($excelProblem): ?>

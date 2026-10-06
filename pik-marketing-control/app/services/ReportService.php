@@ -378,7 +378,7 @@ final class ReportService
             'SELECT p.id, p.code, COALESCE(p.po_number, p.code) AS po_number, c.name AS customer_name, u.name AS pic_name, p.po_date, p.status, p.payment_term,
                     COALESCE(t.line_count, 0) AS line_count, COALESCE(t.total_qty, 0) AS total_qty, COALESCE(t.delivered_qty, 0) AS delivered_qty,
                     COALESCE(t.return_qty, 0) AS return_qty, COALESCE(t.outstanding_qty, 0) AS outstanding_qty,
-                    COALESCE(t.open_outstanding_qty, 0) AS open_outstanding_qty
+                    COALESCE(t.open_outstanding_qty, 0) AS open_outstanding_qty, p.grand_total
              FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id LEFT JOIN users u ON u.id = c.marketing_pic_id
              LEFT JOIN (' . PoLine::poTotalsSql() . ') t ON t.po_id = p.id
              WHERE ' . $where . ' ORDER BY p.po_date IS NULL, p.po_date DESC, p.id DESC LIMIT ' . self::MAX_ROWS,
@@ -398,10 +398,13 @@ final class ReportService
                 ['key' => 'delivered_qty', 'label' => 'Terkirim', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
                 ['key' => 'return_qty', 'label' => 'Retur', 'type' => 'qty', 'total' => true, 'hide' => 'xxl'],
                 ['key' => 'outstanding_qty', 'label' => 'Outstanding', 'type' => 'qty', 'total' => true],
+                ['key' => 'grand_total', 'label' => 'Nilai PO', 'type' => 'money', 'total' => true, 'hide' => 'lg', 'empty' => '—'],
             ],
             'rows'    => $rows,
             'summary' => [
                 ['label' => 'PO', 'value' => Number::qty(count($rows)), 'meta' => Number::qty(count($open)) . ' masih terbuka'],
+                ['label' => 'Nilai PO', 'value' => Number::money(self::sumMoney(array_values(array_filter($rows, static fn ($r) => $r['status'] !== 'Cancelled')), 'grand_total')),
+                    'meta' => 'grand total, tanpa Cancelled · ' . Number::qty(count(array_filter($rows, static fn ($r) => $r['grand_total'] === null))) . ' PO belum bernilai'],
                 ['label' => 'Qty order', 'value' => Number::qty($total), 'meta' => 'retur ' . Number::qty(self::sumInt($rows, 'return_qty'))],
                 ['label' => 'Terkirim', 'value' => Number::qty($delivered), 'meta' => self::pct($delivered, $total) . ' dari order'],
                 ['label' => 'Outstanding PO terbuka', 'value' => Number::qty(self::sumInt($open, 'open_outstanding_qty')), 'meta' => 'pcs belum terkirim'],
