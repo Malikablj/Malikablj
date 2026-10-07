@@ -1,6 +1,6 @@
 # PIK Marketing Control
 
-Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (lead, aktivitas, follow up), purchase order, delivery, retur, stok, lead time, invoice & pembayaran, laporan, dan notifikasi — satu tempat yang menggantikan spreadsheet AppSheet.
+Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (lead, aktivitas, follow up), Order Entry Form, delivery (surat jalan), complaint & retur, stok, lead time, inbound maklon & supplier, laporan, dan notifikasi — satu tempat yang menggantikan spreadsheet AppSheet. Invoice & pembayaran dikelola divisi Keuangan di luar aplikasi ini.
 
 - **Stack:** PHP 8 native (MVC sederhana, tanpa framework), MySQL/MariaDB via PDO, HTML5 + CSS3 + JavaScript, Bootstrap 5 (file lokal), Apache.
 - **Tanpa dependensi eksternal:** tidak perlu Composer/Node. Semua library (Bootstrap, Bootstrap Icons, font) ikut di `public/assets/vendor`.
@@ -29,6 +29,7 @@ Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (l
 15. [Keamanan](#15-keamanan)
 16. [Troubleshooting](#16-troubleshooting)
 17. [Order Entry Form & Complaint (update Oktober 2026)](#17-order-entry-form--complaint-update-oktober-2026)
+18. [Pembagian tugas per divisi, Stock & Inbound Supplier (update Oktober 2026 — 2)](#18-pembagian-tugas-per-divisi-stock--inbound-supplier-update-oktober-2026--2)
 
 ---
 
@@ -95,11 +96,11 @@ File `.env` berisi kredensial — **jangan di-commit / dibagikan**. Semua opsi a
 | `SESSION_IDLE_MINUTES` | `120` | Logout otomatis setelah tidak aktif. |
 | `SESSION_ABSOLUTE_HOURS` | `12` | Batas maksimal umur sesi. |
 
-Pengaturan bisnis (nama perusahaan, jatuh tempo default invoice, tarif PPN, pengingat delivery, interval otomasi) diubah Admin di **Settings › Pengaturan**, bukan di `.env`.
+Pengaturan bisnis (nama perusahaan, pengingat delivery, interval otomasi, email QC) diubah Admin di **Settings › Pengaturan**, bukan di `.env`.
 
 ## 4. Setup database
 
-- `database/schema.sql` — seluruh tabel (users, customers, contacts, products, purchase_orders, po_lines, deliveries, returns, stock, leadtime, inbound_maklon, invoices_payments, po_financials, leads, activities, follow_up + notifications, audit_logs, migration_issues, settings, login_attempts). Aman dijalankan ulang (`CREATE TABLE IF NOT EXISTS`).
+- `database/schema.sql` — seluruh tabel (users, customers, contacts, products, purchase_orders, po_lines, deliveries, returns, stock, leadtime, inbound_maklon, inbound_supplier, invoices_payments & po_financials (data lama, tanpa menu), leads, activities, follow_up + notifications, audit_logs, migration_issues, settings, login_attempts). Aman dijalankan ulang (`CREATE TABLE IF NOT EXISTS`).
 - `database/seed.sql` — **hanya** pengaturan awal (nama perusahaan, jatuh tempo default 30 hari, PPN 11%, dll.). Tidak berisi data bisnis maupun akun.
 - `php database/install.php` menjalankan keduanya memakai kredensial `.env`.
 - Tanpa akses SSH (mis. hosting dengan phpMyAdmin): impor `schema.sql` lalu `seed.sql` lewat tab *Import* phpMyAdmin.
@@ -158,6 +159,9 @@ php -S 127.0.0.1:8080 -t public public/index.php
 | marketing@pik.test | Marketing |
 | sales@pik.test | Sales |
 | management@pik.test | Management |
+| ppic@pik.test | PPIC |
+| produksi@pik.test | Produksi |
+| gudang@pik.test | Gudang |
 | viewer@pik.test | Viewer |
 
 Password semua akun: nilai variabel `DEV_PASSWORD`, atau default `PikDev2026!`. Script hanya mau berjalan bila `APP_ENV` = `development`, `local`, atau `testing`.
@@ -212,13 +216,14 @@ Wajib `AllowOverride All` agar `.htaccess` aktif. Setelah deploy, cek bahwa `htt
 
 ## 9. Otomasi & notifikasi (cron)
 
-Otomasi menandai follow up & invoice yang lewat jatuh tempo (Overdue) dan mengirim notifikasi (tanpa duplikat) kepada user yang berhak:
+Otomasi menandai follow up yang lewat jatuh tempo (Overdue) dan mengirim notifikasi (tanpa duplikat) kepada user yang berhak:
 
 | Notifikasi | Penerima |
 |---|---|
 | Follow up hari ini / terlewat | PIC follow up (bila pengingat aktif) |
-| Delivery terjadwal dalam N hari (Settings) | PIC marketing customer / pembuat delivery (atau semua user Marketing) |
-| Invoice overdue | User dengan akses Finance |
+| Delivery terjadwal dalam N hari (Settings) | Semua user **PPIC** (pengisi surat jalan) + PIC marketing customer / pembuat delivery (atau semua user Marketing) |
+| OEF baru / revisi menunggu konfirmasi | User PPIC (atau Admin bila belum ada PPIC) |
+| Hasil konfirmasi PPIC | Pembuat OEF & sales |
 | Target closing lead ≤ 3 hari / terlewat | PIC lead |
 
 Otomasi berjalan sendiri saat aplikasi dipakai (maksimal sekali per interval, default 60 menit) dan bisa dijalankan manual di Settings › Pengaturan. Untuk server yang tidak selalu dibuka, tambahkan cron:
@@ -250,38 +255,41 @@ Yang perlu dibackup: **database** dan file **`.env`** (simpan terpisah dan aman)
 
 Otorisasi dicek di **backend** pada setiap route (lihat `app/routes.php` + `config/permissions.php`); menu & tombol hanya disembunyikan sebagai kenyamanan tampilan.
 
-| Modul | Admin | Marketing | Sales | PPIC | Management | Viewer |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| Dashboard | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Customers & Contacts | ✔ | ✔ | ✔ | lihat | ✔ | lihat |
-| Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | — | lihat |
-| Order Entry Form (buat / edit) | ✔ | ✔ | buat & edit | lihat | ✔ | lihat |
-| Konfirmasi PPIC (Bisa / Tidak bisa diproses) | ✔ | — | — | ✔ | — | — |
-| Deliveries | ✔ | ✔ | lihat | lihat + ubah jadwal | ✔ | lihat |
-| Complaint & Return | ✔ | ✔ | lihat & catat | lihat | ✔ | lihat |
-| Tombol Selesai / Tidak selesai complaint | ✔ | ✔ | — | — | ✔ | — |
-| Products | ✔ | ✔ | lihat | lihat | — | lihat |
-| Stock, Inbound Maklon | ✔ | — | — | lihat | ✔ | lihat |
-| Lead Time | ✔ | ✔ | — | ✔ | ✔ | lihat |
-| Finance (Invoice, Payment, PO Financials) | ✔ | — | — | — | — | — |
-| Reports | ✔ | — | — | — | semua + export | tanpa Financial & export |
-| Users, Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — | — |
+| Modul | Admin | Marketing | Sales | PPIC | Produksi | Gudang | Management | Viewer |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Dashboard | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Customers & Contacts | ✔ | ✔ | ✔ | — | — | — | ✔ | lihat |
+| Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | — | — | — | lihat |
+| Order Entry Form (buat / edit) | ✔ | ✔ | buat & edit | lihat | — | — | ✔ | lihat |
+| Konfirmasi PPIC (Bisa / Tidak bisa diproses) | ✔ | — | — | ✔ | — | — | — | — |
+| Deliveries / Surat Jalan (catat, edit, ubah jadwal) | ✔ | lihat | lihat | ✔ | — | — | lihat | lihat |
+| Complaint & Return | ✔ | ✔ | lihat & catat | — | — | — | ✔ | lihat |
+| Tombol Selesai / Tidak selesai complaint | ✔ | ✔ | — | — | — | — | ✔ | — |
+| Products | ✔ | ✔ | lihat | — | — | — | — | lihat |
+| Stock | ✔ | — | — | — | ✔ | ✔ | lihat | lihat |
+| Inbound Maklon | ✔ | — | — | — | — | ✔ | lihat | lihat |
+| Inbound Supplier | ✔ | — | — | — | — | ✔ | lihat | lihat |
+| Lead Time | ✔ | ✔ | — | — | — | — | ✔ | lihat |
+| Reports | ✔ | — | — | — | — | — | semua + export | tanpa export |
+| Users, Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — | — | — | — |
 
-Interpretasi PRD (bisa diubah di `config/permissions.php`):
-- Lead Time mengikuti akses PO/Delivery; Inbound Maklon mengikuti akses Stock.
-- Finance tidak disebut untuk role selain Admin di PRD, sehingga hanya Admin. Management melihat angka keuangan lewat laporan Financial.
-- "Viewer: read-only" = boleh melihat modul operasional, tanpa Finance, area Admin, dan export.
+Catatan (bisa diubah di `config/permissions.php`):
+- **Surat Jalan hanya diisi PPIC** (Admin tetap bisa untuk koreksi data). Jadwal delivery otomatis dari OEF tetap dibuat sistem saat Sales/Marketing menyimpan OEF.
+- **PPIC** hanya meninjau OEF (Bisa / Tidak bisa diproses) dan mengelola menu Deliveries; nama customer tetap terlihat di halaman order, tanpa akses ke menu Customers.
+- **Produksi & Gudang** mengisi Stock; **Gudang** juga mengisi Inbound Maklon & Inbound Supplier. Management & Viewer hanya melihat.
+- Menu **Finance** (Invoice & Payment, PO Financials) dan laporan Financial sudah dihapus — ranah divisi Keuangan.
 
 ## 12. Aturan bisnis
 
 - **Outstanding Quantity = Order Quantity − Delivered Quantity + Return Quantity** (per baris PO). Delivered hanya menghitung delivery berstatus *Delivered*/*Partial*. Nilai negatif = kelebihan kirim (harus dikonfirmasi saat input).
 - **Status PO otomatis:** Open/On Process → *Partial* saat ada kiriman; → *Closed* saat semua baris outstanding ≤ 0. Status *Closed* dan *Cancelled* tidak pernah diubah otomatis. Setiap perubahan otomatis tercatat di audit log.
 - **Follow up overdue:** tanggal < hari ini dan status bukan *Done* (status *Cancelled* juga dianggap selesai).
-- **Invoice:** sisa tagihan = nilai invoice − total dibayar; tidak boleh bayar melebihi sisa. Status *Paid* (lunas), *Overdue* (belum lunas & lewat jatuh tempo), *Partial*, *Unpaid*. Jatuh tempo kosong diisi otomatis: termin PO NET n → n hari; CBD/COD → hari yang sama; selain itu default Settings (30 hari). Setiap pembayaran tercatat sebagai riwayat.
-- **PO Financials:** total = qty × harga satuan; PPN = total × tarif Settings (default 11%, sesuai data workbook).
-- **Stok:** Qty = jumlah box × isi per box bila Qty dikosongkan; Qty yang berbeda harus dikonfirmasi. Entri tanpa qty ditandai, tidak dihitung sebagai 0.
+- **Order Entry Form:** No. order, nama customer, dan nama produk diketik manual. No. order wajib unik (tidak peka huruf besar/kecil). Customer & produk dicocokkan dengan nama yang sama (tidak peka huruf besar/kecil & spasi; customer juga "PT." = "PT"); bila belum ada, dicatat otomatis di menu Customers / Products. Qty & spesifikasi OEF terakhir disimpan di produk sebagai arsip.
+- **Stok:** nama produk diketik manual dan dikelompokkan otomatis per produk (nama sama = kelompok sama; nama baru = produk baru bersumber "Stok"). Qty = jumlah box × isi per box bila Qty dikosongkan; Qty yang berbeda harus dikonfirmasi. Entri tanpa qty ditandai, tidak dihitung sebagai 0.
 - **Lead time:** estimasi terbuka yang tanggalnya lewat ditandai *Terlambat*.
-- **Inbound maklon:** total masuk = qty diterima − qty reject.
+- **Inbound maklon:** total masuk = qty diterima − qty reject. No. order/PO & nama barang diketik manual; terhubung otomatis bila sama persis dengan No. order/No. PO customer atau nama produk yang ada.
+- **Inbound supplier:** total masuk = qty diterima − qty reject (qty boleh desimal, mis. kg); rekap per barang = nama barang (tidak peka huruf besar/kecil) + satuan.
+- **Data keuangan lama** (invoice & PO financials hasil migrasi) tetap tersimpan di database tanpa menu, dan tetap mencegah order terkait terhapus.
 - Uang dihitung dalam sen (integer) agar tidak ada selisih pembulatan; input menerima format Indonesia (`12.500.000` atau `1.250.000,50`).
 
 ## 13. Temuan data migrasi
@@ -294,7 +302,7 @@ Hasil import workbook asli (44 customer, 262 produk, 365 PO, 407 baris PO, 1.526
 - **614 delivery belum terhubung ke baris PO** (537 produk tidak cocok persis, 77 PO tidak ditemukan). 435 di antaranya berada di PO satu baris dan bisa ditinjau cepat di halaman *Tinjau delivery legacy*. Sampai dihubungkan, delivery ini belum mengurangi outstanding.
 - PO tanpa nomor (36) / tanpa tanggal (37), nomor PO ganda (4), kemungkinan customer (3) & produk (7) ganda.
 - Stok: 9 baris judul kolom spreadsheet, 35 nama barang belum cocok ke master produk.
-- Seluruh 92 invoice tidak memiliki jatuh tempo; 1 invoice belum lunas ditandai untuk dilengkapi.
+- Seluruh 92 invoice tidak memiliki jatuh tempo; 1 invoice belum lunas ditandai untuk dilengkapi. *(Menu Finance kini dihapus; issue invoice/PO financial tetap bisa ditinjau di Migration Issues tanpa link ke halaman record.)*
 
 ## 14. Struktur folder
 
@@ -376,16 +384,16 @@ Menu **Operations › Order Entry Form** (URL tetap `/purchase-orders`, sehingga
 
 | Kolom | Keterangan |
 |---|---|
-| No. order | Otomatis `OEF-YYMM-NNNN` (urut per bulan tanggal order). |
+| No. order | **Diketik manual** (wajib & unik; lihat bagian 18). |
 | Nama sales | Default nama user yang login; bisa diketik. Bila sama dengan nama user aktif, sales tersebut ikut menerima notifikasi hasil PPIC. |
-| Nama customer | Dipilih dari master customer. |
+| Nama customer | **Diketik manual**; customer baru dicatat otomatis di menu Customers (lihat bagian 18). |
 | No. PO dari customer | Opsional (boleh menyusul), tetap unik bila diisi. |
 | Nama produk | **Diketik manual.** Bila nama yang sama (tidak peka huruf besar/kecil & spasi) belum ada, produk baru **dicatat otomatis di menu Products** (sumber `OEF`). |
 | Spesifikasi produk | Disimpan di order dan sebagai spesifikasi terakhir di produk. |
-| Qty produk | pcs. |
+| Qty produk | pcs. Ikut tersimpan sebagai **Qty** (arsip) di menu Products. |
 | Supplier (jika subcont) | Centang *Dikerjakan subcont* lalu isi supplier (wajib bila subcont). |
 | Permintaan selesai / kirim | Membuat **jadwal delivery otomatis** (status *Scheduled*) di menu Deliveries. |
-| Tujuan kirim | Default alamat customer; menjadi tujuan di jadwal delivery. |
+| Tujuan kirim | Kosong = alamat customer (atau nama customer); menjadi tujuan di jadwal delivery. |
 | Keterangan | Catatan bebas. |
 
 Alur:
@@ -393,10 +401,10 @@ Alur:
 1. Sales/Marketing menyimpan OEF → status PPIC **Menunggu PPIC**; semua user role **PPIC** (atau Admin bila belum ada user PPIC) mendapat notifikasi.
 2. PPIC membuka order lalu menekan **Bisa diproses** (hijau → status order *On Process*) atau **Tidak bisa diproses** (merah, **alasan wajib** → status *Cancelled*, jadwal delivery dibatalkan). Pembuat OEF & sales mendapat notifikasi hasilnya.
 3. Order yang ditolak bisa direvisi; menyimpan revisi otomatis mengirim ulang ke PPIC dan mengaktifkan kembali jadwal delivery. Mengubah spesifikasi, qty, produk, subcont, atau tanggal permintaan pada order yang sudah dikonfirmasi juga mengirim ulang ke PPIC.
-4. **Ubah jadwal**: di halaman order (panel *Jadwal delivery › Ubah jadwal*, disertai alasan yang tercatat di catatan delivery) atau langsung edit delivery di menu Deliveries. Tanggal permintaan customer di OEF tetap tersimpan sebagai acuan.
-5. Jadwal delivery otomatis tidak mengurangi outstanding sampai statusnya *Delivered/Partial* (aturan lama tetap berlaku). Saat barang dikirim, ubah jadwal tersebut menjadi *Delivered* dan isi nomor surat jalan, atau catat delivery baru.
+4. **Ubah jadwal** (PPIC): di halaman order (panel *Jadwal delivery › Ubah jadwal*, disertai alasan yang tercatat di catatan delivery) atau langsung edit delivery di menu Deliveries. Tanggal permintaan customer di OEF tetap tersimpan sebagai acuan.
+5. Jadwal delivery otomatis tidak mengurangi outstanding sampai statusnya *Delivered/Partial* (aturan lama tetap berlaku). Saat barang dikirim, **PPIC** mengubah jadwal tersebut menjadi *Delivered* dan mengisi nomor surat jalan, atau mencatat delivery baru.
 
-Data PO lama hasil migrasi tetap tampil dengan label **PO lama** (tanpa konfirmasi PPIC) dan tetap bisa dikelola seperti sebelumnya. Order multi-produk tetap didukung lewat *Tambah baris* di halaman detail.
+Data PO lama hasil migrasi tetap tampil dengan label **PO lama** (tanpa konfirmasi PPIC) dan tetap bisa dikelola seperti sebelumnya. Order multi-produk tetap didukung lewat *Tambah baris* di halaman detail (nama produk diketik manual).
 
 Role baru **PPIC** dibuat di Settings › Users.
 
@@ -428,4 +436,64 @@ Data retur lama otomatis ditandai *Selesai* (catatan: "Data retur lama") agar ti
 Gunakan tombol **Kirim email percobaan** setelah menyimpan. Bila email gagal, complaint tetap tersimpan dan pesan error ditampilkan.
 
 > Catatan keamanan: password SMTP disimpan di tabel `settings` (tidak terenkripsi). Gunakan akun email khusus notifikasi dengan hak terbatas, dan batasi akses database.
+
+## 18. Pembagian tugas per divisi, Stock & Inbound Supplier (update Oktober 2026 — 2)
+
+### Cara update server
+
+1. **Backup database** (lihat bagian 10) dan simpan `.env` yang sudah ada.
+2. Unggah/timpa file aplikasi (folder `app/`, `config/`, `cron/`, `database/`, `public/`, `tests/`, `README.md`). **Jangan menimpa `.env`** dan isi folder `storage/`.
+3. Hapus file lama yang tidak dipakai lagi (aman bila tertinggal, karena route-nya sudah tidak ada):
+   `app/controllers/InvoiceController.php`, `app/controllers/PoFinancialController.php`, `app/models/Invoice.php`, `app/models/PoFinancial.php`,
+   folder `app/views/invoices/`, `app/views/po_financials/`, dan `app/views/customers/tabs/invoices.php`.
+4. Buka aplikasi sekali (atau jalankan `php database/migrate.php`). Migrasi skema **2026.10.2** berjalan otomatis:
+   - role `Produksi` & `Gudang` ditambahkan ke kolom `users.role`;
+   - `purchase_orders.order_number` diperbesar menjadi 60 karakter (No. order diisi manual);
+   - kolom `products.qty` ditambahkan dan langsung diisi dengan qty Order Entry Form terakhir setiap produk;
+   - tabel `inbound_supplier` dibuat.
+   Data lama tidak dihapus (termasuk `capacity_per_day`, invoice, dan PO financials).
+5. Buat akun untuk divisi PPIC, Produksi, dan Gudang di **Settings › Users**.
+
+### 1 · Order Entry Form: No. order, customer & produk diketik manual
+
+- **No. order** diisi manual (wajib, maks. 60 karakter, unik — tidak peka huruf besar/kecil & spasi). Form menampilkan No. order terakhir sebagai bantuan.
+- **Nama customer** diketik manual (dengan saran nama yang sudah ada). Dicocokkan dengan customer yang namanya sama (tidak peka huruf besar/kecil & spasi, "PT. Abc" = "PT Abc"); bila belum ada, **customer baru dicatat otomatis di menu Customers** (status Active, PIC = sales bila namanya cocok dengan user aktif, catatan "Dicatat otomatis dari Order Entry Form …"). Lengkapi alamat & kontaknya di menu Customers.
+- **Nama produk** tetap diketik manual dan dicatat otomatis di menu Products (juga untuk *Tambah baris* di halaman order).
+- Menu **Products**: kolom *Kapasitas produksi per hari* diganti **Qty** — arsip qty dari Order Entry Form terakhir (terisi otomatis, bisa diubah manual). Halaman produk juga menampilkan *Total dipesan* dari seluruh order. Nilai kapasitas lama tetap tersimpan di database tetapi tidak ditampilkan.
+
+### 2 · PPIC: tinjau OEF + isi Surat Jalan
+
+- Role **PPIC** hanya: melihat Order Entry Form, menekan **Bisa diproses / Tidak bisa diproses**, dan menu **Deliveries** penuh (catat surat jalan, edit, ubah jadwal, hapus). Tanpa akses Customers, Products, Stock, Lead Time, Complaint, maupun Reports.
+- **Surat Jalan hanya diisi PPIC.** Marketing, Sales, dan Management kini hanya *melihat* Deliveries (tombol *Catat delivery* & *Ubah jadwal* tidak tampil dan ditolak di backend). Admin tetap bisa untuk koreksi.
+- Dashboard PPIC: *Menunggu PPIC*, *Surat jalan mendatang*, order terbaru, dan pengiriman mendatang. PPIC juga menerima notifikasi pengingat delivery.
+
+### 3 · Produksi & Gudang: Stock dengan nama produk manual
+
+- Role baru **Produksi** (Stock) dan **Gudang** (Stock, Inbound Maklon, Inbound Supplier).
+- Form stok: **nama produk diketik manual** (dengan saran). Nama yang sama otomatis masuk ke **kelompok produk** yang sama; nama baru dicatat sebagai produk baru (sumber "Stok").
+- Menu Stock: tab **Kelompok per produk** (total FG / WIP / Ready / Reserved per produk, filter kategori), klik nama produk untuk melihat semua entri dalam kelompok tersebut, dan tab *Semua entri* (dengan pencatat & waktu update).
+- Entri stok legacy yang belum terhubung bisa dikelompokkan cukup dengan mengetik nama produknya.
+
+### 4 · Menu Finance dihapus
+
+Menu **Invoice & Payment** dan **PO Financials** (beserta laporan Financial, kartu piutang di dashboard, tab Invoice & ringkasan piutang di customer, bagian Finance di halaman order, pencarian invoice, pengaturan jatuh tempo/PPN, dan notifikasi invoice overdue) dihapus karena ranah divisi Keuangan. **Data lama tetap ada di database** (tabel `invoices_payments` & `po_financials`), tetap ikut import workbook, dan tetap mencegah order terkait terhapus.
+
+### 5 · Inbound Maklon diinput manual oleh Gudang
+
+- Hanya **Gudang** (dan Admin) yang mencatat/mengubah; Management & Viewer melihat.
+- Dropdown order & produk diganti isian manual: **Nama barang / komponen** (wajib) dan **No. order / PO terkait** (opsional). Bila No. order sama dengan No. order OEF atau No. PO customer, atau nama barang sama dengan produk di master, data otomatis terhubung (tanpa membuat data baru).
+
+### 6 · Menu baru: Inbound Supplier
+
+Menu **Inventory › Inbound Supplier** (`/inbound-supplier`) untuk penerimaan barang dari supplier (bahan baku, kemasan, label, karton, dll.), diinput manual oleh **Gudang**:
+
+| Kolom | Keterangan |
+|---|---|
+| Supplier, Tanggal barang masuk | Wajib. |
+| No. & tanggal surat jalan supplier, No. PO pembelian | Opsional. Tanggal SJ tidak boleh setelah tanggal masuk. |
+| Nama barang, kode, jenis barang, lokasi simpan | Nama barang wajib; isian lain dengan saran dari data sebelumnya. |
+| Qty diterima, Qty reject, Satuan | Qty boleh desimal (format `1.250,5` atau `1250.5`); reject ≤ diterima. **Total masuk = diterima − reject** (otomatis). |
+| Penerima, link lampiran, catatan | Penerima default = user yang login. |
+
+Tersedia tab **Rekap per barang** (total diterima, reject, dan masuk per nama barang + satuan), filter supplier/jenis/periode/ada reject, pencarian global, kartu di dashboard Gudang, dan riwayat perubahan (audit log).
 

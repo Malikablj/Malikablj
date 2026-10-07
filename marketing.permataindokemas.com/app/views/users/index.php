@@ -84,9 +84,12 @@ use App\Helpers\Permission;
     <p class="text-secondary small mb-3">Diatur di <span class="code-chip">config/permissions.php</span> dan diverifikasi di backend untuk setiap halaman &amp; aksi.</p>
     <div class="row g-3 small">
         <div class="col-md-6 col-xl-4"><strong>Admin</strong><div class="text-secondary">Akses penuh ke semua modul, user, audit log, import &amp; migration issues.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Marketing</strong><div class="text-secondary">Customers, Contacts, Leads, Activities, Follow Up, Purchase Orders, Delivery &amp; Return, Products.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Sales</strong><div class="text-secondary">Customers, Contacts, Leads, Activities, Follow Up.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Management</strong><div class="text-secondary">Dashboard, Reports (termasuk finansial), Customers, Purchase Orders, Delivery &amp; Return, Stock.</div></div>
-        <div class="col-md-6 col-xl-4"><strong>Viewer</strong><div class="text-secondary">Read-only untuk modul operasional &amp; laporan non-finansial.</div></div>
+        <div class="col-md-6 col-xl-4"><strong>Marketing</strong><div class="text-secondary">Customers, Contacts, Leads, Activities, Follow Up, Order Entry Form, Complaint &amp; Return, Lead Time, Products. Deliveries hanya lihat.</div></div>
+        <div class="col-md-6 col-xl-4"><strong>Sales</strong><div class="text-secondary">Customers, Contacts, Leads, Activities, Follow Up, input Order Entry Form &amp; complaint.</div></div>
+        <div class="col-md-6 col-xl-4"><strong>PPIC</strong><div class="text-secondary">Meninjau Order Entry Form (Bisa / Tidak bisa diproses) dan mengisi Surat Jalan di menu Deliveries.</div></div>
+        <div class="col-md-6 col-xl-4"><strong>Produksi</strong><div class="text-secondary">Mengisi Stock (nama produk diketik manual, otomatis dikelompokkan per produk).</div></div>
+        <div class="col-md-6 col-xl-4"><strong>Gudang</strong><div class="text-secondary">Mengisi Stock, Inbound Maklon, dan Inbound Supplier.</div></div>
+        <div class="col-md-6 col-xl-4"><strong>Management</strong><div class="text-secondary">Dashboard, Reports + export, Customers, Order Entry Form, Complaint &amp; Return, Lead Time; Deliveries, Stock &amp; Inbound hanya lihat.</div></div>
+        <div class="col-md-6 col-xl-4"><strong>Viewer</strong><div class="text-secondary">Read-only untuk modul operasional &amp; laporan, tanpa export.</div></div>
     </div>
 </div>

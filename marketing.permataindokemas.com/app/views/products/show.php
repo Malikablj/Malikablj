@@ -58,16 +58,14 @@ $today = today();
 <div class="stat-strip section-gap">
     <?php if ($canPo): ?>
         <div><div class="stat-label">Outstanding PO terbuka</div><div class="stat-value"><?= e(fmt_qty($product['open_outstanding'], '0')) ?></div><div class="x-small text-secondary"><?= e($product['unit']) ?></div></div>
-        <div><div class="stat-label">Baris PO</div><div class="stat-value"><?= e(fmt_qty($product['line_count'], '0')) ?></div></div>
+        <div><div class="stat-label">Total dipesan</div><div class="stat-value"><?= e(fmt_qty($product['ordered_qty'], '0')) ?></div><div class="x-small text-secondary"><?= e(fmt_qty($product['line_count'], '0')) ?> baris order</div></div>
         <div><div class="stat-label">Total terkirim</div><div class="stat-value"><?= e(fmt_qty($product['delivered_qty'], '0')) ?></div><div class="x-small text-secondary">delivery Delivered/Partial</div></div>
     <?php endif; ?>
     <?php if ($canStock): ?>
         <div><div class="stat-label">Stok FG</div><div class="stat-value"><?= e(fmt_qty($product['stock_fg'], '0')) ?></div>
             <div class="x-small text-secondary">Ready <?= e(fmt_qty($product['stock_ready'], '0')) ?> · WIP <?= e(fmt_qty($product['stock_wip'], '0')) ?> · Reserved <?= e(fmt_qty($product['stock_reserved'], '0')) ?></div></div>
     <?php endif; ?>
-    <?php if ($product['capacity_per_day'] !== null): ?>
-        <div><div class="stat-label">Kapasitas / hari</div><div class="stat-value"><?= e(fmt_qty($product['capacity_per_day'], '0')) ?></div><div class="x-small text-secondary"><?= e($product['unit']) ?></div></div>
-    <?php endif; ?>
+    <div><div class="stat-label">Qty (arsip OEF)</div><div class="stat-value"><?= e(fmt_qty($product['qty'])) ?></div><div class="x-small text-secondary"><?= e($product['unit']) ?> · order terakhir</div></div>
 </div>
 
 <div class="row g-4">
@@ -184,7 +182,7 @@ $today = today();
                 <dt>Catatan</dt><dd><?= $product['notes'] ? nl2br(e($product['notes'])) : '<span class="text-subtle">—</span>' ?></dd>
                 <dt>Dibuat</dt><dd><?= e(fmt_datetime($product['created_at'])) ?><?= $product['created_by_name'] ? ' oleh ' . e($product['created_by_name']) : '' ?></dd>
                 <?php if ($product['updated_at']): ?><dt>Diperbarui</dt><dd><?= e(fmt_datetime($product['updated_at'])) ?><?= $product['updated_by_name'] ? ' oleh ' . e($product['updated_by_name']) : '' ?></dd><?php endif; ?>
-                <?php if ($product['source']): ?><dt>Sumber</dt><dd><?= e($product['source'] === 'OEF' ? 'Dicatat otomatis dari Order Entry Form' : $product['source']) ?></dd><?php endif; ?>
+                <?php if ($product['source']): ?><dt>Sumber</dt><dd><?= e(App\Models\Product::SOURCE_LABELS[$product['source']] ?? $product['source']) ?></dd><?php endif; ?>
             </dl>
         </section>
 

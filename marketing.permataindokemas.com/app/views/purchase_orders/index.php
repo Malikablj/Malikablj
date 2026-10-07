@@ -6,6 +6,7 @@ use App\Models\PurchaseOrder;
 /** @var App\Helpers\Paginator $orders @var array<string,mixed> $summary @var array<string,mixed> $filters @var int $ppicPending */
 $hasFilter = $filters['q'] !== '' || $filters['status'] !== '' || $filters['ppic'] !== '' || $filters['customer_id'] > 0 || $filters['from'] !== '' || $filters['to'] !== '' || $filters['issue'] !== '';
 $ppicOptions = PurchaseOrder::PPIC_LABELS + ['legacy' => 'PO lama (tanpa PPIC)'];
+$canCustomer = can('customers.view');
 ?>
 <div class="page-header">
     <div>
@@ -76,7 +77,7 @@ $ppicOptions = PurchaseOrder::PPIC_LABELS + ['legacy' => 'PO lama (tanpa PPIC)']
                                 <?= e(fmt_date($po['po_date'], 'Tanpa tanggal')) ?><?= $po['sales_name'] ? ' · ' . e($po['sales_name']) : '' ?>
                                 <span class="d-md-none"> · <?= e($po['customer_name'] ?? '') ?></span></div>
                             <div class="d-sm-none mt-1"><?= ppic_badge($po['ppic_status']) ?> <?= status_badge($po['status']) ?></div></td>
-                        <td class="d-none d-md-table-cell"><?= $po['customer_id'] ? '<a href="' . e(url('/customers/' . $po['customer_id'])) . '">' . e($po['customer_name']) . '</a>' : '<span class="badge-soft badge-soft-warning no-dot">Customer belum terhubung</span>' ?>
+                        <td class="d-none d-md-table-cell"><?= $po['customer_id'] ? ($canCustomer ? '<a href="' . e(url('/customers/' . $po['customer_id'])) . '">' . e($po['customer_name']) . '</a>' : e($po['customer_name'])) : '<span class="badge-soft badge-soft-warning no-dot">Customer belum terhubung</span>' ?>
                             <div class="cell-sub"><?= e($po['first_product'] ?? '—') ?><?= (int) $po['line_count'] > 1 ? ' +' . ((int) $po['line_count'] - 1) . ' produk' : '' ?><?= (int) $po['is_subcont'] === 1 ? ' · <span class="badge-soft badge-soft-neutral no-dot">Subcont</span>' : '' ?></div></td>
                         <td class="d-none d-lg-table-cell nowrap"><?= e(fmt_date($po['requested_date'])) ?>
                             <?php if ($po['schedule_date'] && $po['schedule_date'] !== $po['requested_date'] && $po['schedule_status'] !== 'Cancelled'): ?><div class="cell-sub">Jadwal: <?= e(fmt_date($po['schedule_date'])) ?></div><?php endif; ?></td>

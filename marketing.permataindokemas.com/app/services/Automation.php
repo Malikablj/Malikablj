@@ -9,20 +9,18 @@ use App\Helpers\Logger;
 use App\Helpers\Number;
 use App\Helpers\Permission;
 use App\Models\FollowUp;
-use App\Models\Invoice;
 use App\Models\Lead;
 use App\Models\Notification;
 use App\Models\Setting;
 
 /**
  * Otomasi berkala:
- *   1. status Overdue follow up & invoice disinkronkan;
+ *   1. status Overdue follow up disinkronkan;
  *   2. notifikasi pengingat (tidak dobel — setiap notifikasi punya dedupe key):
  *      - follow up jatuh hari ini (PIC)
  *      - follow up overdue (PIC)
- *      - delivery terjadwal dalam N hari (PIC marketing customer / pembuat delivery,
- *        atau semua user Marketing bila tidak ada)
- *      - invoice overdue (user dengan akses Finance)
+ *      - delivery terjadwal dalam N hari (user PPIC yang mengisi surat jalan + PIC marketing
+ *        customer / pembuat delivery, atau semua user Marketing bila tidak ada)
  *      - lead mendekati / melewati target closing (PIC lead)
  *   Penerima hanya user aktif yang punya akses ke modul terkait.
  *
@@ -56,12 +54,10 @@ final class Automation
             $result = [
                 'ran_at'             => date('Y-m-d H:i:s'),
                 'followups_overdue'  => $follow['overdue'],
-                'invoices_updated'   => Invoice::refreshStatuses($today),
                 'notifications'      => [
                     'followup_due'      => self::followUpsDue($today),
                     'followup_overdue'  => self::followUpsOverdue($today),
                     'delivery_upcoming' => self::upcomingDeliveries($today),
-                    'invoice_overdue'   => self::overdueInvoices(),
                     'lead_closing'      => self::leadsClosing($today),
                 ],
             ];
@@ -148,38 +144,20 @@ final class Automation
             ['d1' => $today, 'd2' => $until]
         );
         $fallback = null;
+        $ppic = $rows !== [] ? self::usersWith('deliveries.edit', 'PPIC') : [];
         $sent = 0;
         foreach ($rows as $r) {
             $users = self::allowed([$r['marketing_pic_id'], $r['created_by']], 'deliveries.view');
             if ($users === []) {
                 $users = $fallback ??= self::usersWith('deliveries.view', 'Marketing');
             }
+            // PPIC mengisi surat jalan → selalu ikut diingatkan
+            $users = array_values(array_unique(array_merge($users, $ppic)));
             $when = $r['delivery_date'] === $today ? 'hari ini' : fmt_date($r['delivery_date']);
             foreach ($users as $uid) {
                 $sent += (int) Notification::send($uid, 'delivery_upcoming', 'Delivery ' . ($r['sj_number'] ?? $r['code']) . ' dijadwalkan ' . $when,
                     trim(($r['customer_name'] ?? '') . ' · ' . ($r['product_name'] ?? '') . ' · ' . Number::qty($r['delivered_qty']) . ' pcs', ' ·'),
                     '/deliveries/' . $r['id'], 'delivery', (int) $r['id'], 'delivery_upcoming:' . $r['id'] . ':' . $r['delivery_date']);
-            }
-        }
-        return $sent;
-    }
-
-    private static function overdueInvoices(): int
-    {
-        $rows = Database::fetchAll(
-            "SELECT i.id, i.code, i.invoice_number, i.due_date, (i.invoice_amount - i.paid_amount) AS outstanding, c.name AS customer_name
-             FROM invoices_payments i LEFT JOIN customers c ON c.id = i.customer_id WHERE i.status = 'Overdue'"
-        );
-        if ($rows === []) {
-            return 0;
-        }
-        $users = self::usersWith('finance.view');
-        $sent = 0;
-        foreach ($rows as $r) {
-            foreach ($users as $uid) {
-                $sent += (int) Notification::send($uid, 'invoice_overdue', 'Invoice ' . ($r['invoice_number'] ?? $r['code']) . ' lewat jatuh tempo',
-                    trim(($r['customer_name'] ?? '') . ' · sisa ' . Number::money($r['outstanding']) . ' · jatuh tempo ' . fmt_date($r['due_date']), ' ·'),
-                    '/invoices/' . $r['id'], 'invoice', (int) $r['id'], 'invoice_overdue:' . $r['id'] . ':' . $r['due_date']);
             }
         }
         return $sent;

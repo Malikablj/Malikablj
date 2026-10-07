@@ -36,6 +36,8 @@ $users = [
     ['Sales Dev', 'sales@pik.test', 'Sales'],
     ['Management Dev', 'management@pik.test', 'Management'],
     ['PPIC Dev', 'ppic@pik.test', 'PPIC'],
+    ['Produksi Dev', 'produksi@pik.test', 'Produksi'],
+    ['Gudang Dev', 'gudang@pik.test', 'Gudang'],
     ['Viewer Dev', 'viewer@pik.test', 'Viewer'],
 ];
 

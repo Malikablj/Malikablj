@@ -87,16 +87,50 @@ test('permission: matriks role sesuai PRD', function () {
     assert_true(Permission::allows('Marketing', 'purchase_orders.create'));
     assert_true(Permission::allows('Marketing', 'products.delete'));
     assert_false(Permission::allows('Marketing', 'stock.view'));
-    assert_false(Permission::allows('Marketing', 'finance.view'));
+    assert_true(Permission::allows('Marketing', 'deliveries.view'));
+    assert_false(Permission::allows('Marketing', 'deliveries.create'), 'Surat jalan hanya diisi PPIC');
     assert_true(Permission::allows('Sales', 'leads.edit'));
-    assert_false(Permission::allows('Sales', 'purchase_orders.view'));
-    assert_true(Permission::allows('Management', 'reports.financial'));
+    assert_true(Permission::allows('Sales', 'purchase_orders.create'), 'Sales menginput OEF');
+    assert_false(Permission::allows('Sales', 'purchase_orders.delete'));
+    assert_false(Permission::allows('Sales', 'deliveries.edit'));
+    // PPIC: hanya tinjau OEF + menu Delivery (mengisi surat jalan)
+    assert_true(Permission::allows('PPIC', 'purchase_orders.view'));
+    assert_true(Permission::allows('PPIC', 'ppic.approve'));
+    assert_false(Permission::allows('PPIC', 'purchase_orders.edit'));
+    assert_true(Permission::allows('PPIC', 'deliveries.create'));
+    assert_true(Permission::allows('PPIC', 'deliveries.edit'));
+    foreach (['customers.view', 'products.view', 'stock.view', 'inbound.view', 'returns.view', 'leadtime.view', 'reports.view'] as $perm) {
+        assert_false(Permission::allows('PPIC', $perm), 'PPIC tidak punya ' . $perm);
+    }
+    // Produksi & Gudang
+    assert_true(Permission::allows('Produksi', 'stock.create'));
+    assert_false(Permission::allows('Produksi', 'inbound.view'));
+    assert_false(Permission::allows('Produksi', 'purchase_orders.view'));
+    assert_true(Permission::allows('Gudang', 'stock.edit'));
+    assert_true(Permission::allows('Gudang', 'inbound.create'));
+    assert_true(Permission::allows('Gudang', 'inbound_supplier.create'));
+    assert_false(Permission::allows('Gudang', 'deliveries.view'));
+    assert_false(Permission::allows('Gudang', 'customers.view'));
+    // Management & Viewer
+    assert_true(Permission::allows('Management', 'reports.export'));
     assert_true(Permission::allows('Management', 'stock.view'));
+    assert_false(Permission::allows('Management', 'stock.create'), 'stok diinput Produksi/Gudang');
+    assert_false(Permission::allows('Management', 'inbound.create'), 'inbound diinput Gudang');
+    assert_true(Permission::allows('Management', 'inbound_supplier.view'));
+    assert_false(Permission::allows('Management', 'deliveries.create'));
     assert_false(Permission::allows('Management', 'leads.view'));
     assert_true(Permission::allows('Viewer', 'customers.view'));
+    assert_true(Permission::allows('Viewer', 'inbound_supplier.view'));
     assert_false(Permission::allows('Viewer', 'customers.create'));
-    assert_false(Permission::allows('Viewer', 'reports.financial'));
+    assert_false(Permission::allows('Viewer', 'reports.export'));
     assert_false(Permission::allows('Viewer', 'users.view'));
+    // Menu Finance dihapus: tidak ada role non-Admin yang memilikinya
+    foreach (Permission::ROLES as $role) {
+        if ($role !== 'Admin') {
+            assert_false(Permission::allows($role, 'finance.view'), $role . ' tanpa finance');
+        }
+    }
+    assert_same(['Admin', 'Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Gudang', 'Viewer'], Permission::ROLES);
     assert_false(Permission::allows(null, 'dashboard.view'));
 });
 
@@ -266,7 +300,7 @@ test('user baru wajib ganti password sebelum memakai aplikasi', function () {
 });
 
 test('otorisasi backend: non-admin ditolak 403 di area admin (GET & POST)', function () {
-    foreach (['Marketing', 'Sales', 'Management', 'Viewer'] as $role) {
+    foreach (['Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Gudang', 'Viewer'] as $role) {
         $c = client_as($role);
         assert_status(403, $c->get('/users'), "{$role} GET /users");
         assert_status(403, $c->get('/audit-log'), "{$role} GET /audit-log");

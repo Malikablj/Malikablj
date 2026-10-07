@@ -10,7 +10,6 @@ use App\Helpers\Request;
 use App\Helpers\Validator;
 use App\Models\Customer;
 use App\Models\Delivery;
-use App\Models\Invoice;
 use App\Models\LeadTime;
 use App\Models\MigrationIssue;
 use App\Models\PoLine;
@@ -25,7 +24,7 @@ final class PurchaseOrderController extends Controller
 {
     /** Field form Order Entry Form (header + produk). */
     private const FORM_FIELDS = [
-        'customer_id', 'sales_name', 'po_number', 'po_date', 'product_name', 'product_spec', 'order_qty',
+        'order_number', 'customer_name', 'sales_name', 'po_number', 'po_date', 'product_name', 'product_spec', 'order_qty',
         'is_subcont', 'supplier', 'requested_date', 'ship_to', 'remark', 'payment_term', 'status',
     ];
 
@@ -63,12 +62,13 @@ final class PurchaseOrderController extends Controller
     public function create(): void
     {
         $customerId = Request::queryInt('customer_id') ?: null;
+        $customer = $customerId ? Database::fetch('SELECT name, address FROM customers WHERE id = :id', ['id' => $customerId]) : null;
         $preset = [
-            'customer_id' => $customerId,
-            'po_date'     => today(),
-            'sales_name'  => Auth::user()['name'] ?? '',
-            'is_subcont'  => 0,
-            'ship_to'     => $customerId ? Database::fetchValue('SELECT address FROM customers WHERE id = :id', ['id' => $customerId]) : null,
+            'customer_name' => $customer['name'] ?? '',
+            'po_date'       => today(),
+            'sales_name'    => Auth::user()['name'] ?? '',
+            'is_subcont'    => 0,
+            'ship_to'       => $customer['address'] ?? null,
         ];
         $this->view('purchase_orders/form', $this->formData(null) + ['errors' => [], 'preset' => $preset]);
     }
@@ -83,12 +83,15 @@ final class PurchaseOrderController extends Controller
         $data = $v->validated();
         [$header, $product] = $this->split($data, true);
         try {
-            $result = OrderEntry::create($header, $product['name'], $product['spec'], $product['qty']);
+            $result = OrderEntry::create($header, (string) $data['customer_name'], $product['name'], $product['spec'], $product['qty']);
         } catch (DomainException $e) {
             $this->failure($e->getMessage(), '/purchase-orders/create');
         }
         $po = PurchaseOrder::find($result['id']) ?? [];
         $msg = 'Order Entry Form ' . PurchaseOrder::displayNumber($po) . ' tersimpan dan dikirim ke PPIC untuk konfirmasi.';
+        if ($result['customer_created']) {
+            $msg .= ' Customer baru "' . $data['customer_name'] . '" dicatat otomatis di menu Customers.';
+        }
         if ($result['product_created']) {
             $msg .= ' Produk baru "' . $product['name'] . '" dicatat otomatis di menu Products.';
         }
@@ -101,18 +104,15 @@ final class PurchaseOrderController extends Controller
     public function show(int $id): void
     {
         $po = $this->found(PurchaseOrder::findFull($id));
-        $finance = Auth::can('finance.view');
         $this->view('purchase_orders/show', [
             'title'      => 'Order ' . PurchaseOrder::displayNumber($po),
             'po'         => $po,
             'lines'      => PurchaseOrder::lines($id),
             'deliveries' => Delivery::forPo($id),
             'returns'    => ProductReturn::forPo($id),
-            'invoices'   => $finance ? Invoice::forPo($id) : [],
-            'financials' => $finance ? Database::fetchAll('SELECT * FROM po_financials WHERE po_id = :id ORDER BY id', ['id' => $id]) : [],
             'leadtimes'  => Auth::can('leadtime.view') ? LeadTime::forPo($id) : [],
             'issues'     => Auth::can('migration.view') ? MigrationIssue::openForRecord('PURCHASE_ORDERS', $id) : [],
-            'products'   => Auth::can('purchase_orders.edit') ? Product::selectOptions() : [],
+            'productNames' => Auth::can('purchase_orders.edit') ? Product::nameSuggestions() : [],
             'errors'     => [],
         ]);
     }
@@ -132,15 +132,19 @@ final class PurchaseOrderController extends Controller
             $this->invalid('purchase_orders/form', $this->formData($po) + ['preset' => []], $v->errors(), $this->oldInput());
             return;
         }
-        [$header, $product] = $this->split($v->validated(), $withProduct);
+        $data = $v->validated();
+        [$header, $product] = $this->split($data, $withProduct);
         try {
-            $result = OrderEntry::update($id, $header, $product);
+            $result = OrderEntry::update($id, $header, (string) $data['customer_name'], $product);
         } catch (DomainException $e) {
             $this->failure($e->getMessage(), '/purchase-orders/' . $id . '/edit');
         }
         $msg = 'Order diperbarui.';
         if ($result['resubmitted']) {
             $msg .= ' Perubahan dikirim ulang ke PPIC untuk konfirmasi.';
+        }
+        if ($result['customer_created']) {
+            $msg .= ' Customer baru dicatat otomatis di menu Customers.';
         }
         if ($result['product_created']) {
             $msg .= ' Produk baru dicatat otomatis di menu Products.';
@@ -193,19 +197,27 @@ final class PurchaseOrderController extends Controller
         $this->success('PO ' . ($po['po_number'] ?? $po['code']) . ' dihapus.', '/purchase-orders');
     }
 
+    /** Tambah baris produk: nama produk diketik manual (produk baru dicatat otomatis). */
     public function addLine(int $id): void
     {
         $po = $this->found(PurchaseOrder::find($id));
-        $v = $this->validateLine($_POST);
+        $v = Validator::make($_POST, [
+            'product_name' => 'required|string|max:190',
+            'order_qty'    => 'required|integer|min:1',
+            'remark'       => 'nullable|string|max:500',
+        ], ['product_name' => 'Nama produk', 'order_qty' => 'Qty order', 'remark' => 'Catatan baris']);
         if ($v->fails()) {
             $this->failure('Baris gagal ditambahkan: ' . implode(' ', $v->errors()), '/purchase-orders/' . $id);
         }
         $data = $v->validated();
-        Database::transaction(function () use ($id, $data): void {
-            PoLine::create(['po_id' => $id, 'product_id' => $data['product_id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark']]);
+        $label = PurchaseOrder::displayNumber($po);
+        $created = Database::transaction(function () use ($id, $data, $label): bool {
+            $product = Product::findOrCreateForOrder((string) $data['product_name'], null, $label, (int) $data['order_qty']);
+            PoLine::create(['po_id' => $id, 'product_id' => $product['id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark']]);
             PurchaseOrder::syncStatus($id);
+            return $product['created'];
         });
-        $this->success('Baris produk ditambahkan ke PO ' . ($po['po_number'] ?? $po['code']) . '.', '/purchase-orders/' . $id);
+        $this->success('Baris produk ditambahkan ke order ' . $label . '.' . ($created ? ' Produk baru dicatat otomatis di menu Products.' : ''), '/purchase-orders/' . $id);
     }
 
     public function editLine(int $id): void
@@ -264,7 +276,8 @@ final class PurchaseOrderController extends Controller
     {
         $req = $isOef ? 'required' : 'nullable';
         $rules = [
-            'customer_id'    => 'required|integer|exists:customers,id',
+            'order_number'   => $req . '|string|max:60',
+            'customer_name'  => 'required|string|max:190',
             'sales_name'     => $req . '|string|max:120',
             'po_number'      => 'nullable|string|max:80',
             'po_date'        => 'required|date',
@@ -286,7 +299,7 @@ final class PurchaseOrderController extends Controller
             $rules['status'] = ['required', ['in', PurchaseOrder::STATUSES]];
         }
         $v = Validator::make($_POST, $rules, [
-            'customer_id' => 'Nama customer', 'sales_name' => 'Nama sales', 'po_number' => 'No. PO dari customer', 'po_date' => 'Tanggal order',
+            'order_number' => 'No. order', 'customer_name' => 'Nama customer', 'sales_name' => 'Nama sales', 'po_number' => 'No. PO dari customer', 'po_date' => 'Tanggal order',
             'product_name' => 'Nama produk', 'product_spec' => 'Spesifikasi produk', 'order_qty' => 'Qty produk', 'is_subcont' => 'Subcont',
             'supplier' => 'Supplier', 'requested_date' => 'Permintaan selesai / kirim', 'ship_to' => 'Tujuan kirim', 'remark' => 'Keterangan',
             'payment_term' => 'Termin pembayaran', 'status' => 'Status order',
@@ -294,6 +307,12 @@ final class PurchaseOrderController extends Controller
         $data = $v->validated();
         if ((int) ($data['is_subcont'] ?? 0) === 1 && empty($data['supplier'])) {
             $v->addError('supplier', 'Supplier wajib diisi untuk order subcont.');
+        }
+        if (!empty($data['order_number'])) {
+            $orderNumber = (string) preg_replace('/\s+/u', ' ', (string) $data['order_number']);
+            if (($taken = PurchaseOrder::orderNumberTaken($orderNumber, $id)) !== null) {
+                $v->addError('order_number', 'No. order sudah dipakai order lain (' . $taken['order_number'] . ($taken['customer_name'] ? ', ' . $taken['customer_name'] : '') . ').');
+            }
         }
         if (!empty($data['po_number'])) {
             $number = (string) $data['po_number'];
@@ -307,14 +326,15 @@ final class PurchaseOrderController extends Controller
     }
 
     /**
-     * Pisahkan data form menjadi header purchase_orders & data produk.
+     * Pisahkan data form menjadi header purchase_orders & data produk
+     * (nama customer diproses terpisah oleh OrderEntry: dicari / dicatat otomatis).
      * @param array<string,mixed> $data
      * @return array{0:array<string,mixed>,1:array{name:string,spec:?string,qty:int}|null}
      */
     private function split(array $data, bool $withProduct): array
     {
         $header = [
-            'customer_id'    => (int) $data['customer_id'],
+            'order_number'   => $data['order_number'] !== null ? (string) preg_replace('/\s+/u', ' ', (string) $data['order_number']) : null,
             'sales_name'     => $data['sales_name'],
             'po_number'      => $data['po_number'],
             'po_date'        => $data['po_date'],
@@ -365,8 +385,9 @@ final class PurchaseOrderController extends Controller
         return [
             'title'          => $po ? 'Edit Order ' . PurchaseOrder::displayNumber($po) : 'Order Entry Form',
             'po'             => $po,
-            'customers'      => Customer::selectOptions(),
+            'customerNames'  => Customer::nameSuggestions(),
             'productNames'   => Product::nameSuggestions(),
+            'lastOrderNumber' => PurchaseOrder::lastOrderNumber(),
             'salesNames'     => array_values(User::picOptions()),
             'productEditable' => $po === null || $line !== null,
             'productLocked'  => $po !== null && $line !== null && OrderEntry::lineLocked($po, (int) $line['id']),

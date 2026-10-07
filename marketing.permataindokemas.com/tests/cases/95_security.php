@@ -38,9 +38,12 @@ test('XSS: data berbahaya di semua field teks selalu di-escape di seluruh halama
     $lt = Database::insert('leadtime', ['code' => 'LT-XSS0000001', 'po_id' => $po, 'product_id' => $prod, 'po_number_legacy' => $x, 'product_legacy' => $x, 'notes' => $x, 'quantity' => 1, 'delivery_date' => today(), 'status' => 'Planned']);
     $inb = Database::insert('inbound_maklon', ['code' => 'INB-XSS0000001', 'vendor' => 'Vendor ' . $x, 'receiver' => $x, 'actual_inbound_date' => today(), 'sj_number' => $x, 'component_name' => $x,
         'type' => $x, 'notes' => $x, 'odoo_checklist' => mb_substr($x, 0, 60), 'quantity' => 1, 'po_id' => $po, 'attachment' => 'javascript:alert(1)']);
-    $inv = Database::insert('invoices_payments', ['code' => 'PAY-XSS0000001', 'customer_id' => $cust, 'po_id' => $po, 'invoice_number' => 'INV ' . $x, 'invoice_date' => today(), 'due_date' => today(),
+    $ins = Database::insert('inbound_supplier', ['code' => 'INS-XSS0000001', 'supplier' => 'Supplier ' . $x, 'inbound_date' => today(), 'sj_number' => $x, 'sj_date' => today(),
+        'po_reference' => $x, 'item_name' => 'Barang ' . $x, 'item_code' => $x, 'category' => $x, 'unit' => mb_substr($x, 0, 20), 'quantity' => '10.00', 'reject_qty' => '1.00',
+        'total_in' => '9.00', 'receiver' => $x, 'location' => $x, 'notes' => $x, 'attachment' => 'javascript:alert(1)']);
+    // data keuangan lama tetap ada di database, tetapi tidak lagi ditampilkan di halaman mana pun
+    Database::insert('invoices_payments', ['code' => 'PAY-XSS0000001', 'customer_id' => $cust, 'po_id' => $po, 'invoice_number' => 'INV ' . $x, 'invoice_date' => today(), 'due_date' => today(),
         'invoice_amount' => '100.00', 'paid_amount' => '0.00', 'status' => 'Unpaid', 'notes' => $x, 'payment_receipt_number' => $x, 'invoice_attachment' => 'javascript:alert(1)']);
-    $pof = Database::insert('po_financials', ['code' => 'POF-XSS0000001', 'po_id' => $po, 'brand' => $x, 'product_legacy' => $x, 'notes' => $x, 'po_date' => today(), 'payment_status' => 'Unpaid']);
     $iss = Database::insert('migration_issues', ['code' => 'ISS-XSS0000001', 'table_name' => 'PURCHASE_ORDERS', 'record_id' => $po, 'record_code' => 'PO-XSS0000001', 'issue_type' => 'DATE DIFFERS FROM LEGACY',
         'field_name' => 'po_date', 'master_value' => $x, 'suggested_value' => $x, 'legacy_po' => $x, 'legacy_product' => $x, 'description' => $x]);
     Database::insert('notifications', ['user_id' => $adminId, 'type' => 'followup_due', 'title' => 'Notif ' . $x, 'message' => $x, 'link' => '/']);
@@ -53,14 +56,14 @@ test('XSS: data berbahaya di semua field teks selalu di-escape di seluruh halama
         '/purchase-orders', '/purchase-orders/' . $po, '/purchase-orders/' . $po . '/edit', '/po-lines/' . $line . '/edit',
         '/deliveries', '/deliveries/' . $del, '/deliveries/' . $del . '/edit', '/returns', '/returns/' . $ret, '/returns/' . $ret . '/edit', '/returns/create', '/reports/complaint',
         '/products', '/products/' . $prod, '/products/' . $prod . '/edit', '/stock', '/stock?view=entries', '/stock/' . $stock . '/edit',
-        '/lead-times', '/lead-times/' . $lt . '/edit', '/inbound', '/inbound/' . $inb, '/inbound/' . $inb . '/edit',
-        '/invoices', '/invoices/' . $inv, '/invoices/' . $inv . '/edit', '/po-financials', '/po-financials/' . $pof, '/po-financials/' . $pof . '/edit',
-        '/reports/customer', '/reports/lead', '/reports/activity', '/reports/po', '/reports/delivery', '/reports/financial',
+        '/lead-times', '/lead-times/' . $lt . '/edit', '/inbound', '/inbound/' . $inb, '/inbound/' . $inb . '/edit', '/stock?product_id=' . $prod,
+        '/inbound-supplier', '/inbound-supplier?view=items', '/inbound-supplier/' . $ins, '/inbound-supplier/' . $ins . '/edit', '/inbound-supplier/create', '/stock/create', '/inbound/create',
+        '/purchase-orders/create', '/reports/customer', '/reports/lead', '/reports/activity', '/reports/po', '/reports/delivery',
         '/notifications', '/audit-log', '/audit-log/' . $auditId, '/migration-issues?status=all', '/migration-issues/' . $iss, '/migration-issues/deliveries',
         '/search?q=' . rawurlencode('X"><img'), '/search?q=' . rawurlencode($x), '/customers?q=' . rawurlencode($x), '/customers?' . http_build_query(['customer' . $x => 1]),
         '/customers/' . $cust . '?tab=' . rawurlencode($x),
     ];
-    foreach (['contacts', 'leads', 'activities', 'followups', 'pos', 'deliveries', 'returns', 'invoices'] as $tab) {
+    foreach (['contacts', 'leads', 'activities', 'followups', 'pos', 'deliveries', 'returns'] as $tab) {
         $pages[] = '/customers/' . $cust . '?tab=' . $tab;
     }
     foreach ($pages as $path) {
@@ -68,6 +71,16 @@ test('XSS: data berbahaya di semua field teks selalu di-escape di seluruh halama
         assert_true(in_array($res->status, [200, 404], true), "HTTP {$res->status} untuk {$path}");
         assert_not_contains('<img src=x onerror', $res->body, 'payload tidak ter-escape di ' . $path);
         assert_not_contains('href="javascript:', strtolower($res->body), 'link javascript: di ' . $path);
+    }
+    // role baru melihat halaman miliknya tanpa XSS
+    foreach (['PPIC' => ['/', '/purchase-orders/' . $po, '/deliveries/' . $del], 'Gudang' => ['/', '/stock', '/inbound/' . $inb, '/inbound-supplier/' . $ins], 'Produksi' => ['/', '/stock?view=entries']] as $role => $paths) {
+        $rc = client_as($role);
+        foreach ($paths as $path) {
+            $res = $rc->get($path);
+            assert_status(200, $res, $role . ' ' . $path);
+            assert_not_contains('<img src=x onerror', $res->body, 'payload tidak ter-escape di ' . $role . ' ' . $path);
+            assert_not_contains('href="javascript:', strtolower($res->body), 'link javascript: di ' . $role . ' ' . $path);
+        }
     }
     // export juga aman (CSV diberi tanda petik untuk sel berawalan =,+,-,@)
     $csv = $admin->get('/reports/customer/export', ['format' => 'csv']);
@@ -79,7 +92,7 @@ test('SQL injection: parameter pencarian, sort, filter & id aman', function () {
     $users = (int) Database::fetchValue('SELECT COUNT(*) FROM users');
     $payloads = ["' OR '1'='1", "1; DROP TABLE users; --", "\\' UNION SELECT password_hash FROM users --"];
     foreach ($payloads as $p) {
-        foreach (['/customers', '/purchase-orders', '/deliveries', '/invoices', '/products', '/leads/list', '/reports/po'] as $path) {
+        foreach (['/customers', '/purchase-orders', '/deliveries', '/products', '/leads/list', '/reports/po', '/stock', '/inbound', '/inbound-supplier'] as $path) {
             $res = $c->get($path, ['q' => $p, 'sort' => $p, 'dir' => $p, 'status' => $p, 'customer_id' => $p, 'from' => $p, 'to' => $p, 'page' => $p]);
             assert_status(200, $res, $path . ' ' . $p);
             assert_not_contains('SQLSTATE', $res->body);

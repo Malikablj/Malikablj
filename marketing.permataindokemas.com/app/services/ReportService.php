@@ -7,12 +7,12 @@ namespace App\Services;
 use App\Helpers\Auth;
 use App\Helpers\Database;
 use App\Helpers\Number;
-use App\Models\Invoice;
 use App\Models\Lead;
 use App\Models\PoLine;
 
 /**
- * Laporan (PRD: Customer, Lead, Activity, PO, Delivery, Financial).
+ * Laporan: Customer, Lead, Activity, Order Entry Form, Delivery, Complaint & Return.
+ * (Laporan Financial dihapus — invoice & pembayaran dikelola divisi Keuangan.)
  * Filter umum: periode (from/to), customer, PIC. Satu definisi kolom dipakai
  * untuk tampilan layar, export CSV, dan export Excel sehingga angkanya selalu sama.
  *
@@ -27,7 +27,7 @@ final class ReportService
 
     public const REPORTS = [
         'customer'  => ['title' => 'Customer', 'perm' => 'reports.customer', 'icon' => 'bi-buildings',
-                        'desc' => 'Aktivitas, PO, outstanding, dan piutang per customer.', 'date' => 'Periode aktivitas, PO & invoice', 'pic' => 'PIC marketing customer'],
+                        'desc' => 'Aktivitas, order, dan outstanding per customer.', 'date' => 'Periode aktivitas & order', 'pic' => 'PIC marketing customer'],
         'lead'      => ['title' => 'Lead', 'perm' => 'reports.lead', 'icon' => 'bi-kanban',
                         'desc' => 'Pipeline lead per status, sumber, dan PIC; win rate.', 'date' => 'Tanggal lead dibuat', 'pic' => 'PIC lead'],
         'activity'  => ['title' => 'Activity', 'perm' => 'reports.activity', 'icon' => 'bi-chat-square-text',
@@ -38,8 +38,6 @@ final class ReportService
                         'desc' => 'Pengiriman per periode, customer, dan status.', 'date' => 'Tanggal delivery', 'pic' => 'PIC marketing customer'],
         'complaint' => ['title' => 'Complaint & Return', 'perm' => 'reports.complaint', 'icon' => 'bi-exclamation-octagon',
                         'desc' => 'Seluruh complaint customer & hasilnya: selesai, tidak selesai (dengan alasan), retur, dan bukti.', 'date' => 'Tanggal complaint', 'pic' => 'PIC marketing customer'],
-        'financial' => ['title' => 'Financial', 'perm' => 'reports.financial', 'icon' => 'bi-cash-coin',
-                        'desc' => 'Invoice, pembayaran, sisa tagihan, dan umur piutang.', 'date' => 'Tanggal invoice', 'pic' => 'PIC marketing customer'],
     ];
 
     /** @return array<string,array<string,string>> laporan yang boleh dibuka user saat ini */
@@ -75,7 +73,6 @@ final class ReportService
             'po'        => self::poReport($f),
             'delivery'  => self::deliveryReport($f),
             'complaint' => self::complaintReport($f),
-            'financial' => self::financialReport($f, $today),
             default     => throw new \InvalidArgumentException('Laporan tidak dikenal.'),
         };
         $result['truncated'] = count($result['rows']) >= self::MAX_ROWS;
@@ -181,11 +178,9 @@ final class ReportService
 
     private static function customerReport(array $f): array
     {
-        $withFinance = Auth::can('reports.financial');
         $params = [];
         $actPeriod = self::period('a.activity_date', 'ac', $f, $params, true);
         $poPeriod = self::period('p.po_date', 'po', $f, $params);
-        $invPeriod = self::period('i.invoice_date', 'iv', $f, $params);
         $where = ['1=1'];
         if (!empty($f['customer_id'])) {
             $where[] = 'c.id = :cid';
@@ -201,8 +196,7 @@ final class ReportService
                     COALESCE(ld.open_leads, 0) AS open_leads, COALESCE(ld.pipeline, 0) AS pipeline,
                     COALESCE(ac.n, 0) AS activities, ac.last_activity,
                     COALESCE(po.n, 0) AS po_count, COALESCE(po.qty, 0) AS order_qty, COALESCE(po.delivered, 0) AS delivered_qty,
-                    COALESCE(op.outstanding, 0) AS outstanding_qty,
-                    COALESCE(iv.invoiced, 0) AS invoiced, COALESCE(iv.paid, 0) AS paid, COALESCE(iv.receivable, 0) AS receivable
+                    COALESCE(op.outstanding, 0) AS outstanding_qty
              FROM customers c
              LEFT JOIN users u ON u.id = c.marketing_pic_id
              LEFT JOIN (SELECT customer_id, SUM(status NOT IN ('Won','Lost','Dormant')) AS open_leads,
@@ -216,9 +210,6 @@ final class ReportService
              LEFT JOIN (SELECT p.customer_id, SUM(COALESCE(t.open_outstanding_qty, 0)) AS outstanding
                         FROM purchase_orders p JOIN (" . PoLine::poTotalsSql() . ") t ON t.po_id = p.id
                         WHERE p.customer_id IS NOT NULL AND p.status IN ({$open}) GROUP BY p.customer_id) op ON op.customer_id = c.id
-             LEFT JOIN (SELECT i.customer_id, SUM(i.invoice_amount) AS invoiced, SUM(i.paid_amount) AS paid,
-                               SUM(GREATEST(i.invoice_amount - i.paid_amount, 0)) AS receivable
-                        FROM invoices_payments i WHERE i.customer_id IS NOT NULL{$invPeriod} GROUP BY i.customer_id) iv ON iv.customer_id = c.id
              WHERE " . implode(' AND ', $where) . '
              ORDER BY COALESCE(po.qty, 0) DESC, COALESCE(ac.n, 0) DESC, c.name
              LIMIT ' . self::MAX_ROWS,
@@ -236,10 +227,6 @@ final class ReportService
             ['key' => 'delivered_qty', 'label' => 'Terkirim', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
             ['key' => 'outstanding_qty', 'label' => 'Outstanding (PO open)', 'type' => 'qty', 'total' => true, 'hide' => 'sm'],
         ];
-        if ($withFinance) {
-            $columns[] = ['key' => 'invoiced', 'label' => 'Nilai invoice', 'type' => 'money', 'total' => true, 'hide' => 'xxl'];
-            $columns[] = ['key' => 'receivable', 'label' => 'Piutang', 'type' => 'money', 'total' => true, 'hide' => 'lg'];
-        }
         $active = count(array_filter($rows, static fn ($r) => $r['status'] === 'Active'));
         $withPo = count(array_filter($rows, static fn ($r) => (int) $r['po_count'] > 0));
         $summary = [
@@ -249,9 +236,6 @@ final class ReportService
             ['label' => 'Qty order', 'value' => Number::qty(self::sumInt($rows, 'order_qty')), 'meta' => 'terkirim ' . Number::qty(self::sumInt($rows, 'delivered_qty'))],
             ['label' => 'Outstanding PO open', 'value' => Number::qty(self::sumInt($rows, 'outstanding_qty')), 'meta' => 'pcs saat ini'],
         ];
-        if ($withFinance) {
-            $summary[] = ['label' => 'Piutang', 'value' => Number::money(self::sumMoney($rows, 'receivable')), 'meta' => 'dari invoice periode ini'];
-        }
         $byQty = [];
         foreach ($rows as $r) {
             $byQty[(string) $r['name']] = (int) $r['order_qty'];
@@ -559,74 +543,6 @@ final class ReportService
                 self::breakdown('Complaint per alasan', self::countBy($rows, 'reason_label', 'Tanpa alasan')),
                 self::breakdown('Complaint per customer', self::countBy($rows, 'customer_name', 'Customer ?'), 'qty', 8),
                 self::breakdown('Complaint per produk', self::countBy($rows, 'product_name', 'Tanpa produk'), 'qty', 8),
-            ],
-        ];
-    }
-
-    private static function financialReport(array $f, string $today): array
-    {
-        Invoice::refreshStatuses($today);
-        $params = ['today' => $today];
-        $where = '1=1' . self::period('i.invoice_date', 'iv', $f, $params);
-        if (!empty($f['customer_id'])) {
-            $where .= ' AND i.customer_id = :cid';
-            $params['cid'] = (int) $f['customer_id'];
-        }
-        if (!empty($f['pic'])) {
-            $where .= ' AND c.marketing_pic_id = :pic';
-            $params['pic'] = (int) $f['pic'];
-        }
-        $rows = Database::fetchAll(
-            'SELECT i.id, i.code, COALESCE(i.invoice_number, i.code) AS invoice_number, c.name AS customer_name,
-                    COALESCE(p.po_number, i.po_number_legacy) AS po_number, i.invoice_date, i.due_date, i.invoice_amount, i.paid_amount,
-                    GREATEST(i.invoice_amount - i.paid_amount, 0) AS outstanding, i.status, i.payment_date,
-                    CASE WHEN i.due_date IS NULL THEN NULL ELSE DATEDIFF(:today, i.due_date) END AS days_past_due
-             FROM invoices_payments i LEFT JOIN customers c ON c.id = i.customer_id LEFT JOIN purchase_orders p ON p.id = i.po_id
-             WHERE ' . $where . ' ORDER BY i.invoice_date IS NULL, i.invoice_date DESC, i.id DESC LIMIT ' . self::MAX_ROWS,
-            $params
-        );
-        $invoiced = self::sumMoney($rows, 'invoice_amount');
-        $paid = self::sumMoney($rows, 'paid_amount');
-        $overdue = self::sumMoney(array_values(array_filter($rows, static fn ($r) => $r['status'] === 'Overdue')), 'outstanding');
-        $aging = ['Belum jatuh tempo' => 0, '1–30 hari' => 0, '31–60 hari' => 0, '61–90 hari' => 0, '> 90 hari' => 0, 'Tanpa jatuh tempo' => 0];
-        foreach ($rows as $r) {
-            $cents = Number::toCents($r['outstanding']) ?? 0;
-            if ($cents <= 0) {
-                continue;
-            }
-            $d = $r['days_past_due'];
-            $bucket = match (true) {
-                $d === null      => 'Tanpa jatuh tempo',
-                (int) $d <= 0    => 'Belum jatuh tempo',
-                (int) $d <= 30   => '1–30 hari',
-                (int) $d <= 60   => '31–60 hari',
-                (int) $d <= 90   => '61–90 hari',
-                default          => '> 90 hari',
-            };
-            $aging[$bucket] += $cents / 100;
-        }
-        return [
-            'columns' => [
-                ['key' => 'invoice_number', 'label' => 'Invoice', 'type' => 'text', 'link' => '/invoices/{id}', 'perm' => 'finance.view', 'sub' => ['customer_name', 'po_number']],
-                ['key' => 'customer_name', 'label' => 'Customer', 'type' => 'text', 'hide' => 'md'],
-                ['key' => 'po_number', 'label' => 'PO', 'type' => 'text', 'hide' => 'xxl'],
-                ['key' => 'invoice_date', 'label' => 'Tanggal', 'type' => 'date', 'hide' => 'lg'],
-                ['key' => 'due_date', 'label' => 'Jatuh tempo', 'type' => 'date', 'hide' => 'xl'],
-                ['key' => 'status', 'label' => 'Status', 'type' => 'status', 'hide' => 'sm'],
-                ['key' => 'invoice_amount', 'label' => 'Nilai invoice', 'type' => 'money', 'total' => true, 'hide' => 'lg'],
-                ['key' => 'paid_amount', 'label' => 'Dibayar', 'type' => 'money', 'total' => true, 'hide' => 'xxl'],
-                ['key' => 'outstanding', 'label' => 'Sisa', 'type' => 'money', 'total' => true],
-            ],
-            'rows'    => $rows,
-            'summary' => [
-                ['label' => 'Nilai invoice', 'value' => Number::money($invoiced), 'meta' => Number::qty(count($rows)) . ' invoice'],
-                ['label' => 'Dibayar', 'value' => Number::money($paid), 'meta' => self::pct((float) $paid, (float) $invoiced) . ' tertagih'],
-                ['label' => 'Sisa tagihan', 'value' => Number::money(self::sumMoney($rows, 'outstanding')), 'meta' => 'belum dibayar'],
-                ['label' => 'Overdue', 'value' => Number::money($overdue), 'meta' => 'lewat jatuh tempo'],
-            ],
-            'breakdowns' => [
-                self::breakdown('Umur piutang (sisa tagihan)', $aging, 'money', null, false),
-                self::breakdown('Invoice per status', self::countBy($rows, 'status')),
             ],
         ];
     }

@@ -9,8 +9,9 @@ use App\Models\PurchaseOrder;
  * @var array<string,mixed>|null $po
  * @var array<string,string> $errors
  * @var array<string,mixed> $preset
- * @var array<int,string> $customers
+ * @var list<string> $customerNames
  * @var list<string> $productNames
+ * @var string|null $lastOrderNumber
  * @var list<string> $salesNames
  * @var bool $productEditable
  * @var bool $productLocked
@@ -35,7 +36,7 @@ $number = $isEdit ? PurchaseOrder::displayNumber($po) : null;
     <p class="page-subtitle"><?php if ($isEdit && $isOef && in_array($po['ppic_status'], ['Approved', 'Rejected'], true)): ?>
         Mengubah spesifikasi, qty, produk, subcont, atau tanggal permintaan akan mengirim ulang order ke PPIC untuk konfirmasi.
     <?php elseif ($isOef): ?>
-        Setelah disimpan, order dikirim ke PPIC untuk dikonfirmasi dan jadwal kirim otomatis masuk ke menu Delivery.
+        Isi No. order, customer, dan produk secara manual. Customer & produk baru otomatis tercatat di menu Customers &amp; Products. Setelah disimpan, order dikirim ke PPIC untuk dikonfirmasi dan jadwal kirim otomatis masuk ke menu Delivery.
     <?php else: ?>
         Data PO lama (hasil migrasi). Baris produk dikelola dari halaman detail.
     <?php endif; ?></p>
@@ -48,14 +49,14 @@ $number = $isEdit ? PurchaseOrder::displayNumber($po) : null;
     <div class="form-section">
         <div class="form-section-title">Order</div>
         <div class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label" for="f_order_number">No. order</label>
-                <input type="text" class="form-control" id="f_order_number" value="<?= e($number ?? 'Otomatis (OEF-' . date('ym') . '-…)') ?>" readonly>
-            </div>
+            <?= Form::input('order_number', 'No. order', old('order_number', $record), $errors, ['required' => $isOef, 'maxlength' => 60, 'col' => 'col-md-4', 'autocomplete' => 'off',
+                'placeholder' => 'mis. OEF-' . date('ym') . '-0001', 'help' => 'Diisi manual, tidak boleh sama dengan order lain.' . ($lastOrderNumber ? ' No. terakhir: ' . $lastOrderNumber . '.' : '')]) ?>
             <?= Form::input('po_date', 'Tanggal order', old('po_date', $record), $errors, ['type' => 'date', 'required' => true, 'col' => 'col-md-4']) ?>
             <?= Form::input('sales_name', 'Nama sales', old('sales_name', $record), $errors, ['required' => $isOef, 'maxlength' => 120, 'col' => 'col-md-4', 'list' => 'sales-names', 'autocomplete' => 'off']) ?>
             <datalist id="sales-names"><?php foreach ($salesNames as $n): ?><option value="<?= e($n) ?>"><?php endforeach; ?></datalist>
-            <?= Form::select('customer_id', 'Nama customer', $customers, old('customer_id', $record), $errors, ['required' => true, 'placeholder' => '— Pilih customer —', 'searchable' => 'Cari customer…', 'col' => 'col-md-8']) ?>
+            <?= Form::input('customer_name', 'Nama customer', old('customer_name', $record), $errors, ['required' => true, 'maxlength' => 190, 'col' => 'col-md-8', 'list' => 'customer-names', 'autocomplete' => 'off',
+                'help' => 'Ketik manual. Bila belum ada di menu Customers, customer dicatat otomatis saat disimpan.']) ?>
+            <datalist id="customer-names"><?php foreach ($customerNames as $n): ?><option value="<?= e($n) ?>"><?php endforeach; ?></datalist>
             <?= Form::input('po_number', 'No. PO dari customer', old('po_number', $record), $errors, ['maxlength' => 80, 'col' => 'col-md-4', 'placeholder' => 'mis. PO/SIT/260901420', 'help' => 'Kosongkan bila customer belum mengirim PO.']) ?>
         </div>
     </div>
@@ -68,7 +69,8 @@ $number = $isEdit ? PurchaseOrder::displayNumber($po) : null;
                     'required' => true, 'maxlength' => 190, 'col' => 'col-md-8', 'list' => 'product-names', 'autocomplete' => 'off', 'readonly' => $productLocked,
                     'help' => $productLocked ? 'Produk tidak dapat diganti karena order sudah memiliki pengiriman/retur.' : 'Ketik manual. Bila belum ada di menu Products, produk dicatat otomatis saat disimpan.',
                 ]) ?>
-                <?= Form::input('order_qty', 'Qty produk', old('order_qty', $record), $errors, ['type' => 'number', 'min' => 1, 'step' => 1, 'inputmode' => 'numeric', 'required' => true, 'col' => 'col-md-4', 'suffix' => 'pcs']) ?>
+                <?= Form::input('order_qty', 'Qty produk', old('order_qty', $record), $errors, ['type' => 'number', 'min' => 1, 'step' => 1, 'inputmode' => 'numeric', 'required' => true, 'col' => 'col-md-4', 'suffix' => 'pcs',
+                    'help' => 'Ikut tersimpan sebagai qty arsip di menu Products.']) ?>
                 <datalist id="product-names"><?php foreach ($productNames as $n): ?><option value="<?= e($n) ?>"><?php endforeach; ?></datalist>
                 <?= Form::textarea('product_spec', 'Spesifikasi produk', old('product_spec', $record), $errors, ['rows' => 4, 'maxlength' => 5000, 'required' => $isOef,
                     'placeholder' => 'mis. material, ukuran, warna, cetak/finishing, kemasan…', 'help' => 'Dicek dan dikonfirmasi oleh PPIC.']) ?>
@@ -92,7 +94,7 @@ $number = $isEdit ? PurchaseOrder::displayNumber($po) : null;
             </div>
             <?= Form::input('requested_date', 'Permintaan selesai / kirim', old('requested_date', $record), $errors, ['type' => 'date', 'required' => $isOef, 'col' => 'col-md-4',
                 'help' => $isOef ? 'Otomatis dijadwalkan di menu Delivery; jadwal bisa diubah bila ada perubahan.' : null]) ?>
-            <?= Form::input('ship_to', 'Tujuan kirim', old('ship_to', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-8', 'placeholder' => 'Alamat / gudang tujuan (kosong = nama customer)']) ?>
+            <?= Form::input('ship_to', 'Tujuan kirim', old('ship_to', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-8', 'placeholder' => 'Alamat / gudang tujuan (kosong = alamat / nama customer)']) ?>
         </div>
     </div>
 

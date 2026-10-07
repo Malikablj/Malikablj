@@ -9,8 +9,10 @@ use App\Helpers\Paginator;
 use DomainException;
 
 /**
- * Penerimaan barang/komponen maklon dari vendor.
+ * Penerimaan barang/komponen maklon dari vendor — diinput manual oleh Gudang.
  * Total masuk = Qty diterima − Qty reject (dihitung otomatis saat disimpan).
+ * No. order/PO dan nama barang diketik manual; bila cocok persis dengan order /
+ * produk yang ada, record otomatis terhubung (tanpa membuat data baru).
  */
 final class InboundMaklon extends Model
 {
@@ -18,7 +20,7 @@ final class InboundMaklon extends Model
     public const ENTITY = 'inbound_maklon';
     public const LABEL = 'sj_number';
 
-    private const SELECT = 'SELECT ib.*, p.po_number, p.code AS po_code, p.customer_id, c.name AS customer_name,
+    private const SELECT = 'SELECT ib.*, COALESCE(p.order_number, p.po_number) AS po_number, p.code AS po_code, p.customer_id, c.name AS customer_name,
             pr.name AS product_name, pr.variant
         FROM inbound_maklon ib
         LEFT JOIN purchase_orders p ON p.id = ib.po_id
@@ -32,8 +34,9 @@ final class InboundMaklon extends Model
         $params = [];
         if (!empty($f['q'])) {
             $where[] = '(ib.sj_number LIKE :q1 OR ib.vendor LIKE :q2 OR ib.receiver LIKE :q3 OR ib.component_name LIKE :q4 OR ib.internal_component_code LIKE :q5
-                        OR ib.factory_component_code LIKE :q6 OR p.po_number LIKE :q7 OR ib.po_number_legacy LIKE :q8 OR pr.name LIKE :q9 OR ib.code LIKE :q10)';
-            for ($i = 1; $i <= 10; $i++) {
+                        OR ib.factory_component_code LIKE :q6 OR p.po_number LIKE :q7 OR ib.po_number_legacy LIKE :q8 OR pr.name LIKE :q9 OR ib.code LIKE :q10
+                        OR p.order_number LIKE :q11)';
+            for ($i = 1; $i <= 11; $i++) {
                 $params['q' . $i] = Database::like((string) $f['q']);
             }
         }
@@ -109,38 +112,54 @@ final class InboundMaklon extends Model
     /** @return list<string> */
     public static function distinct(string $column): array
     {
-        if (!in_array($column, ['vendor', 'receiver', 'type'], true)) {
+        if (!in_array($column, ['vendor', 'receiver', 'type', 'component_name'], true)) {
             throw new DomainException('Kolom tidak dikenal.');
         }
         return array_map('strval', Database::fetchColumn("SELECT DISTINCT `{$column}` FROM inbound_maklon WHERE `{$column}` IS NOT NULL AND `{$column}` <> '' ORDER BY `{$column}`"));
     }
 
-    /** @return array<int,string> PO untuk pilihan form (terbaru dulu) */
-    public static function poOptions(?int $includeId = null): array
+    /**
+     * Order (OEF / PO) yang nomornya sama persis dengan isian manual
+     * (No. order OEF atau No. PO customer, tidak peka huruf besar/kecil).
+     */
+    public static function matchOrder(?string $reference): ?int
     {
-        $rows = Database::fetchAll(
-            "SELECT p.id, p.po_number, p.code, p.status, c.name AS customer_name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
-             WHERE p.status IN ('Open','On Process','Partial') OR p.id = :inc ORDER BY p.po_date DESC, p.id DESC",
-            ['inc' => $includeId ?? 0]
-        );
-        $out = [];
-        foreach ($rows as $r) {
-            $out[(int) $r['id']] = ($r['po_number'] ?? $r['code']) . ' — ' . ($r['customer_name'] ?? 'customer ?') . ' (' . $r['status'] . ')';
+        $reference = trim((string) $reference);
+        if ($reference === '') {
+            return null;
         }
-        return $out;
+        $id = Database::fetchValue(
+            'SELECT id FROM purchase_orders WHERE LOWER(TRIM(order_number)) = LOWER(:a) OR LOWER(TRIM(po_number)) = LOWER(:b)
+             ORDER BY (LOWER(TRIM(order_number)) = LOWER(:c)) DESC, id DESC LIMIT 1',
+            ['a' => $reference, 'b' => $reference, 'c' => $reference]
+        );
+        return $id !== null ? (int) $id : null;
     }
 
-    /** @param array<string,mixed> $data */
+    /**
+     * Simpan inbound. Relasi ke order & produk ditentukan otomatis dari isian manual:
+     *  - po_number_legacy (No. order / PO yang diketik) → po_id bila cocok persis
+     *  - component_name → product_id bila sama persis dengan nama produk
+     * @param array<string,mixed> $data
+     */
     public static function saveInbound(?int $id, array $data): int
     {
         $data['total_in'] = self::totalIn($data['quantity'] ?? null, $data['reject_qty'] ?? null);
         return Database::transaction(function () use ($id, $data): int {
+            $before = $id !== null ? self::find($id) : null;
+            if ($id !== null && $before === null) {
+                throw new DomainException('Data inbound tidak ditemukan.');
+            }
+            if (array_key_exists('po_number_legacy', $data)) {
+                $data['po_id'] = self::matchOrder($data['po_number_legacy']);
+            }
+            if (array_key_exists('component_name', $data)) {
+                $product = Product::findByName((string) $data['component_name']);
+                $sameName = $before !== null && mb_strtolower(trim((string) $before['component_name'])) === mb_strtolower(trim((string) $data['component_name']));
+                $data['product_id'] = $product !== null ? (int) $product['id'] : ($sameName ? $before['product_id'] : null);
+            }
             if ($id === null) {
                 return self::create($data);
-            }
-            $before = self::find($id);
-            if ($before === null) {
-                throw new DomainException('Data inbound tidak ditemukan.');
             }
             self::update($id, $data, $before);
             return $id;

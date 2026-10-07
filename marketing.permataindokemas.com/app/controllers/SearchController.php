@@ -53,10 +53,15 @@ final class SearchController extends Controller
                     'url' => '/products/' . $r['id'], 'title' => $r['name'], 'sub' => trim(($r['product_code'] ?? '') . ' ' . ($r['variant'] ?? '')) ?: $r['code'], 'badge' => null, 'icon' => 'bi-box-seam',
                 ], Database::fetchAll('SELECT id, code, name, product_code, variant FROM products WHERE name LIKE :q1 OR code LIKE :q2 OR product_code LIKE :q3 OR variant LIKE :q4 ORDER BY name LIMIT ' . self::LIMIT, $p(4)));
             }
-            if (Auth::can('finance.view')) {
-                $sections['Invoices'] = array_map(static fn ($r) => [
-                    'url' => '/invoices/' . $r['id'], 'title' => $r['invoice_number'] ?? $r['code'], 'sub' => fmt_money($r['invoice_amount']) . ' · ' . fmt_date($r['invoice_date']), 'badge' => $r['status'], 'icon' => 'bi-cash-coin',
-                ], Database::fetchAll('SELECT id, code, invoice_number, invoice_amount, invoice_date, status FROM invoices_payments WHERE invoice_number LIKE :q1 OR code LIKE :q2 OR po_number_legacy LIKE :q3 ORDER BY invoice_date DESC LIMIT ' . self::LIMIT, $p(3)));
+            if (Auth::can('inbound.view')) {
+                $sections['Inbound Maklon'] = array_map(static fn ($r) => [
+                    'url' => '/inbound/' . $r['id'], 'title' => $r['sj_number'] ?? $r['code'], 'sub' => trim(($r['component_name'] ?? '') . ' · ' . ($r['vendor'] ?? '') . ' · ' . fmt_date($r['actual_inbound_date']), ' ·'), 'badge' => null, 'icon' => 'bi-box-arrow-in-down',
+                ], Database::fetchAll('SELECT id, code, sj_number, component_name, vendor, actual_inbound_date FROM inbound_maklon WHERE sj_number LIKE :q1 OR code LIKE :q2 OR component_name LIKE :q3 OR vendor LIKE :q4 OR po_number_legacy LIKE :q5 ORDER BY actual_inbound_date DESC LIMIT ' . self::LIMIT, $p(5)));
+            }
+            if (Auth::can('inbound_supplier.view')) {
+                $sections['Inbound Supplier'] = array_map(static fn ($r) => [
+                    'url' => '/inbound-supplier/' . $r['id'], 'title' => $r['item_name'], 'sub' => trim(($r['supplier'] ?? '') . ' · ' . ($r['sj_number'] ?? $r['code']) . ' · ' . fmt_date($r['inbound_date']), ' ·'), 'badge' => null, 'icon' => 'bi-truck-flatbed',
+                ], Database::fetchAll('SELECT id, code, sj_number, item_name, supplier, inbound_date FROM inbound_supplier WHERE item_name LIKE :q1 OR code LIKE :q2 OR sj_number LIKE :q3 OR supplier LIKE :q4 OR po_reference LIKE :q5 OR item_code LIKE :q6 ORDER BY inbound_date DESC LIMIT ' . self::LIMIT, $p(6)));
             }
             $sections = array_filter($sections);
         }

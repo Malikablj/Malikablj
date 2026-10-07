@@ -40,7 +40,7 @@ $id = (int) $d['id'];
                 <dl class="dl-grid">
                     <div><dt>Qty</dt><dd class="fs-5 fw-semibold<?= (int) $d['delivered_qty'] < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($d['delivered_qty'])) ?> pcs</dd></div>
                     <div><dt>Order</dt><dd><?= $d['po_id'] ? '<a href="' . e(url('/purchase-orders/' . $d['po_id'])) . '">' . e($d['po_number'] ?? $d['po_code']) . '</a>' : '<span class="text-subtle">Tidak diketahui</span>' ?></dd></div>
-                    <div><dt>Customer</dt><dd><?= $d['customer_id'] ? '<a href="' . e(url('/customers/' . $d['customer_id'])) . '">' . e($d['customer_name']) . '</a>' : '—' ?></dd></div>
+                    <div><dt>Customer</dt><dd><?= $d['customer_id'] ? (can('customers.view') ? '<a href="' . e(url('/customers/' . $d['customer_id'])) . '">' . e($d['customer_name']) . '</a>' : e($d['customer_name'])) : '—' ?></dd></div>
                     <div><dt>Produk</dt><dd><?= e($d['product_name'] ?? 'Belum terpetakan') ?></dd></div>
                     <div><dt>Lampiran</dt><dd><?= external_link($d['attachment'], 'Buka dokumen') ?></dd></div>
                     <div><dt>Catatan</dt><dd><?= $d['note'] ? nl2br(e($d['note'])) : '—' ?></dd></div>

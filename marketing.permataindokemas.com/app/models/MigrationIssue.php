@@ -28,8 +28,7 @@ final class MigrationIssue
         'STOCK'             => ['/stock/{id}/edit', 'stock.edit', 'Stok'],
         'LEADTIME'          => ['/lead-times/{id}/edit', 'leadtime.edit', 'Lead time'],
         'INBOUND_MAKLON'    => ['/inbound/{id}', 'inbound.view', 'Inbound maklon'],
-        'INVOICES_PAYMENTS' => ['/invoices/{id}', 'finance.view', 'Invoice'],
-        'PO_FINANCIALS'     => ['/po-financials/{id}', 'finance.view', 'PO financial'],
+        // INVOICES_PAYMENTS & PO_FINANCIALS: menu Finance sudah dihapus (data tetap di database, tanpa halaman).
     ];
 
     /**

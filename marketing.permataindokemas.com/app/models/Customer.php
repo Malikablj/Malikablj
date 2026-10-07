@@ -163,12 +163,6 @@ final class Customer extends Model
             ['c' => $id]
         ) ?? [];
         $lastActivity = Database::fetchValue('SELECT MAX(activity_date) FROM activities WHERE customer_id = :c', ['c' => $id]);
-        $finance = Database::fetch(
-            'SELECT COALESCE(SUM(invoice_amount), 0) AS invoiced, COALESCE(SUM(paid_amount), 0) AS paid,
-                    COALESCE(SUM(GREATEST(invoice_amount - paid_amount, 0)), 0) AS outstanding
-             FROM invoices_payments WHERE customer_id = :c',
-            ['c' => $id]
-        ) ?? [];
         return [
             'leads_open'        => (int) ($leads['open_count'] ?? 0),
             'leads_pipeline'    => (float) ($leads['pipeline'] ?? 0),
@@ -180,9 +174,6 @@ final class Customer extends Model
             'delivered_qty'     => (int) ($po['delivered_qty'] ?? 0),
             'outstanding_qty'   => (int) ($po['outstanding'] ?? 0),
             'last_activity'     => $lastActivity !== null ? (string) $lastActivity : null,
-            'invoiced'          => (float) ($finance['invoiced'] ?? 0),
-            'paid'              => (float) ($finance['paid'] ?? 0),
-            'receivable'        => (float) ($finance['outstanding'] ?? 0),
         ];
     }
 
@@ -207,6 +198,45 @@ final class Customer extends Model
             throw new DomainException('Customer tidak dapat dihapus karena masih memiliki ' . implode(', ', $blocking) . '. Ubah status menjadi Inactive bila customer sudah tidak aktif.');
         }
         self::delete($id, $customer);
+    }
+
+    /**
+     * Customer untuk Order Entry Form: nama customer diketik manual.
+     * Dicari berurutan: nama sama persis (tidak peka huruf besar/kecil & spasi), lalu nama
+     * yang sama setelah normalisasi ("PT. Cantik" = "pt cantik"). Bila belum ada, customer
+     * baru dicatat otomatis di menu Customers (status Active, PIC = sales bila dikenali).
+     * @return array{id:int,created:bool,name:string}
+     */
+    public static function findOrCreateForOrder(string $name, ?string $orderLabel = null, ?int $picUserId = null): array
+    {
+        $name = trim((string) preg_replace('/\s+/u', ' ', $name));
+        if ($name === '') {
+            throw new DomainException('Nama customer wajib diisi.');
+        }
+        $exact = Database::fetch(
+            "SELECT id, name FROM customers WHERE LOWER(TRIM(name)) = LOWER(:n) ORDER BY status = 'Active' DESC, id ASC LIMIT 1",
+            ['n' => $name]
+        );
+        if ($exact !== null) {
+            return ['id' => (int) $exact['id'], 'created' => false, 'name' => (string) $exact['name']];
+        }
+        $similar = self::similarByName($name);
+        if ($similar !== []) {
+            return ['id' => (int) $similar[0]['id'], 'created' => false, 'name' => (string) $similar[0]['name']];
+        }
+        $id = self::create([
+            'name'             => mb_substr($name, 0, 190),
+            'status'           => 'Active',
+            'marketing_pic_id' => $picUserId,
+            'notes'            => 'Dicatat otomatis dari Order Entry Form' . ($orderLabel ? ' ' . $orderLabel : '') . '. Lengkapi alamat, kontak, dan data lainnya di menu Customers.',
+        ]);
+        return ['id' => $id, 'created' => true, 'name' => mb_substr($name, 0, 190)];
+    }
+
+    /** @return list<string> nama customer (saran input Order Entry Form) */
+    public static function nameSuggestions(int $limit = 2000): array
+    {
+        return array_map('strval', Database::fetchColumn('SELECT DISTINCT name FROM customers ORDER BY name LIMIT ' . max(1, $limit)));
     }
 
     /** @return array<int,string> */

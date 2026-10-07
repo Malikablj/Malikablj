@@ -35,11 +35,11 @@ $total = $row['total_in'] ?? ($row['quantity'] !== null ? (int) $row['quantity']
     <div class="col-lg-7 min-w-0">
         <section class="surface surface-pad section-gap">
             <dl class="dl-single mb-0">
-                <dt>Komponen</dt><dd><?= e($row['component_name'] ?? '—') ?><?= $row['type'] ? ' <span class="chip">' . e($row['type']) . '</span>' : '' ?></dd>
+                <dt>Nama barang / komponen</dt><dd><?= e($row['component_name'] ?? '—') ?><?= $row['type'] ? ' <span class="chip">' . e($row['type']) . '</span>' : '' ?></dd>
                 <dt>Produk</dt><dd><?php if ($row['product_id']): ?><?php if (can('products.view')): ?><a href="<?= e(url('/products/' . $row['product_id'])) ?>"><?= e($row['product_name']) ?></a><?php else: ?><?= e($row['product_name']) ?><?php endif; ?><?php else: ?><span class="text-subtle">Tidak terhubung</span><?php endif; ?></dd>
                 <dt>Kode komponen internal</dt><dd><?= e($row['internal_component_code'] ?? '—') ?></dd>
                 <dt>Kode komponen pabrik</dt><dd><?= e($row['factory_component_code'] ?? '—') ?></dd>
-                <dt>PO</dt><dd><?php if ($row['po_id']): ?><?php if (can('purchase_orders.view')): ?><a href="<?= e(url('/purchase-orders/' . $row['po_id'])) ?>"><?= e($row['po_number'] ?? $row['po_code']) ?></a><?php else: ?><?= e($row['po_number'] ?? $row['po_code']) ?><?php endif; ?><?= $row['customer_name'] ? ' · ' . e($row['customer_name']) : '' ?>
+                <dt>Order / PO</dt><dd><?php if ($row['po_id']): ?><?php if (can('purchase_orders.view')): ?><a href="<?= e(url('/purchase-orders/' . $row['po_id'])) ?>"><?= e($row['po_number'] ?? $row['po_code']) ?></a><?php else: ?><?= e($row['po_number'] ?? $row['po_code']) ?><?php endif; ?><?= $row['customer_name'] ? ' · ' . e($row['customer_name']) : '' ?>
                     <?php elseif ($row['po_number_legacy']): ?><?= e($row['po_number_legacy']) ?> <span class="badge-soft badge-soft-warning no-dot">Belum terhubung</span><?php else: ?><span class="text-subtle">—</span><?php endif; ?></dd>
                 <dt>Tanggal surat jalan</dt><dd><?= e(fmt_date($row['sj_date'])) ?></dd>
                 <dt>Checklist Odoo</dt><dd><?= e($row['odoo_checklist'] ?? '—') ?></dd>

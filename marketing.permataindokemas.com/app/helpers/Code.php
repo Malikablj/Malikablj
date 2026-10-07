@@ -27,6 +27,7 @@ final class Code
         'stock'             => 'STK',
         'leadtime'          => 'LT',
         'inbound_maklon'    => 'INB',
+        'inbound_supplier'  => 'INS',
         'invoices_payments' => 'PAY',
         'po_financials'     => 'POF',
         'migration_issues'  => 'ISS',

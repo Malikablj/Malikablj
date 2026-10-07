@@ -21,7 +21,7 @@ $cancel = $return !== '' ? to($return) : ($isEdit ? url('/deliveries/' . $delive
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/deliveries')) ?>">Deliveries</a><i class="bi bi-chevron-right"></i><span><?= $isEdit ? e($delivery['sj_number'] ?? $delivery['code']) : 'Catat' ?></span></div>
 <div class="page-header"><div><h1 class="page-title"><?= $isEdit ? 'Edit Delivery' : 'Catat Delivery' ?></h1>
-    <p class="page-subtitle">Delivery selalu terhubung ke baris PO sehingga outstanding terhitung otomatis.</p></div></div>
+    <p class="page-subtitle">Diisi oleh PPIC. Delivery selalu terhubung ke baris order sehingga outstanding terhitung otomatis.</p></div></div>
 
 <div class="row g-4">
     <div class="col-xl-8">
@@ -68,7 +68,7 @@ $cancel = $return !== '' ? to($return) : ($isEdit ? url('/deliveries/' . $delive
             <div class="surface surface-pad">
                 <h2 class="surface-title mb-3">Baris PO terpilih</h2>
                 <dl class="dl-grid dl-single">
-                    <div><dt>Order</dt><dd><a href="<?= e(url('/purchase-orders/' . $line['po_id'])) ?>"><?= e($line['po_number'] ?? $line['po_code']) ?></a> · <?= e($line['customer_name'] ?? '') ?></dd></div>
+                    <div><dt>Order</dt><dd><?php if (can('purchase_orders.view')): ?><a href="<?= e(url('/purchase-orders/' . $line['po_id'])) ?>"><?= e($line['po_number'] ?? $line['po_code']) ?></a><?php else: ?><?= e($line['po_number'] ?? $line['po_code']) ?><?php endif; ?> · <?= e($line['customer_name'] ?? '') ?></dd></div>
                     <div><dt>Produk</dt><dd><?= e($line['product_name']) ?></dd></div>
                     <div><dt>Order / Terkirim / Retur</dt><dd class="tabular"><?= e(fmt_qty($line['order_qty'])) ?> / <?= e(fmt_qty($line['delivered_qty'], '0')) ?> / <?= e(fmt_qty($line['return_qty'], '0')) ?></dd></div>
                     <div><dt>Outstanding</dt><dd class="fw-semibold fs-5"><?= e(fmt_qty($line['outstanding_qty'], '0')) ?> pcs</dd></div>

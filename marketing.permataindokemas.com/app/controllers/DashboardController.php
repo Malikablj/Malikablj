@@ -8,7 +8,6 @@ use App\Helpers\Auth;
 use App\Helpers\Database;
 use App\Models\Delivery;
 use App\Models\FollowUp;
-use App\Models\Invoice;
 use App\Models\LeadTime;
 use App\Services\DashboardService;
 
@@ -20,11 +19,6 @@ final class DashboardController extends Controller
         $canFollow = Auth::can('followups.view');
         if ($canFollow) {
             FollowUp::refreshOverdue($today);
-        }
-        $finance = null;
-        if (Auth::can('finance.view')) {
-            Invoice::refreshStatuses($today);
-            $finance = Invoice::summary([], $today);
         }
         // Setiap daftar hanya diambil bila role boleh melihat modulnya (otorisasi di backend)
         $this->view('dashboard/index', [
@@ -38,7 +32,7 @@ final class DashboardController extends Controller
             'orders'          => Auth::can('purchase_orders.view') ? DashboardService::recentOrders() : null,
             'deliveries'      => Auth::can('deliveries.view') ? Delivery::upcoming(6) : null,
             'leadtimes'       => Auth::can('leadtime.view') ? LeadTime::upcoming($today, 4) : null,
-            'finance'         => $finance,
+            'inbound'         => Auth::can('inbound.view') || Auth::can('inbound_supplier.view') ? DashboardService::recentInbound(6) : null,
         ]);
     }
 }

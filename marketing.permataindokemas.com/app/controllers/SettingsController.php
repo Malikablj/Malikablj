@@ -14,7 +14,7 @@ use Throwable;
 final class SettingsController extends Controller
 {
     private const FIELDS = [
-        'company_name', 'invoice_default_due_days', 'ppn_rate', 'delivery_reminder_days', 'automation_interval_minutes',
+        'company_name', 'delivery_reminder_days', 'automation_interval_minutes',
         'qc_default_email', 'mail_transport', 'mail_from_address', 'mail_from_name',
         'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username',
     ];
@@ -28,8 +28,6 @@ final class SettingsController extends Controller
     {
         $v = Validator::make($_POST, [
             'company_name'                => 'required|string|max:120',
-            'invoice_default_due_days'    => 'required|integer|min:0|max:365',
-            'ppn_rate'                    => 'required|numeric|min:0|max:100',
             'delivery_reminder_days'      => 'required|integer|min:0|max:30',
             'automation_interval_minutes' => 'required|integer|min:5|max:1440',
             'qc_default_email'            => 'nullable|string|max:500',
@@ -41,7 +39,7 @@ final class SettingsController extends Controller
             'smtp_encryption'             => ['nullable', ['in', array_keys(Mailer::ENCRYPTIONS)]],
             'smtp_username'               => 'nullable|string|max:190',
         ], [
-            'company_name' => 'Nama perusahaan', 'invoice_default_due_days' => 'Jatuh tempo default', 'ppn_rate' => 'Tarif PPN',
+            'company_name' => 'Nama perusahaan',
             'delivery_reminder_days' => 'Pengingat delivery', 'automation_interval_minutes' => 'Interval otomasi',
             'qc_default_email' => 'Email QC default', 'mail_transport' => 'Metode kirim', 'mail_from_address' => 'Email pengirim',
             'mail_from_name' => 'Nama pengirim', 'smtp_host' => 'SMTP host', 'smtp_port' => 'SMTP port', 'smtp_encryption' => 'Enkripsi', 'smtp_username' => 'SMTP username',
@@ -109,8 +107,7 @@ final class SettingsController extends Controller
             $this->failure('Otomasi sedang berjalan di proses lain. Coba lagi sebentar.', '/settings');
         }
         $total = array_sum($result['notifications']);
-        $this->success('Otomasi selesai: ' . $total . ' notifikasi baru, ' . $result['followups_overdue'] . ' follow up ditandai Overdue, '
-            . $result['invoices_updated'] . ' status invoice diperbarui.', '/settings');
+        $this->success('Otomasi selesai: ' . $total . ' notifikasi baru, ' . $result['followups_overdue'] . ' follow up ditandai Overdue.', '/settings');
     }
 
     /** @return array<string,mixed> */

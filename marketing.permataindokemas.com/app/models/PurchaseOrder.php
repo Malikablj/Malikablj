@@ -168,22 +168,21 @@ final class PurchaseOrder extends Model
         return (int) Database::fetchValue("SELECT COUNT(*) FROM purchase_orders WHERE ppic_status = 'Pending'");
     }
 
-    /**
-     * Nomor Order Entry Form berikutnya: OEF-YYMM-NNNN (urut per bulan tanggal order).
-     * Dipanggil di dalam transaksi; keunikan dijaga unique index (lihat OrderEntry::create).
-     */
-    public static function nextOrderNumber(string $orderDate): string
+    /** No. order (diisi manual) sudah dipakai order lain? Tidak peka huruf besar/kecil & spasi. */
+    public static function orderNumberTaken(string $number, ?int $exceptId = null): ?array
     {
-        $prefix = 'OEF-' . date('ym', strtotime($orderDate) ?: time()) . '-';
-        $last = Database::fetchValue(
-            'SELECT order_number FROM purchase_orders WHERE order_number LIKE :p ORDER BY order_number DESC LIMIT 1 FOR UPDATE',
-            ['p' => $prefix . '%']
+        return Database::fetch(
+            'SELECT p.id, p.code, p.order_number, c.name AS customer_name FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
+             WHERE LOWER(TRIM(p.order_number)) = LOWER(TRIM(:n)) AND p.id <> :ex LIMIT 1',
+            ['n' => $number, 'ex' => $exceptId ?? 0]
         );
-        $n = 1;
-        if (is_string($last) && preg_match('/-(\d+)$/', $last, $m)) {
-            $n = (int) $m[1] + 1;
-        }
-        return $prefix . str_pad((string) $n, 4, '0', STR_PAD_LEFT);
+    }
+
+    /** No. order terakhir yang diinput (bantuan saat mengisi nomor manual). */
+    public static function lastOrderNumber(): ?string
+    {
+        $value = Database::fetchValue('SELECT order_number FROM purchase_orders WHERE order_number IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 1');
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /** Nomor PO sudah dipakai PO lain? (tidak peka huruf besar/kecil) */

@@ -20,6 +20,7 @@ final class Product extends Model
         'name'        => 'pr.name',
         'code'        => 'pr.product_code',
         'category'    => 'pr.category',
+        'qty'         => 'pr.qty',
         'outstanding' => 'po.open_outstanding',
         'created'     => 'pr.created_at',
     ];
@@ -56,7 +57,7 @@ final class Product extends Model
     {
         return "SELECT t.product_id, COUNT(*) AS line_count,
                        SUM(CASE WHEN p.status IN ('Open','On Process','Partial') THEN GREATEST(t.outstanding_qty, 0) ELSE 0 END) AS open_outstanding,
-                       SUM(t.delivered_qty) AS delivered_qty
+                       SUM(t.delivered_qty) AS delivered_qty, SUM(t.order_qty) AS ordered_qty
                 FROM (" . PoLine::totalsSql() . ') t JOIN purchase_orders p ON p.id = t.po_id
                 GROUP BY t.product_id';
     }
@@ -97,7 +98,7 @@ final class Product extends Model
         return Database::fetch(
             'SELECT pr.*, cu.name AS created_by_name, uu.name AS updated_by_name,
                     COALESCE(po.line_count, 0) AS line_count, COALESCE(po.open_outstanding, 0) AS open_outstanding,
-                    COALESCE(po.delivered_qty, 0) AS delivered_qty,
+                    COALESCE(po.delivered_qty, 0) AS delivered_qty, COALESCE(po.ordered_qty, 0) AS ordered_qty,
                     COALESCE(st.fg, 0) AS stock_fg, COALESCE(st.wip, 0) AS stock_wip, COALESCE(st.ready, 0) AS stock_ready,
                     COALESCE(st.reserved, 0) AS stock_reserved, COALESCE(st.entries, 0) AS stock_entries
              FROM products pr
@@ -181,28 +182,58 @@ final class Product extends Model
         );
     }
 
+    /** Sumber produk yang dicatat otomatis (kolom products.source). */
+    public const SOURCE_LABELS = [
+        'OEF'  => 'Dicatat otomatis dari Order Entry Form',
+        'Stok' => 'Dicatat otomatis dari input Stock (Produksi/Gudang)',
+    ];
+
+    /** Rapikan nama produk yang diketik manual: spasi ganda & spasi di awal/akhir dihapus. */
+    public static function normalizeName(string $name): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', $name));
+    }
+
+    /**
+     * Cari produk dengan nama yang sama persis (tidak peka huruf besar/kecil & spasi).
+     * Produk aktif dan tanpa varian didahulukan.
+     * @return array<string,mixed>|null
+     */
+    public static function findByName(string $name): ?array
+    {
+        $name = self::normalizeName($name);
+        if ($name === '') {
+            return null;
+        }
+        return Database::fetch(
+            'SELECT id, name, spec, qty, is_active FROM products WHERE LOWER(TRIM(name)) = LOWER(:n)
+             ORDER BY is_active DESC, (variant IS NULL OR variant = \'\') DESC, id ASC LIMIT 1',
+            ['n' => $name]
+        );
+    }
+
     /**
      * Produk untuk Order Entry Form: nama produk diketik manual. Bila sudah ada
      * produk dengan nama yang sama persis (tidak peka huruf besar/kecil), produk
      * itu dipakai; bila belum, produk baru dicatat otomatis di menu Products.
-     * Spesifikasi terakhir disimpan di kolom spec produk.
+     * Spesifikasi & qty OEF terakhir disimpan di produk sebagai arsip.
      * @return array{id:int,created:bool}
      */
-    public static function findOrCreateForOrder(string $name, ?string $spec, ?string $orderLabel = null): array
+    public static function findOrCreateForOrder(string $name, ?string $spec, ?string $orderLabel = null, ?int $qty = null): array
     {
-        $name = trim((string) preg_replace('/\s+/u', ' ', $name));
+        $name = self::normalizeName($name);
         if ($name === '') {
             throw new DomainException('Nama produk wajib diisi.');
         }
-        $existing = Database::fetch(
-            'SELECT id, spec, is_active FROM products WHERE LOWER(TRIM(name)) = LOWER(:n) ORDER BY is_active DESC, (variant IS NULL OR variant = \'\') DESC, id ASC LIMIT 1',
-            ['n' => $name]
-        );
+        $existing = self::findByName($name);
         if ($existing !== null) {
             $id = (int) $existing['id'];
             $changes = [];
             if ($spec !== null && $spec !== '' && (string) $existing['spec'] !== $spec) {
                 $changes['spec'] = $spec;
+            }
+            if ($qty !== null && $qty >= 0 && (string) $existing['qty'] !== (string) $qty) {
+                $changes['qty'] = $qty;
             }
             if ((int) $existing['is_active'] !== 1) {
                 $changes['is_active'] = 1;
@@ -215,6 +246,7 @@ final class Product extends Model
         $id = self::create([
             'name'      => mb_substr($name, 0, 190),
             'spec'      => $spec !== '' ? $spec : null,
+            'qty'       => $qty !== null && $qty >= 0 ? $qty : null,
             'unit'      => 'pcs',
             'is_active' => 1,
             'source'    => 'OEF',
@@ -223,7 +255,33 @@ final class Product extends Model
         return ['id' => $id, 'created' => true];
     }
 
-    /** @return list<string> nama produk aktif (untuk saran input OEF) */
+    /**
+     * Produk untuk input Stock: nama produk diketik manual oleh Produksi/Gudang.
+     * Nama yang sama (tidak peka huruf besar/kecil & spasi) selalu masuk ke produk
+     * yang sama sehingga stok otomatis terkelompok per produk.
+     * @return array{id:int,created:bool}
+     */
+    public static function findOrCreateForStock(string $name, ?string $unit = null): array
+    {
+        $name = self::normalizeName($name);
+        if ($name === '') {
+            throw new DomainException('Nama produk wajib diisi.');
+        }
+        $existing = self::findByName($name);
+        if ($existing !== null) {
+            return ['id' => (int) $existing['id'], 'created' => false];
+        }
+        $id = self::create([
+            'name'      => mb_substr($name, 0, 190),
+            'unit'      => $unit !== null && $unit !== '' ? mb_substr($unit, 0, 20) : 'pcs',
+            'is_active' => 1,
+            'source'    => 'Stok',
+            'notes'     => 'Dicatat otomatis dari input Stock.',
+        ]);
+        return ['id' => $id, 'created' => true];
+    }
+
+    /** @return list<string> nama produk aktif (untuk saran input OEF / Stock) */
     public static function nameSuggestions(int $limit = 1500): array
     {
         return array_map('strval', Database::fetchColumn(

@@ -11,7 +11,7 @@ use App\Models\PoLine;
 
 /**
  * Tab pada halaman detail customer: satu tempat untuk melihat konteks
- * contacts, leads, activities, follow up, PO, delivery, return dan invoice.
+ * contacts, leads, activities, follow up, order (OEF), delivery, dan complaint/return.
  * Tab hanya tampil bila role user punya akses ke modul tersebut.
  */
 final class CustomerTabs
@@ -25,7 +25,6 @@ final class CustomerTabs
         'pos'        => ['label' => 'Order (OEF)', 'perm' => 'purchase_orders.view', 'count' => 'pos'],
         'deliveries' => ['label' => 'Deliveries', 'perm' => 'deliveries.view', 'count' => 'deliveries'],
         'returns'    => ['label' => 'Complaint & Return', 'perm' => 'returns.view', 'count' => 'returns'],
-        'invoices'   => ['label' => 'Invoices', 'perm' => 'finance.view', 'count' => 'invoices'],
     ];
 
     /**
@@ -100,15 +99,6 @@ final class CustomerTabs
                  WHERE COALESCE(r.customer_id, p.customer_id) = :c',
                 ['c' => $customerId],
                 'r.return_date DESC, r.id DESC',
-                $page,
-                25
-            )],
-            'invoices'   => ['invoices' => Paginator::query(
-                'SELECT i.*, p.po_number, (i.invoice_amount - i.paid_amount) AS outstanding_amount
-                 FROM invoices_payments i LEFT JOIN purchase_orders p ON p.id = i.po_id
-                 WHERE i.customer_id = :c',
-                ['c' => $customerId],
-                'i.invoice_date DESC, i.id DESC',
                 $page,
                 25
             )],

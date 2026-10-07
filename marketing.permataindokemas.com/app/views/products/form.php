@@ -36,7 +36,8 @@ $cancel = $isEdit ? url('/products/' . $product['id']) : url('/products');
                     <?= Form::input('variant', 'Varian', old('variant', $product), $errors, ['maxlength' => 255, 'col' => 'col-md-8', 'placeholder' => 'mis. warna, ukuran, finishing']) ?>
                     <?= Form::input('category', 'Kategori', old('category', $product), $errors, ['maxlength' => 100, 'col' => 'col-md-4', 'list' => 'category-list', 'placeholder' => 'mis. Botol, Cap, Pump']) ?>
                     <?= Form::input('unit', 'Satuan', old('unit', $product, 'pcs'), $errors, ['required' => true, 'maxlength' => 20, 'col' => 'col-md-4', 'list' => 'unit-list']) ?>
-                    <?= Form::input('capacity_per_day', 'Kapasitas produksi per hari', old('capacity_per_day', $product), $errors, ['type' => 'number', 'min' => 0, 'step' => 1, 'col' => 'col-md-4', 'suffix' => 'pcs/hari']) ?>
+                    <?= Form::input('qty', 'Qty', old('qty', $product), $errors, ['type' => 'number', 'min' => 0, 'step' => 1, 'col' => 'col-md-4', 'inputmode' => 'numeric',
+                        'help' => 'Arsip qty dari Order Entry Form terakhir (terisi otomatis), bisa diubah manual.']) ?>
                 </div>
                 <datalist id="category-list"><?php foreach ($categories as $c): ?><option value="<?= e($c) ?>"><?php endforeach; ?></datalist>
                 <datalist id="unit-list"><?php foreach ($units as $u): ?><option value="<?= e($u) ?>"><?php endforeach; ?></datalist>

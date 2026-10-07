@@ -71,9 +71,6 @@ $base = '/customers/' . $id;
         <div><div class="stat-label">Order berjalan</div><div class="stat-value"><?= e(fmt_qty($summary['po_open'], '0')) ?></div><div class="x-small text-secondary">dari <?= e(fmt_qty($summary['po_count'], '0')) ?> order</div></div>
         <div><div class="stat-label">Outstanding</div><div class="stat-value"><?= e(fmt_qty($summary['outstanding_qty'], '0')) ?></div><div class="x-small text-secondary">pcs di order berjalan</div></div>
     <?php endif; ?>
-    <?php if (can('finance.view')): ?>
-        <div><div class="stat-label">Piutang</div><div class="stat-value"><?= e(fmt_money($summary['receivable'], 'Rp 0')) ?></div><div class="x-small text-secondary">dari <?= e(fmt_money($summary['invoiced'], 'Rp 0')) ?> invoice</div></div>
-    <?php endif; ?>
     <div><div class="stat-label">Aktivitas terakhir</div><div class="stat-value fs-6 mt-1"><?= e(fmt_date($summary['last_activity'], 'Belum ada')) ?></div><div class="x-small text-secondary"><?= e(relative_day($summary['last_activity'])) ?></div></div>
 </div>
 

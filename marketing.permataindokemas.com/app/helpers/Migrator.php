@@ -20,11 +20,47 @@ use Throwable;
 final class Migrator
 {
     /** Naikkan setiap kali ada migrasi baru. */
-    public const VERSION = '2026.10.1';
+    public const VERSION = '2026.10.2';
     private const SETTING_KEY = 'schema_version';
 
     /** true bila kolom complaint baru saja ditambahkan pada run ini (data lama perlu disesuaikan). */
     private static bool $complaintColumnsAdded = false;
+
+    /** true bila kolom products.qty baru saja ditambahkan pada run ini (diisi dari OEF terakhir). */
+    private static bool $productQtyAdded = false;
+
+    /** Struktur tabel inbound_supplier (sama dengan database/schema.sql). */
+    private const INBOUND_SUPPLIER_DDL = "CREATE TABLE IF NOT EXISTS inbound_supplier (
+          id             INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+          code           VARCHAR(20)   NOT NULL,
+          supplier       VARCHAR(150)  NOT NULL,
+          inbound_date   DATE          NOT NULL COMMENT 'Tanggal barang diterima di gudang',
+          sj_number      VARCHAR(60)   NULL COMMENT 'No. surat jalan supplier',
+          sj_date        DATE          NULL,
+          po_reference   VARCHAR(80)   NULL COMMENT 'No. PO pembelian ke supplier',
+          item_name      VARCHAR(255)  NOT NULL,
+          item_code      VARCHAR(60)   NULL,
+          category       VARCHAR(80)   NULL COMMENT 'Jenis barang, mis. bahan baku, kemasan',
+          unit           VARCHAR(20)   NOT NULL DEFAULT 'pcs',
+          quantity       DECIMAL(15,2) NOT NULL COMMENT 'Qty diterima',
+          reject_qty     DECIMAL(15,2) NULL,
+          total_in       DECIMAL(15,2) NULL COMMENT 'Qty diterima - reject',
+          receiver       VARCHAR(120)  NULL COMMENT 'Penerima / petugas gudang',
+          location       VARCHAR(120)  NULL COMMENT 'Lokasi simpan di gudang',
+          attachment     VARCHAR(500)  NULL,
+          notes          TEXT          NULL,
+          created_by     INT UNSIGNED  NULL,
+          updated_by     INT UNSIGNED  NULL,
+          created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at     DATETIME      NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          UNIQUE KEY uq_inbound_supplier_code (code),
+          KEY idx_inbound_supplier_date (inbound_date),
+          KEY idx_inbound_supplier_supplier (supplier),
+          KEY idx_inbound_supplier_item (item_name),
+          CONSTRAINT fk_inbound_supplier_created FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
+          CONSTRAINT fk_inbound_supplier_updated FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
     /** Jalankan bila perlu (dipanggil di setiap request; cepat bila sudah terbaru). */
     public static function ensure(): void
@@ -75,15 +111,16 @@ final class Migrator
     private static function steps(): array
     {
         return [
-            // ---------------------------------------------------------- role PPIC
-            'users.role + PPIC' => static function (): bool {
+            // ---------------------------------------------------------- role PPIC, Produksi, Gudang
+            'users.role: PPIC, Produksi, Gudang' => static function (): bool {
                 $type = (string) Database::fetchValue(
                     "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'"
                 );
-                if (str_contains($type, "'PPIC'")) {
+                $missing = array_filter(Permission::ROLES, static fn (string $role): bool => !str_contains($type, "'" . $role . "'"));
+                if ($missing === []) {
                     return false;
                 }
-                Database::query("ALTER TABLE users MODIFY role ENUM('Admin','Marketing','Sales','Management','PPIC','Viewer') NOT NULL DEFAULT 'Viewer'");
+                Database::query("ALTER TABLE users MODIFY role ENUM('" . implode("','", Permission::ROLES) . "') NOT NULL DEFAULT 'Viewer'");
                 return true;
             },
 
@@ -117,6 +154,37 @@ final class Migrator
                 return self::addColumns('products', [
                     'spec' => "TEXT NULL COMMENT 'Spesifikasi terakhir dari OEF' AFTER variant",
                 ]);
+            },
+            'purchase_orders: No. order diisi manual' => static function (): bool {
+                $length = (int) Database::fetchValue(
+                    "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'purchase_orders' AND COLUMN_NAME = 'order_number'"
+                );
+                if ($length >= 60) {
+                    return false;
+                }
+                Database::query("ALTER TABLE purchase_orders MODIFY order_number VARCHAR(60) NULL COMMENT 'No. order Order Entry Form (diisi manual, unik)'");
+                return true;
+            },
+            'products: kolom qty (arsip OEF)' => static function (): bool {
+                self::$productQtyAdded = !self::columnExists('products', 'qty');
+                return self::addColumns('products', [
+                    'qty' => "INT UNSIGNED NULL COMMENT 'Qty dari Order Entry Form terakhir (arsip produk)' AFTER category",
+                ]);
+            },
+            'products: qty diisi dari OEF terakhir' => static function (): bool {
+                if (!self::$productQtyAdded) {
+                    return false;
+                }
+                // Kolom baru: isi dengan qty Order Entry Form terakhir untuk setiap produk (data PO lama tidak dipakai).
+                return Database::query(
+                    'UPDATE products pr
+                     JOIN (SELECT pl.product_id, pl.order_qty FROM po_lines pl
+                           WHERE pl.id = (SELECT pl2.id FROM po_lines pl2 JOIN purchase_orders p2 ON p2.id = pl2.po_id
+                                          WHERE pl2.product_id = pl.product_id AND p2.ppic_status IS NOT NULL
+                                          ORDER BY p2.po_date DESC, pl2.id DESC LIMIT 1)) x ON x.product_id = pr.id
+                     SET pr.qty = GREATEST(x.order_qty, 0)
+                     WHERE pr.qty IS NULL'
+                )->rowCount() > 0;
             },
 
             // ---------------------------------------------------------- Complaint & Return
@@ -177,6 +245,15 @@ final class Migrator
                       CONSTRAINT fk_complaint_att_user   FOREIGN KEY (uploaded_by) REFERENCES users (id) ON DELETE SET NULL
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
                 );
+                return true;
+            },
+
+            // ---------------------------------------------------------- Inbound Supplier (Gudang)
+            'tabel inbound_supplier' => static function (): bool {
+                if (self::tableExists('inbound_supplier')) {
+                    return false;
+                }
+                Database::query(self::INBOUND_SUPPLIER_DDL);
                 return true;
             },
         ];

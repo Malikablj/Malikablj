@@ -12,12 +12,11 @@ use App\Controllers\DeliveryController;
 use App\Controllers\FollowUpController;
 use App\Controllers\ImportController;
 use App\Controllers\InboundController;
-use App\Controllers\InvoiceController;
+use App\Controllers\InboundSupplierController;
 use App\Controllers\LeadController;
 use App\Controllers\LeadTimeController;
 use App\Controllers\MigrationIssueController;
 use App\Controllers\NotificationController;
-use App\Controllers\PoFinancialController;
 use App\Controllers\ProductController;
 use App\Controllers\ProfileController;
 use App\Controllers\PurchaseOrderController;
@@ -133,7 +132,7 @@ return static function (Router $r): void {
     $r->post('/returns/{id}/email', [ReturnController::class, 'email'], 'returns.edit');
     $r->post('/returns/{id}/delete', [ReturnController::class, 'destroy'], 'returns.delete');
 
-    // Inventory: products, stock, lead time, inbound maklon
+    // Inventory: products, stock, lead time, inbound maklon, inbound supplier
     $r->get('/products', [ProductController::class, 'index'], 'products.view');
     $r->get('/products/create', [ProductController::class, 'create'], 'products.create');
     $r->post('/products', [ProductController::class, 'store'], 'products.create');
@@ -160,23 +159,13 @@ return static function (Router $r): void {
     $r->get('/inbound/{id}/edit', [InboundController::class, 'edit'], 'inbound.edit');
     $r->post('/inbound/{id}', [InboundController::class, 'update'], 'inbound.edit');
     $r->post('/inbound/{id}/delete', [InboundController::class, 'destroy'], 'inbound.delete');
-
-    // Finance: invoice & payment, PO financials
-    $r->get('/invoices', [InvoiceController::class, 'index'], 'finance.view');
-    $r->get('/invoices/create', [InvoiceController::class, 'create'], 'finance.create');
-    $r->post('/invoices', [InvoiceController::class, 'store'], 'finance.create');
-    $r->get('/invoices/{id}', [InvoiceController::class, 'show'], 'finance.view');
-    $r->get('/invoices/{id}/edit', [InvoiceController::class, 'edit'], 'finance.edit');
-    $r->post('/invoices/{id}', [InvoiceController::class, 'update'], 'finance.edit');
-    $r->post('/invoices/{id}/payments', [InvoiceController::class, 'pay'], 'finance.edit');
-    $r->post('/invoices/{id}/delete', [InvoiceController::class, 'destroy'], 'finance.delete');
-    $r->get('/po-financials', [PoFinancialController::class, 'index'], 'finance.view');
-    $r->get('/po-financials/create', [PoFinancialController::class, 'create'], 'finance.create');
-    $r->post('/po-financials', [PoFinancialController::class, 'store'], 'finance.create');
-    $r->get('/po-financials/{id}', [PoFinancialController::class, 'show'], 'finance.view');
-    $r->get('/po-financials/{id}/edit', [PoFinancialController::class, 'edit'], 'finance.edit');
-    $r->post('/po-financials/{id}', [PoFinancialController::class, 'update'], 'finance.edit');
-    $r->post('/po-financials/{id}/delete', [PoFinancialController::class, 'destroy'], 'finance.delete');
+    $r->get('/inbound-supplier', [InboundSupplierController::class, 'index'], 'inbound_supplier.view');
+    $r->get('/inbound-supplier/create', [InboundSupplierController::class, 'create'], 'inbound_supplier.create');
+    $r->post('/inbound-supplier', [InboundSupplierController::class, 'store'], 'inbound_supplier.create');
+    $r->get('/inbound-supplier/{id}', [InboundSupplierController::class, 'show'], 'inbound_supplier.view');
+    $r->get('/inbound-supplier/{id}/edit', [InboundSupplierController::class, 'edit'], 'inbound_supplier.edit');
+    $r->post('/inbound-supplier/{id}', [InboundSupplierController::class, 'update'], 'inbound_supplier.edit');
+    $r->post('/inbound-supplier/{id}/delete', [InboundSupplierController::class, 'destroy'], 'inbound_supplier.delete');
 
     // Reports (akses per jenis laporan dicek di controller: reports.customer, reports.po, ...)
     $r->get('/reports', [ReportController::class, 'index'], 'reports.view');

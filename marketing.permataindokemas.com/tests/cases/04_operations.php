@@ -25,15 +25,18 @@ test('validasi Order Entry Form', function () use ($opsSetup) {
     $form = $c->get('/purchase-orders/create', ['customer_id' => $ids['customer']]);
     assert_status(200, $form);
     assert_contains('Simpan &amp; kirim ke PPIC', $form->body);
-    $r1 = $c->post('/purchase-orders', ['customer_id' => '', 'sales_name' => '', 'po_date' => '2026-13-01', 'product_name' => '', 'order_qty' => '', 'product_spec' => '', 'requested_date' => '']);
+    assert_contains('value="PT Operasi Uji"', $form->body, 'nama customer terisi dari ?customer_id');
+    assert_contains('name="order_number"', $form->body, 'No. order diisi manual');
+    $r1 = $c->post('/purchase-orders', ['order_number' => '', 'customer_name' => '', 'sales_name' => '', 'po_date' => '2026-13-01', 'product_name' => '', 'order_qty' => '', 'product_spec' => '', 'requested_date' => '']);
     assert_status(422, $r1);
+    assert_contains('No. order wajib diisi', $r1->body);
     assert_contains('Nama customer wajib diisi', $r1->body);
     assert_contains('Nama sales wajib diisi', $r1->body);
     assert_contains('Tanggal order harus berupa tanggal', $r1->body);
     assert_contains('Nama produk wajib diisi', $r1->body);
     assert_contains('Spesifikasi produk wajib diisi', $r1->body);
     assert_contains('Permintaan selesai / kirim wajib diisi', $r1->body);
-    $r2 = $c->post('/purchase-orders', ['customer_id' => (string) $ids['customer'], 'sales_name' => 'Sales Uji', 'po_number' => 'PO/OPS/001', 'po_date' => today(),
+    $r2 = $c->post('/purchase-orders', ['order_number' => 'OEF-OPS-001', 'customer_name' => 'PT Operasi Uji', 'sales_name' => 'Sales Uji', 'po_number' => 'PO/OPS/001', 'po_date' => today(),
         'product_name' => 'Botol Ops 100ml', 'product_spec' => 'PET bening', 'order_qty' => '0', 'is_subcont' => '1', 'supplier' => '',
         'requested_date' => date('Y-m-d', strtotime('-1 day'))]);
     assert_status(422, $r2);
@@ -42,23 +45,27 @@ test('validasi Order Entry Form', function () use ($opsSetup) {
     assert_false((bool) Database::fetchValue("SELECT 1 FROM purchase_orders WHERE po_number = 'PO/OPS/001'"), 'tidak ada order setengah jadi');
 });
 
-test('buat OEF: nomor otomatis, produk lama dipakai, jadwal delivery otomatis, PPIC Pending', function () use ($opsSetup) {
+test('buat OEF: No. order manual, customer & produk lama dipakai, jadwal delivery otomatis, PPIC Pending', function () use ($opsSetup) {
     $ids = $opsSetup();
     client_as('PPIC'); // pastikan ada user PPIC penerima notifikasi
     $c = client_as('Marketing');
-    $res = $c->post('/purchase-orders', ['customer_id' => (string) $ids['customer'], 'sales_name' => 'Sales Uji', 'po_number' => 'PO/OPS/001', 'po_date' => today(), 'payment_term' => 'DP 50%',
+    $customers = (int) Database::fetchValue('SELECT COUNT(*) FROM customers');
+    $res = $c->post('/purchase-orders', ['order_number' => ' OEF-OPS-001 ', 'customer_name' => ' pt operasi  UJI ', 'sales_name' => 'Sales Uji', 'po_number' => 'PO/OPS/001', 'po_date' => today(), 'payment_term' => 'DP 50%',
         'product_name' => ' botol ops 100ML ', 'product_spec' => "PET bening\nPrinting 1 warna", 'order_qty' => '1.000', 'requested_date' => date('Y-m-d', strtotime('+10 days')),
         'ship_to' => 'Gudang Cikarang', 'remark' => 'Urgent']);
     assert_redirect($res, '/purchase-orders/');
     $po = Database::fetch("SELECT * FROM purchase_orders WHERE po_number = 'PO/OPS/001'");
     assert_same('Open', $po['status']);
     assert_same('Pending', $po['ppic_status']);
-    assert_true((bool) preg_match('/^OEF-\d{4}-0001$/', (string) $po['order_number']), 'nomor OEF otomatis: ' . $po['order_number']);
+    assert_same('OEF-OPS-001', $po['order_number'], 'No. order sesuai isian manual');
+    assert_same($ids['customer'], (int) $po['customer_id'], 'nama customer sama (beda huruf/spasi) → customer lama dipakai');
+    assert_same($customers, (int) Database::fetchValue('SELECT COUNT(*) FROM customers'), 'tidak ada customer ganda');
     $lines = Database::fetchAll('SELECT product_id, order_qty FROM po_lines WHERE po_id = :id ORDER BY id', ['id' => $po['id']]);
     assert_same(1, count($lines));
     assert_same($ids['p1'], (int) $lines[0]['product_id'], 'nama produk sama (beda huruf/spasi) → produk lama dipakai');
     assert_same(1000, (int) $lines[0]['order_qty']);
     assert_same("PET bening\nPrinting 1 warna", Database::fetchValue('SELECT spec FROM products WHERE id = :id', ['id' => $ids['p1']]));
+    assert_same(1000, (int) Database::fetchValue('SELECT qty FROM products WHERE id = :id', ['id' => $ids['p1']]), 'qty OEF tersimpan sebagai arsip produk');
     $sched = Database::fetch('SELECT * FROM deliveries WHERE id = :id', ['id' => $po['schedule_delivery_id']]);
     assert_same('Scheduled', $sched['status']);
     assert_same($po['requested_date'], $sched['delivery_date']);
@@ -66,23 +73,25 @@ test('buat OEF: nomor otomatis, produk lama dipakai, jadwal delivery otomatis, P
     assert_same(1000, (int) $sched['delivered_qty']);
     assert_true((bool) Database::fetchValue("SELECT 1 FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.role = 'PPIC' AND n.type = 'oef_ppic'"), 'PPIC dapat notifikasi');
     // baris kedua ditambahkan dari halaman detail (order multi-produk tetap didukung)
-    assert_redirect($c->post('/purchase-orders/' . $po['id'] . '/lines', ['product_id' => (string) $ids['p2'], 'order_qty' => '500']), '/purchase-orders/' . $po['id']);
+    assert_redirect($c->post('/purchase-orders/' . $po['id'] . '/lines', ['product_name' => 'POT OPS 50GR', 'order_qty' => '500']), '/purchase-orders/' . $po['id']);
+    assert_same($ids['p2'], (int) Database::fetchValue('SELECT product_id FROM po_lines WHERE po_id = :p ORDER BY id DESC LIMIT 1', ['p' => $po['id']]), 'baris tambahan: produk diketik manual, produk lama dipakai');
     $page = $c->get('/purchase-orders/' . $po['id']);
     assert_status(200, $page);
     assert_contains('Botol Ops 100ml', $page->body);
     assert_contains('1.500', $page->body, 'total order 1.500');
     assert_contains('Menunggu PPIC', $page->body);
-    // No. PO customer unik (tidak peka huruf besar/kecil)
-    $dup = $c->post('/purchase-orders', ['customer_id' => (string) $ids['customer'], 'sales_name' => 'Sales Uji', 'po_number' => 'po/ops/001', 'po_date' => today(),
+    // No. order & No. PO customer unik (tidak peka huruf besar/kecil)
+    $dup = $c->post('/purchase-orders', ['order_number' => 'oef-ops-001', 'customer_name' => 'PT Operasi Uji', 'sales_name' => 'Sales Uji', 'po_number' => 'po/ops/001', 'po_date' => today(),
         'product_name' => 'Botol Ops 100ml', 'product_spec' => 'x', 'order_qty' => '1', 'requested_date' => today()]);
     assert_status(422, $dup);
+    assert_contains('No. order sudah dipakai order lain', $dup->body);
     assert_contains('No. PO customer sudah dipakai', $dup->body);
 });
 
-test('OEF dengan produk baru → produk dicatat otomatis di menu Products', function () use ($opsSetup) {
+test('OEF dengan customer & produk baru → dicatat otomatis di menu Customers & Products', function () use ($opsSetup) {
     $ids = $opsSetup();
     $c = client_as('Sales');
-    $res = $c->post('/purchase-orders', ['customer_id' => (string) $ids['customer'], 'sales_name' => 'Sales Uji', 'po_date' => today(),
+    $res = $c->post('/purchase-orders', ['order_number' => 'OEF-OPS-002', 'customer_name' => 'PT Operasi Uji', 'sales_name' => 'Sales Uji', 'po_date' => today(),
         'product_name' => 'Jar Ops Baru 30gr', 'product_spec' => 'PP putih, tutup emas', 'order_qty' => '2000', 'is_subcont' => '1', 'supplier' => 'CV Maklon Uji',
         'requested_date' => date('Y-m-d', strtotime('+20 days'))]);
     assert_redirect($res, '/purchase-orders/');
@@ -90,16 +99,37 @@ test('OEF dengan produk baru → produk dicatat otomatis di menu Products', func
     assert_true($prod !== null, 'produk baru tercatat');
     assert_same('OEF', $prod['source']);
     assert_same('PP putih, tutup emas', $prod['spec']);
+    assert_same(2000, (int) $prod['qty'], 'qty OEF tersimpan di produk baru');
     $po = Database::fetch('SELECT * FROM purchase_orders WHERE id = (SELECT po_id FROM po_lines WHERE product_id = :p)', ['p' => $prod['id']]);
     assert_same(1, (int) $po['is_subcont']);
     assert_same('CV Maklon Uji', $po['supplier']);
     assert_true($po['po_number'] === null, 'No. PO customer boleh kosong');
+    assert_same($ids['customer'], (int) $po['customer_id']);
+    // customer baru diketik manual → tercatat otomatis di menu Customers
+    $new = $c->post('/purchase-orders', ['order_number' => 'OEF-OPS-003', 'customer_name' => 'CV Pelanggan Baru OEF', 'sales_name' => 'Sales Tester', 'po_date' => today(),
+        'product_name' => 'Jar Ops Baru 30gr', 'product_spec' => 'PP putih', 'order_qty' => '300', 'requested_date' => date('Y-m-d', strtotime('+5 days'))]);
+    assert_redirect($new, '/purchase-orders/');
+    $flash = $c->get((string) parse_url((string) $new->location, PHP_URL_PATH));
+    assert_contains('Customer baru &quot;CV Pelanggan Baru OEF&quot; dicatat otomatis di menu Customers', $flash->body);
+    $cust = Database::fetch("SELECT * FROM customers WHERE name = 'CV Pelanggan Baru OEF'");
+    assert_true($cust !== null, 'customer baru tercatat');
+    assert_same('Active', $cust['status']);
+    assert_contains('Dicatat otomatis dari Order Entry Form OEF-OPS-003', (string) $cust['notes']);
+    assert_same((int) Database::fetchValue("SELECT id FROM users WHERE email = 'sales.qa@pik.test'"), (int) $cust['marketing_pic_id'], 'PIC = sales yang dikenali');
+    assert_same((int) $cust['id'], (int) Database::fetchValue("SELECT customer_id FROM purchase_orders WHERE order_number = 'OEF-OPS-003'"));
+    assert_same(300, (int) Database::fetchValue("SELECT qty FROM products WHERE name = 'Jar Ops Baru 30gr'"), 'qty arsip = OEF terakhir');
+    $list = client_as('Marketing')->get('/customers', ['q' => 'Pelanggan Baru']);
+    assert_contains('CV Pelanggan Baru OEF', $list->body, 'muncul di menu Customers');
+    // "PT." vs "PT" (normalisasi nama) tidak membuat customer ganda
+    $c->post('/purchase-orders', ['order_number' => 'OEF-OPS-004', 'customer_name' => 'PT. Operasi Uji', 'sales_name' => 'Sales Uji', 'po_date' => today(),
+        'product_name' => 'Botol Ops 100ml', 'product_spec' => 'x', 'order_qty' => '10', 'requested_date' => today()]);
+    assert_same($ids['customer'], (int) Database::fetchValue("SELECT customer_id FROM purchase_orders WHERE order_number = 'OEF-OPS-004'"));
 });
 
 group('Phase 4 · PPIC & jadwal delivery OEF');
 
 test('PPIC: tidak bisa diproses wajib alasan → jadwal batal; revisi → Pending lagi; bisa diproses → On Process', function () {
-    $po = Database::fetch("SELECT p.* FROM purchase_orders p JOIN po_lines l ON l.po_id = p.id JOIN products pr ON pr.id = l.product_id WHERE pr.name = 'Jar Ops Baru 30gr'");
+    $po = Database::fetch("SELECT * FROM purchase_orders WHERE order_number = 'OEF-OPS-002'");
     $id = (int) $po['id'];
     // hanya PPIC / Admin yang boleh memutuskan
     assert_status(403, client_as('Marketing')->post('/purchase-orders/' . $id . '/ppic', ['decision' => 'approve']));
@@ -108,6 +138,9 @@ test('PPIC: tidak bisa diproses wajib alasan → jadwal batal; revisi → Pendin
     assert_status(200, $page);
     assert_contains('Bisa diproses', $page->body);
     assert_contains('Tidak bisa diproses', $page->body);
+    assert_contains('PT Operasi Uji', $page->body, 'PPIC melihat nama customer');
+    assert_not_contains('/customers/' . $po['customer_id'] . '"', $page->body, 'tanpa link ke menu Customers (PPIC tidak punya akses)');
+    assert_not_contains('/purchase-orders/' . $id . '/edit', $page->body, 'PPIC hanya meninjau, tidak mengedit OEF');
     $noReason = $ppic->post('/purchase-orders/' . $id . '/ppic', ['decision' => 'reject', 'ppic_note' => '']);
     assert_redirect($noReason, '/purchase-orders/' . $id);
     assert_same('Pending', Database::fetchValue('SELECT ppic_status FROM purchase_orders WHERE id = :id', ['id' => $id]));
@@ -122,7 +155,7 @@ test('PPIC: tidak bisa diproses wajib alasan → jadwal batal; revisi → Pendin
     $sales = client_as('Sales');
     assert_status(200, $sales->get('/purchase-orders/' . $id . '/edit'));
     $newDate = date('Y-m-d', strtotime('+25 days'));
-    $rev = $sales->post('/purchase-orders/' . $id, ['customer_id' => (string) $row['customer_id'], 'sales_name' => 'Sales Uji', 'po_date' => $row['po_date'],
+    $rev = $sales->post('/purchase-orders/' . $id, ['order_number' => $row['order_number'], 'customer_name' => 'PT Operasi Uji', 'sales_name' => 'Sales Uji', 'po_date' => $row['po_date'],
         'product_name' => 'Jar Ops Baru 30gr', 'product_spec' => 'PP natural, tutup emas', 'order_qty' => '2000', 'is_subcont' => '1', 'supplier' => 'CV Maklon Uji',
         'requested_date' => $newDate, 'status' => 'Cancelled']);
     assert_redirect($rev, '/purchase-orders/' . $id);
@@ -141,7 +174,7 @@ test('PPIC: tidak bisa diproses wajib alasan → jadwal batal; revisi → Pendin
 });
 
 test('ubah jadwal delivery OEF dari halaman order & menu Delivery', function () {
-    $po = Database::fetch("SELECT p.* FROM purchase_orders p JOIN po_lines l ON l.po_id = p.id JOIN products pr ON pr.id = l.product_id WHERE pr.name = 'Jar Ops Baru 30gr'");
+    $po = Database::fetch("SELECT * FROM purchase_orders WHERE order_number = 'OEF-OPS-002'");
     $id = (int) $po['id'];
     $ppic = client_as('PPIC');
     $date = date('Y-m-d', strtotime('+30 days'));
@@ -153,8 +186,9 @@ test('ubah jadwal delivery OEF dari halaman order & menu Delivery', function () 
     $list = client_as('Marketing')->get('/deliveries');
     assert_status(200, $list);
     assert_contains((string) $po['order_number'], $list->body, 'jadwal OEF tampil di menu Delivery');
-    // Sales tidak boleh mengubah jadwal
+    // Sales & Marketing tidak boleh mengubah jadwal (hanya PPIC)
     assert_status(403, client_as('Sales')->post('/purchase-orders/' . $id . '/schedule', ['delivery_date' => today()]));
+    assert_status(403, client_as('Marketing')->post('/purchase-orders/' . $id . '/schedule', ['delivery_date' => today()]));
 });
 
 group('Phase 4 · Delivery, Return & Outstanding');
@@ -162,7 +196,12 @@ group('Phase 4 · Delivery, Return & Outstanding');
 test('delivery Delivered mengurangi outstanding, Scheduled tidak; status PO → Partial', function () {
     $po = Database::fetch("SELECT * FROM purchase_orders WHERE po_number = 'PO/OPS/001'");
     $line1 = (int) Database::fetchValue('SELECT id FROM po_lines WHERE po_id = :p ORDER BY id LIMIT 1', ['p' => $po['id']]);
-    $c = client_as('Marketing');
+    // Surat jalan hanya diisi PPIC
+    $m = client_as('Marketing');
+    assert_status(403, $m->get('/deliveries/create', ['po_line_id' => $line1]));
+    assert_status(403, $m->post('/deliveries', ['po_line_id' => (string) $line1, 'delivery_date' => today(), 'sj_number' => 'PIK-SJ-MKT', 'delivered_qty' => '1', 'status' => 'Delivered']));
+    assert_false((bool) Database::fetchValue("SELECT 1 FROM deliveries WHERE sj_number = 'PIK-SJ-MKT'"));
+    $c = client_as('PPIC');
     assert_status(200, $c->get('/deliveries/create', ['po_line_id' => $line1]));
     $r = $c->post('/deliveries', ['po_line_id' => (string) $line1, 'delivery_date' => today(), 'sj_number' => 'PIK-SJ-90001', 'delivered_qty' => '400', 'status' => 'Delivered']);
     assert_redirect($r, '/purchase-orders/' . $po['id']);
@@ -178,7 +217,7 @@ test('delivery Delivered mengurangi outstanding, Scheduled tidak; status PO → 
 test('over delivery wajib dikonfirmasi', function () {
     $po = Database::fetch("SELECT * FROM purchase_orders WHERE po_number = 'PO/OPS/001'");
     $line1 = (int) Database::fetchValue('SELECT id FROM po_lines WHERE po_id = :p ORDER BY id LIMIT 1', ['p' => $po['id']]);
-    $c = client_as('Marketing');
+    $c = client_as('PPIC');
     $r = $c->post('/deliveries', ['po_line_id' => (string) $line1, 'delivery_date' => today(), 'sj_number' => 'PIK-SJ-90003', 'delivered_qty' => '700', 'status' => 'Delivered']);
     assert_status(422, $r);
     assert_contains('Qty melebihi outstanding baris PO (600 pcs)', $r->body);
@@ -197,9 +236,9 @@ test('over delivery wajib dikonfirmasi', function () {
 test('PO otomatis Closed saat seluruh baris terpenuhi; retur menambah outstanding', function () {
     $po = Database::fetch("SELECT * FROM purchase_orders WHERE po_number = 'PO/OPS/001'");
     $lines = Database::fetchColumn('SELECT id FROM po_lines WHERE po_id = :p ORDER BY id', ['p' => $po['id']]);
-    $c = client_as('Marketing');
-    $c->post('/deliveries', ['po_line_id' => (string) $lines[1], 'delivery_date' => today(), 'sj_number' => 'PIK-SJ-90004', 'delivered_qty' => '500', 'status' => 'Delivered']);
+    client_as('PPIC')->post('/deliveries', ['po_line_id' => (string) $lines[1], 'delivery_date' => today(), 'sj_number' => 'PIK-SJ-90004', 'delivered_qty' => '500', 'status' => 'Delivered']);
     assert_same('Closed', Database::fetchValue('SELECT status FROM purchase_orders WHERE id = :id', ['id' => $po['id']]));
+    $c = client_as('Marketing');
     // retur 150 di baris 1
     assert_status(200, $c->get('/returns/create', ['po_line_id' => $lines[0]]));
     $bad = $c->post('/returns', ['record_type' => 'Return', 'po_line_id' => (string) $lines[0], 'return_date' => today(), 'return_qty' => '150', 'reason' => 'Rusak', 'complaint_detail' => 'Pecah']);
@@ -238,7 +277,8 @@ test('delivery legacy tanpa baris PO: hubungkan ke baris PO yang sama → issue 
     $legacy = Database::insert('deliveries', ['code' => 'DEL-OPS0000099', 'po_id' => $po['id'], 'delivery_date' => today(), 'sj_number' => 'PIK-SJ-LEGACY', 'delivered_qty' => 4, 'status' => 'Delivered', 'migration_flag' => 'PRODUCT/LINE NOT MATCHED']);
     Database::insert('migration_issues', ['code' => 'ISS-OPS0000099', 'table_name' => 'DELIVERIES', 'record_code' => 'DEL-OPS0000099', 'record_id' => $legacy, 'issue_type' => 'PRODUCT/LINE NOT MATCHED', 'resolution_status' => 'Needs Review']);
     assert_same(0, PoLine::totals($line)['delivered_qty'], 'belum terhubung = belum dihitung');
-    $c = client_as('Marketing');
+    assert_status(403, client_as('Marketing')->post('/deliveries/' . $legacy . '/link', ['po_line_id' => (string) $line]), 'hanya PPIC');
+    $c = client_as('PPIC');
     $page = $c->get('/deliveries/' . $legacy);
     assert_contains('Belum terhubung ke baris PO', $page->body);
     $otherLine = (int) Database::fetchValue("SELECT id FROM po_lines WHERE code = 'POL-TEST00001'");
@@ -270,8 +310,8 @@ test('edit & hapus baris PO dengan pengaman relasi', function () {
     assert_same(1200, (int) Database::fetchValue('SELECT order_qty FROM po_lines WHERE id = :id', ['id' => $lines[0]]));
     assert_redirect($c->post('/po-lines/' . $lines[0] . '/delete'), '/purchase-orders/' . $po['id']);
     assert_true((bool) Database::fetchValue('SELECT 1 FROM po_lines WHERE id = :id', ['id' => $lines[0]]), 'baris dengan delivery tidak terhapus');
-    // tambah baris baru lalu hapus
-    assert_redirect($c->post('/purchase-orders/' . $po['id'] . '/lines', ['product_id' => (string) $p2, 'order_qty' => '10']), '/purchase-orders/' . $po['id']);
+    // tambah baris baru (nama produk diketik manual) lalu hapus
+    assert_redirect($c->post('/purchase-orders/' . $po['id'] . '/lines', ['product_name' => 'Pot Ops 50gr', 'order_qty' => '10']), '/purchase-orders/' . $po['id']);
     $new = (int) Database::fetchValue('SELECT MAX(id) FROM po_lines WHERE po_id = :p', ['p' => $po['id']]);
     assert_redirect($c->post('/po-lines/' . $new . '/delete'), '/purchase-orders/' . $po['id']);
     assert_false((bool) Database::fetchValue('SELECT 1 FROM po_lines WHERE id = :id', ['id' => $new]));
@@ -283,8 +323,7 @@ test('hapus PO: diblokir bila ada delivery; PO kosong boleh', function () {
     assert_redirect($c->post('/purchase-orders/' . $po . '/delete'), '/purchase-orders/' . $po);
     assert_true((bool) Database::fetchValue('SELECT 1 FROM purchase_orders WHERE id = :id', ['id' => $po]));
     $c->get('/purchase-orders/create');
-    $cid = (string) Database::fetchValue("SELECT id FROM customers WHERE name = 'PT Operasi Uji'");
-    $c->post('/purchase-orders', ['po_number' => 'PO/OPS/HAPUS', 'customer_id' => $cid, 'sales_name' => 'Admin', 'po_date' => today(), 'product_name' => 'Botol Ops 100ml',
+    $c->post('/purchase-orders', ['order_number' => 'OEF-OPS-HAPUS', 'po_number' => 'PO/OPS/HAPUS', 'customer_name' => 'PT Operasi Uji', 'sales_name' => 'Admin', 'po_date' => today(), 'product_name' => 'Botol Ops 100ml',
         'product_spec' => 'x', 'order_qty' => '5', 'requested_date' => today()]);
     $tmp = (int) Database::fetchValue("SELECT id FROM purchase_orders WHERE po_number = 'PO/OPS/HAPUS'");
     $sched = (int) Database::fetchValue('SELECT schedule_delivery_id FROM purchase_orders WHERE id = :id', ['id' => $tmp]);
@@ -318,6 +357,19 @@ test('otorisasi operations per role', function () {
     $ppic = client_as('PPIC');
     assert_status(200, $ppic->get('/purchase-orders'));
     assert_status(403, $ppic->get('/purchase-orders/create'), 'PPIC hanya mengonfirmasi, tidak membuat OEF');
+    $po2 = (int) Database::fetchValue("SELECT id FROM purchase_orders WHERE po_number = 'PO/OPS/002'");
+    assert_status(403, $ppic->post('/purchase-orders/' . $po2, ['customer_name' => 'X', 'po_date' => today(), 'status' => 'Open']));
+    assert_status(403, $ppic->get('/customers'), 'PPIC tanpa menu Customers');
+    assert_status(403, $ppic->get('/stock'), 'PPIC tanpa menu Stock');
+    assert_status(403, $ppic->get('/returns'), 'PPIC tanpa menu Complaint');
+    assert_status(403, $ppic->get('/lead-times'), 'PPIC tanpa menu Lead Time');
+    assert_status(200, $ppic->get('/deliveries'));
+    assert_status(200, $ppic->get('/deliveries/create'), 'PPIC mengisi surat jalan');
+    $nav = $ppic->get('/');
+    assert_contains('href="/deliveries"', $nav->body);
+    assert_not_contains('href="/customers"', $nav->body);
+    assert_status(403, client_as('Marketing')->get('/deliveries/create'));
+    assert_status(403, client_as('Management')->get('/deliveries/create'));
     $viewer = client_as('Viewer');
     $po = (int) Database::fetchValue("SELECT id FROM purchase_orders WHERE po_number = 'PO/OPS/002'");
     assert_status(200, $viewer->get('/purchase-orders/' . $po));
@@ -325,6 +377,10 @@ test('otorisasi operations per role', function () {
     assert_status(403, $viewer->post('/purchase-orders/' . $po . '/lines', ['product_id' => '1', 'order_qty' => '1']));
     assert_status(403, $viewer->post('/deliveries', ['po_line_id' => '1', 'delivery_date' => today(), 'delivered_qty' => '1', 'status' => 'Delivered']));
     assert_status(200, client_as('Management')->get('/purchase-orders/create'), 'Management punya akses PO');
+    foreach (['Produksi', 'Gudang'] as $role) {
+        assert_status(403, client_as($role)->get('/purchase-orders'), $role . ' tanpa OEF');
+        assert_status(403, client_as($role)->get('/deliveries'), $role . ' tanpa Delivery');
+    }
 });
 
 group('Phase 4 · Complaint & Return');

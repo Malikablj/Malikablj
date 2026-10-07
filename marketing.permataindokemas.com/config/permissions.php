@@ -12,18 +12,22 @@ declare(strict_types=1);
  *
  * Modul:
  *   dashboard, customers, contacts, leads, activities, followups,
- *   purchase_orders (= Order Entry Form, termasuk PO line), deliveries,
+ *   purchase_orders (= Order Entry Form, termasuk PO line), deliveries (= Surat Jalan),
  *   returns (= Complaint & Return; returns.resolve = tombol Selesai / Tidak selesai),
  *   ppic (ppic.approve = tombol "Bisa diproses" / "Tidak bisa diproses" di OEF),
- *   products, stock, leadtime, inbound, finance,
+ *   products, stock, leadtime, inbound (= Inbound Maklon), inbound_supplier,
  *   reports (sub: reports.customer, reports.lead, reports.activity,
- *            reports.po, reports.delivery, reports.complaint, reports.financial,
- *            reports.export),
+ *            reports.po, reports.delivery, reports.complaint, reports.export),
  *   users, settings, audit, migration, import (khusus Admin)
  *
- * Interpretasi PRD untuk modul yang tidak disebut per role:
- *   - Lead Time mengikuti akses PO/Delivery (Marketing & Management).
- *   - Inbound Maklon mengikuti akses Stock (Management).
+ * Pembagian tugas per divisi:
+ *   - Sales / Marketing mengisi Order Entry Form (customer & produk diketik manual,
+ *     otomatis tercatat di menu Customers & Products).
+ *   - PPIC hanya meninjau OEF (Bisa / Tidak bisa diproses) dan satu-satunya divisi
+ *     yang mengisi Surat Jalan di menu Deliveries.
+ *   - Produksi & Gudang mengisi Stock (nama produk diketik manual, dikelompokkan otomatis).
+ *   - Gudang mengisi Inbound Maklon & Inbound Supplier.
+ *   - Invoice & pembayaran dikelola divisi Keuangan di luar aplikasi ini.
  *
  * Permission ini dicek di BACKEND pada setiap route (lihat app/routes.php)
  * dan juga dipakai untuk menyembunyikan menu/tombol di tampilan.
@@ -36,7 +40,7 @@ return [
         'dashboard.view',
         'customers.*', 'contacts.*',
         'leads.*', 'activities.*', 'followups.*',
-        'purchase_orders.*', 'deliveries.*', 'returns.*', 'leadtime.*',
+        'purchase_orders.*', 'deliveries.view', 'returns.*', 'leadtime.*',
         'products.*',
     ],
 
@@ -49,30 +53,40 @@ return [
         'deliveries.view', 'returns.view', 'returns.create', 'products.view',
     ],
 
-    // PPIC: konfirmasi OEF (bisa / tidak bisa diproses) & mengatur jadwal produksi/kirim
+    // PPIC: hanya meninjau OEF (bisa / tidak bisa diproses) + menu Delivery (mengisi Surat Jalan)
     'PPIC' => [
         'dashboard.view',
-        'customers.view',
         'purchase_orders.view', 'ppic.approve',
-        'deliveries.view', 'deliveries.edit', 'leadtime.*',
-        'products.view', 'stock.view', 'inbound.view', 'returns.view',
+        'deliveries.*',
+    ],
+
+    // Produksi: mengisi stok (nama produk diketik manual)
+    'Produksi' => [
+        'dashboard.view',
+        'stock.*',
+    ],
+
+    // Gudang: stok, inbound maklon, inbound supplier
+    'Gudang' => [
+        'dashboard.view',
+        'stock.*', 'inbound.*', 'inbound_supplier.*',
     ],
 
     'Management' => [
         'dashboard.view',
         'reports.*',
         'customers.*', 'contacts.*',
-        'purchase_orders.*', 'deliveries.*', 'returns.*', 'leadtime.*',
-        'stock.*', 'inbound.*',
+        'purchase_orders.*', 'deliveries.view', 'returns.*', 'leadtime.*',
+        'stock.view', 'inbound.view', 'inbound_supplier.view',
     ],
 
-    // Read-only untuk seluruh modul operasional (tanpa Finance & area Admin)
+    // Read-only untuk seluruh modul operasional (tanpa area Admin & export)
     'Viewer' => [
         'dashboard.view',
         'customers.view', 'contacts.view',
         'leads.view', 'activities.view', 'followups.view',
         'purchase_orders.view', 'deliveries.view', 'returns.view',
-        'products.view', 'stock.view', 'leadtime.view', 'inbound.view',
+        'products.view', 'stock.view', 'leadtime.view', 'inbound.view', 'inbound_supplier.view',
         'reports.view', 'reports.customer', 'reports.lead', 'reports.activity',
         'reports.po', 'reports.delivery', 'reports.complaint',
     ],

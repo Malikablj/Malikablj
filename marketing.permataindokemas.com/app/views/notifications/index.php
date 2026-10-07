@@ -32,7 +32,7 @@ $icon = static fn (string $type): string => match (true) {
 
 <div class="surface">
     <?php if ($notifications->isEmpty()): ?>
-        <div class="empty-state"><i class="bi bi-bell-slash"></i><div class="empty-title">Tidak ada notifikasi</div><p>Pengingat follow up, delivery, dan invoice akan muncul di sini.</p></div>
+        <div class="empty-state"><i class="bi bi-bell-slash"></i><div class="empty-title">Tidak ada notifikasi</div><p>Pengingat follow up, delivery, order (PPIC), dan complaint akan muncul di sini.</p></div>
     <?php else: ?>
         <ul class="list-lite">
             <?php foreach ($notifications->items as $n): $isUnread = (int) $n['is_read'] === 0; ?>

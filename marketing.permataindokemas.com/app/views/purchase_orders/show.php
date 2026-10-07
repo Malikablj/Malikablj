@@ -1,6 +1,5 @@
 <?php
 
-use App\Helpers\Form;
 use App\Models\ProductReturn;
 use App\Models\PurchaseOrder;
 
@@ -9,11 +8,9 @@ use App\Models\PurchaseOrder;
  * @var list<array<string,mixed>> $lines
  * @var list<array<string,mixed>> $deliveries
  * @var list<array<string,mixed>> $returns
- * @var list<array<string,mixed>> $invoices
- * @var list<array<string,mixed>> $financials
  * @var list<array<string,mixed>> $leadtimes
  * @var list<array<string,mixed>> $issues
- * @var array<int,string> $products
+ * @var list<string> $productNames
  */
 $id = (int) $po['id'];
 $base = '/purchase-orders/' . $id;
@@ -29,6 +26,8 @@ $canProduct = can('products.view');
 $number = PurchaseOrder::displayNumber($po);
 $isOef = $po['ppic_status'] !== null;
 $canPpic = $isOef && can('ppic.approve');
+$canCustomer = can('customers.view');
+$customerLabel = $po['customer_id'] ? ($canCustomer ? '<a href="' . e(url('/customers/' . $po['customer_id'])) . '">' . e($po['customer_name']) . '</a>' : e($po['customer_name'])) : null;
 $canReschedule = !empty($po['schedule_delivery_id']) && in_array($po['schedule_status'], ['Scheduled', 'On Delivery'], true) && can('deliveries.edit');
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/purchase-orders')) ?>">Order Entry Form</a><i class="bi bi-chevron-right"></i><span><?= e($number) ?></span></div>
@@ -40,7 +39,7 @@ $canReschedule = !empty($po['schedule_delivery_id']) && in_array($po['schedule_s
             <div class="detail-meta">
                 <span class="code-chip"><?= e($po['code']) ?></span>
                 <?php if ($po['order_number'] && $po['po_number']): ?><span title="No. PO dari customer"><i class="bi bi-file-earmark-text"></i>PO <?= e($po['po_number']) ?></span><?php endif; ?>
-                <?php if ($po['customer_id']): ?><span><i class="bi bi-buildings"></i><a href="<?= e(url('/customers/' . $po['customer_id'])) ?>"><?= e($po['customer_name']) ?></a></span>
+                <?php if ($po['customer_id']): ?><span><i class="bi bi-buildings"></i><?= $customerLabel ?></span>
                 <?php else: ?><span class="badge-soft badge-soft-warning no-dot">Customer belum terhubung</span><?php endif; ?>
                 <span><i class="bi bi-calendar3"></i><?= e(fmt_date($po['po_date'], 'Tanpa tanggal')) ?></span>
                 <?php if ($po['payment_term']): ?><span><i class="bi bi-credit-card"></i><?= e($po['payment_term']) ?></span><?php endif; ?>
@@ -57,7 +56,7 @@ $canReschedule = !empty($po['schedule_delivery_id']) && in_array($po['schedule_s
                 <div class="dropdown-menu dropdown-menu-end">
                     <?php if (can('purchase_orders.edit')): ?><a class="dropdown-item" href="<?= e(url($base . '/edit')) ?>"><i class="bi bi-pencil me-2"></i>Edit order</a><?php endif; ?>
                     <?php if (can('purchase_orders.delete')): ?>
-                        <form method="post" action="<?= e(url($base . '/delete')) ?>" data-confirm="Hapus order ini? Order yang sudah memiliki pengiriman/retur/invoice tidak dapat dihapus.">
+                        <form method="post" action="<?= e(url($base . '/delete')) ?>" data-confirm="Hapus order ini? Order yang sudah memiliki pengiriman/retur tidak dapat dihapus.">
                             <?= csrf_field() ?><button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Hapus order</button>
                         </form>
                     <?php endif; ?>
@@ -76,7 +75,7 @@ $canReschedule = !empty($po['schedule_delivery_id']) && in_array($po['schedule_s
                 <dl class="dl-grid">
                     <div><dt>No. order</dt><dd class="fw-semibold"><?= e($po['order_number'] ?? '—') ?></dd></div>
                     <div><dt>Nama sales</dt><dd><?= e($po['sales_name'] ?? '—') ?></dd></div>
-                    <div><dt>Nama customer</dt><dd><?= $po['customer_id'] ? '<a href="' . e(url('/customers/' . $po['customer_id'])) . '">' . e($po['customer_name']) . '</a>' : '—' ?></dd></div>
+                    <div><dt>Nama customer</dt><dd><?= $customerLabel ?? '—' ?></dd></div>
                     <div><dt>No. PO dari customer</dt><dd><?= e($po['po_number'] ?? '—') ?></dd></div>
                     <div><dt>Nama produk</dt><dd><?= e(implode(', ', array_map(static fn ($l) => $l['product_name'], $lines)) ?: '—') ?></dd></div>
                     <div><dt>Qty produk</dt><dd class="fw-semibold"><?= e(fmt_qty($po['total_qty'], '0')) ?> pcs</dd></div>
@@ -202,7 +201,8 @@ $canReschedule = !empty($po['schedule_delivery_id']) && in_array($po['schedule_s
         <form class="surface-footer" method="post" action="<?= e(url($base . '/lines')) ?>">
             <?= csrf_field() ?>
             <div class="row g-2 align-items-center">
-                <div class="col-md-6"><select class="form-select" name="product_id" required aria-label="Produk" data-searchable="Cari produk…"><option value="">+ Tambah produk ke PO…</option><?= Form::options($products, null) ?></select></div>
+                <div class="col-md-6"><input type="text" class="form-control" name="product_name" maxlength="190" list="add-line-products" autocomplete="off" required placeholder="+ Tambah produk (ketik nama produk)…" aria-label="Nama produk">
+                    <datalist id="add-line-products"><?php foreach ($productNames as $n): ?><option value="<?= e($n) ?>"><?php endforeach; ?></datalist></div>
                 <div class="col-6 col-md-2"><input type="number" class="form-control" name="order_qty" min="1" step="1" placeholder="Qty" required aria-label="Qty"></div>
                 <div class="col-6 col-md-2"><input type="text" class="form-control" name="remark" maxlength="500" placeholder="Catatan" aria-label="Catatan"></div>
                 <div class="col-md-2 d-grid"><button class="btn btn-light" type="submit"><i class="bi bi-plus-lg"></i> Tambah</button></div>
@@ -287,43 +287,6 @@ $canReschedule = !empty($po['schedule_delivery_id']) && in_array($po['schedule_s
                             <?php if (can('leadtime.edit')): ?><a class="x-small ms-1" href="<?= e(url('/lead-times/' . $lt['id'] . '/edit', ['return' => $base])) ?>">Edit</a><?php endif; ?></div></li>
                 <?php endforeach; ?>
             </ul>
-        <?php endif; ?>
-    </section>
-<?php endif; ?>
-
-<?php if (can('finance.view')): ?>
-    <section class="surface section-gap">
-        <div class="surface-header"><h2 class="surface-title">Finance</h2>
-            <?php if (can('finance.create')): ?><div class="d-flex gap-2 flex-wrap">
-                <a class="btn btn-light btn-sm" href="<?= e(url('/invoices/create', ['po_id' => $id])) ?>"><i class="bi bi-plus-lg"></i> Invoice</a>
-                <a class="btn btn-light btn-sm" href="<?= e(url('/po-financials/create', ['po_id' => $id])) ?>"><i class="bi bi-plus-lg"></i> Nilai PO</a></div><?php endif; ?></div>
-        <?php if (!$invoices && !$financials): ?><div class="empty-inline">Belum ada invoice atau nilai PO untuk PO ini.</div><?php endif; ?>
-        <?php if ($financials): ?>
-            <div class="table-wrap">
-                <table class="table-pik table-compact">
-                    <thead><tr><th>Ringkasan PO (legacy)</th><th class="num d-none d-md-table-cell">Qty</th><th class="num d-none d-md-table-cell">Harga satuan</th><th class="num">Total + PPN</th><th class="d-none d-sm-table-cell">Status</th></tr></thead>
-                    <tbody>
-                    <?php foreach ($financials as $f): ?>
-                        <tr><td><a class="cell-title" href="<?= e(url('/po-financials/' . $f['id'])) ?>"><?= e($f['product_legacy'] ?? '—') ?></a><div class="cell-sub"><?= e($f['brand'] ?? '') ?></div><div class="cell-sub d-sm-none"><?= status_badge($f['payment_status']) ?></div></td>
-                            <td class="num d-none d-md-table-cell"><?= e(fmt_qty($f['order_qty'])) ?></td><td class="num d-none d-md-table-cell"><?= e(App\Helpers\Number::decimal($f['unit_price'])) ?></td>
-                            <td class="num"><?= e(fmt_money($f['total_incl_ppn'])) ?></td><td class="d-none d-sm-table-cell"><?= status_badge($f['payment_status']) ?></td></tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
-        <?php if ($invoices): ?>
-            <div class="table-wrap">
-                <table class="table-pik table-compact">
-                    <thead><tr><th>Invoice</th><th>Status</th><th class="num d-none d-sm-table-cell">Tagihan</th><th class="num">Sisa</th></tr></thead>
-                    <tbody>
-                    <?php foreach ($invoices as $i): ?>
-                        <tr><td><a class="cell-title" href="<?= e(url('/invoices/' . $i['id'])) ?>"><?= e($i['invoice_number'] ?? $i['code']) ?></a><div class="cell-sub"><?= e(fmt_date($i['invoice_date'])) ?></div></td>
-                            <td><?= status_badge($i['status']) ?></td><td class="num d-none d-sm-table-cell"><?= e(fmt_money($i['invoice_amount'])) ?></td><td class="num fw-semibold"><?= e(fmt_money($i['outstanding_amount'])) ?></td></tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
         <?php endif; ?>
     </section>
 <?php endif; ?>

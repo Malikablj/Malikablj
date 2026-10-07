@@ -31,10 +31,7 @@ final class Navigation
                 ['label' => 'Stock', 'icon' => 'bi-boxes', 'path' => '/stock', 'permission' => 'stock.view'],
                 ['label' => 'Lead Time', 'icon' => 'bi-hourglass-split', 'path' => '/lead-times', 'permission' => 'leadtime.view'],
                 ['label' => 'Inbound Maklon', 'icon' => 'bi-box-arrow-in-down', 'path' => '/inbound', 'permission' => 'inbound.view'],
-            ]],
-            ['label' => 'Finance', 'items' => [
-                ['label' => 'Invoice & Payment', 'icon' => 'bi-cash-coin', 'path' => '/invoices', 'permission' => 'finance.view'],
-                ['label' => 'PO Financials', 'icon' => 'bi-graph-up-arrow', 'path' => '/po-financials', 'permission' => 'finance.view'],
+                ['label' => 'Inbound Supplier', 'icon' => 'bi-truck-flatbed', 'path' => '/inbound-supplier', 'permission' => 'inbound_supplier.view'],
             ]],
             ['label' => 'Insight', 'items' => [
                 ['label' => 'Reports', 'icon' => 'bi-bar-chart-line', 'path' => '/reports', 'permission' => 'reports.view'],
@@ -83,6 +80,10 @@ final class Navigation
             ['label' => 'Leads', 'icon' => 'bi-kanban', 'path' => '/leads', 'permission' => 'leads.view'],
             ['label' => 'Follow Up', 'icon' => 'bi-calendar2-check', 'path' => '/follow-ups', 'permission' => 'followups.view'],
             ['label' => 'OEF', 'icon' => 'bi-receipt', 'path' => '/purchase-orders', 'permission' => 'purchase_orders.view'],
+            ['label' => 'Delivery', 'icon' => 'bi-truck', 'path' => '/deliveries', 'permission' => 'deliveries.edit'],
+            ['label' => 'Stock', 'icon' => 'bi-boxes', 'path' => '/stock', 'permission' => 'stock.create'],
+            ['label' => 'Maklon', 'icon' => 'bi-box-arrow-in-down', 'path' => '/inbound', 'permission' => 'inbound.create'],
+            ['label' => 'Supplier', 'icon' => 'bi-truck-flatbed', 'path' => '/inbound-supplier', 'permission' => 'inbound_supplier.create'],
             ['label' => 'Reports', 'icon' => 'bi-bar-chart-line', 'path' => '/reports', 'permission' => 'reports.view'],
         ];
         $items = array_values(array_filter($candidates, static fn ($i) => Auth::can($i['permission'])));

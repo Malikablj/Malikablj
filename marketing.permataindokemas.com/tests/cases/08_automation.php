@@ -15,11 +15,12 @@ $autoSetup = static function (): array {
     $pic = create_user('Sales', 'pic.auto@pik.test');
     $mkt = create_user('Marketing', 'mkt.auto@pik.test');
     $inactive = create_user('Sales', 'nonaktif.auto@pik.test');
-    // penerima notifikasi invoice (akses Finance) — dibuat sendiri agar test ini bisa dijalankan terpisah
+    // PPIC mengisi surat jalan → ikut diingatkan untuk delivery mendatang
+    $ppic = create_user('PPIC', 'ppic.auto@pik.test');
     $admin = create_user('Admin', 'admin.auto@pik.test');
     Database::update('users', ['is_active' => 0], 'id = :id', ['id' => $inactive]);
     $cust = Customer::create(['name' => 'PT Otomasi Uji', 'status' => 'Active', 'marketing_pic_id' => $mkt]);
-    return $ids = ['pic' => $pic, 'mkt' => $mkt, 'inactive' => $inactive, 'admin' => $admin, 'customer' => $cust];
+    return $ids = ['pic' => $pic, 'mkt' => $mkt, 'inactive' => $inactive, 'admin' => $admin, 'ppic' => $ppic, 'customer' => $cust];
 };
 
 /** @return list<array<string,mixed>> */
@@ -58,7 +59,7 @@ test('follow up hari ini & terlewat → notifikasi ke PIC, status Overdue, tanpa
     assert_same(1, count(notifications_for($ids['pic'], 'followup_overdue')));
 });
 
-test('delivery mendatang → PIC marketing customer; invoice overdue → hanya user Finance; lead target closing → PIC lead', function () use ($autoSetup) {
+test('delivery mendatang → PIC marketing customer & PPIC; invoice tidak lagi diproses; lead target closing → PIC lead', function () use ($autoSetup) {
     $ids = $autoSetup();
     $today = today();
     $prod = Database::insert('products', ['code' => 'PRD-AUT0000001', 'name' => 'Botol Otomasi', 'unit' => 'pcs']);
@@ -81,16 +82,14 @@ test('delivery mendatang → PIC marketing customer; invoice overdue → hanya u
     assert_contains('SJ-AUT-SOON', $del[0]['title']);
     assert_same('/deliveries/' . $soon, $del[0]['link']);
     assert_same(0, (int) Database::fetchValue("SELECT COUNT(*) FROM notifications WHERE type = 'delivery_upcoming' AND entity_id = :id", ['id' => $far]), 'di luar rentang pengingat tidak diingatkan');
-    assert_same(0, count(notifications_for($ids['pic'], 'delivery_upcoming')), 'Sales tidak punya akses delivery');
+    assert_same(0, count(notifications_for($ids['pic'], 'delivery_upcoming')), 'Sales yang bukan PIC customer tidak diingatkan');
+    $ppicN = Database::fetchAll("SELECT * FROM notifications WHERE user_id = :u AND type = 'delivery_upcoming' AND entity_id = :id", ['u' => $ids['ppic'], 'id' => $soon]);
+    assert_same(1, count($ppicN), 'PPIC (pengisi surat jalan) diingatkan');
+    assert_same(0, count(notifications_for($ids['admin'], 'delivery_upcoming')), 'Admin tidak ikut sebagai PPIC');
 
-    assert_same('Overdue', Database::fetchValue('SELECT status FROM invoices_payments WHERE id = :id', ['id' => $inv]));
-    $admin = $ids['admin'];
-    $invN = Database::fetchAll("SELECT * FROM notifications WHERE type = 'invoice_overdue' AND entity_id = :id", ['id' => $inv]);
-    assert_true(count($invN) >= 1);
-    foreach ($invN as $n) {
-        assert_same('Admin', Database::fetchValue('SELECT role FROM users WHERE id = :id', ['id' => $n['user_id']]), 'invoice hanya untuk role dengan akses Finance');
-    }
-    assert_true((bool) Database::fetchValue("SELECT 1 FROM notifications WHERE type = 'invoice_overdue' AND user_id = :u AND entity_id = :id", ['u' => $admin, 'id' => $inv]));
+    // Menu Finance dihapus: status invoice lama tidak diubah & tidak ada notifikasi invoice
+    assert_same('Unpaid', Database::fetchValue('SELECT status FROM invoices_payments WHERE id = :id', ['id' => $inv]));
+    assert_same(0, (int) Database::fetchValue("SELECT COUNT(*) FROM notifications WHERE type = 'invoice_overdue'"));
 
     $leadN = notifications_for($ids['pic'], 'lead_closing');
     assert_same(1, count($leadN), 'lead Won tidak diingatkan');
@@ -134,33 +133,29 @@ test('lock mencegah dua otomasi berjalan bersamaan', function () {
 group('Phase 8 · Settings');
 
 test('pengaturan: hanya Admin, validasi, tersimpan & dipakai; jalankan otomasi manual', function () {
-    foreach (['Marketing', 'Sales', 'Management', 'Viewer'] as $role) {
+    foreach (['Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Gudang', 'Viewer'] as $role) {
         assert_status(403, client_as($role)->get('/settings'), $role);
     }
     $c = client_as('Admin');
     $page = $c->get('/settings');
     assert_status(200, $page);
     assert_contains('Status otomasi', $page->body);
-    $bad = $c->post('/settings', ['company_name' => '', 'invoice_default_due_days' => '400', 'ppn_rate' => '150', 'delivery_reminder_days' => '2', 'automation_interval_minutes' => '1']);
+    assert_not_contains('invoice_default_due_days', $page->body, 'pengaturan keuangan dihapus');
+    $bad = $c->post('/settings', ['company_name' => '', 'delivery_reminder_days' => '40', 'automation_interval_minutes' => '1', 'mail_transport' => 'mail']);
     assert_status(422, $bad);
     assert_contains('Nama perusahaan wajib diisi', $bad->body);
-    assert_contains('Jatuh tempo default maksimal 365', $bad->body);
-    assert_contains('Tarif PPN maksimal 100', $bad->body);
+    assert_contains('Pengingat delivery maksimal 30', $bad->body);
     assert_contains('Interval otomasi minimal 5', $bad->body);
-    assert_redirect($c->post('/settings', ['company_name' => 'PT Permata Indo Kemas', 'invoice_default_due_days' => '14', 'ppn_rate' => '11', 'delivery_reminder_days' => '3', 'automation_interval_minutes' => '30']), '/settings');
+    assert_redirect($c->post('/settings', ['company_name' => 'PT Permata Indo Kemas', 'delivery_reminder_days' => '3', 'automation_interval_minutes' => '30', 'mail_transport' => 'mail']), '/settings');
     Setting::flush();
-    assert_same('14', Setting::get('invoice_default_due_days'));
-    assert_same(14, Setting::int('invoice_default_due_days'));
-    assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE entity_type = 'setting' AND entity_label = 'invoice_default_due_days'"));
-    // jatuh tempo default invoice mengikuti pengaturan baru
-    $cust = (int) Database::fetchValue("SELECT id FROM customers WHERE name = 'PT Otomasi Uji'");
-    $c->post('/invoices', ['customer_id' => (string) $cust, 'invoice_number' => 'INV/SET/001', 'invoice_date' => today(), 'invoice_amount' => '1000']);
-    assert_same(date('Y-m-d', strtotime(today() . ' +14 days')), Database::fetchValue("SELECT due_date FROM invoices_payments WHERE invoice_number = 'INV/SET/001'"));
+    assert_same('3', Setting::get('delivery_reminder_days'));
+    assert_same(3, Setting::int('delivery_reminder_days'));
+    assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE entity_type = 'setting' AND entity_label = 'delivery_reminder_days'"));
     $run = $c->post('/settings/automation/run');
     assert_redirect($run, '/settings');
     assert_contains('Otomasi selesai', $c->get('/settings')->body);
     assert_status(403, client_as('Viewer')->post('/settings/automation/run'));
-    Setting::set('invoice_default_due_days', '30', false);
+    Setting::set('delivery_reminder_days', '2', false);
 });
 
 test('script cron dapat dijalankan dari command line', function () {

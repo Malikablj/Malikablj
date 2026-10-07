@@ -10,7 +10,7 @@ $hasFilter = $filters['q'] !== '' || $filters['status'] !== '' || $filters['cust
     <div>
         <div class="page-eyebrow">Operations</div>
         <h1 class="page-title">Deliveries</h1>
-        <p class="page-subtitle">Pengiriman (Surat Jalan) per baris order. Jadwal dari Order Entry Form masuk otomatis sebagai <em>Scheduled</em>. Hanya status Delivered/Partial yang mengurangi outstanding.</p>
+        <p class="page-subtitle">Pengiriman (Surat Jalan) per baris order — Surat Jalan diisi oleh PPIC. Jadwal dari Order Entry Form masuk otomatis sebagai <em>Scheduled</em>. Hanya status Delivered/Partial yang mengurangi outstanding.</p>
     </div>
     <?php if (can('deliveries.create')): ?>
         <div class="page-actions"><a href="<?= e(url('/deliveries/create')) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Catat Delivery</a></div>
@@ -43,7 +43,7 @@ $hasFilter = $filters['q'] !== '' || $filters['status'] !== '' || $filters['cust
         <?php if ($hasFilter): ?><a class="btn btn-link-plain small" href="<?= e(url('/deliveries')) ?>">Reset</a><?php endif; ?>
     </form>
     <?php if ($deliveries->isEmpty()): ?>
-        <div class="empty-state"><i class="bi bi-truck"></i><div class="empty-title">Tidak ada delivery</div><p>Catat pengiriman dari halaman PO atau tombol Catat Delivery.</p></div>
+        <div class="empty-state"><i class="bi bi-truck"></i><div class="empty-title">Tidak ada delivery</div><p><?= can('deliveries.create') ? 'Catat pengiriman dari halaman order atau tombol Catat Delivery.' : 'Surat jalan dicatat oleh PPIC.' ?></p></div>
     <?php else: ?>
         <div class="table-wrap">
             <table class="table-pik">

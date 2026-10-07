@@ -16,7 +16,7 @@ $showPo = can('purchase_orders.view');
     <div>
         <div class="page-eyebrow">Inventory</div>
         <h1 class="page-title">Products</h1>
-        <p class="page-subtitle">Master produk yang dipakai di PO, delivery, retur, stok, dan lead time.</p>
+        <p class="page-subtitle">Master produk yang dipakai di Order Entry Form, delivery, retur, stok, dan lead time. Produk yang diketik manual di OEF / Stock tercatat otomatis di sini.</p>
     </div>
     <?php if (can('products.create')): ?>
         <div class="page-actions"><a href="<?= e(url('/products/create')) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Tambah Produk</a></div>
@@ -68,6 +68,7 @@ $showPo = can('purchase_orders.view');
                 <thead><tr>
                     <th><?= sort_link('name', 'Produk', $sort, $dir) ?></th>
                     <th class="d-none d-lg-table-cell"><?= sort_link('category', 'Kategori', $sort, $dir) ?></th>
+                    <th class="num d-none d-md-table-cell"><?= sort_link('qty', 'Qty', $sort, $dir) ?></th>
                     <?php if ($showPo): ?>
                         <th class="num d-none d-md-table-cell">Baris PO</th>
                         <th class="num"><?= sort_link('outstanding', 'Outstanding PO', $sort, $dir) ?></th>
@@ -87,10 +88,12 @@ $showPo = can('purchase_orders.view');
                                 <span class="code-chip"><?= e($p['code']) ?></span>
                                 <?= $p['product_code'] ? ' · ' . e($p['product_code']) : '' ?>
                                 <?= $p['variant'] ? ' · ' . e(excerpt($p['variant'], 60)) : '' ?>
+                                <?= isset(App\Models\Product::SOURCE_LABELS[(string) $p['source']]) ? ' · <span class="badge-soft badge-soft-neutral no-dot">' . e($p['source'] === 'OEF' ? 'dari OEF' : 'dari Stock') . '</span>' : '' ?>
                             </div>
                             <?php if ((int) $p['is_active'] !== 1): ?><div class="cell-sub d-sm-none"><?= status_badge('Inactive', 'Nonaktif') ?></div><?php endif; ?>
                         </td>
                         <td class="d-none d-lg-table-cell text-secondary"><?= e($p['category'] ?? '—') ?></td>
+                        <td class="num d-none d-md-table-cell"><?= e(fmt_qty($p['qty'])) ?></td>
                         <?php if ($showPo): ?>
                             <td class="num d-none d-md-table-cell"><?= (int) $p['line_count'] ?></td>
                             <td class="num fw-semibold"><?= e(fmt_qty($p['open_outstanding'], '0')) ?></td>

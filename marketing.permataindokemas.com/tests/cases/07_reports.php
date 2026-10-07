@@ -53,20 +53,27 @@ test('dashboard menampilkan daftar sesuai role (data aktual, otorisasi backend)'
     $latestPo = (string) Database::fetchValue('SELECT COALESCE(po_number, code) FROM purchase_orders ORDER BY po_date IS NULL, po_date DESC, id DESC LIMIT 1');
     $admin = client_as('Admin')->get('/');
     assert_status(200, $admin);
-    foreach (['Telepon konfirmasi laporan', 'Kirim katalog terlewat', 'Kunjungan laporan uji', $latestPo, 'SJ-REP-NEXT', 'Piutang belum dibayar'] as $text) {
+    foreach (['Telepon konfirmasi laporan', 'Kirim katalog terlewat', 'Kunjungan laporan uji', $latestPo, 'SJ-REP-NEXT'] as $text) {
         assert_contains($text, $admin->body, 'Admin: ' . $text);
     }
+    assert_not_contains('Piutang belum dibayar', $admin->body, 'kartu piutang dihapus bersama menu Finance');
     $sales = client_as('Sales')->get('/');
     assert_contains('Telepon konfirmasi laporan', $sales->body);
     assert_contains('Kunjungan laporan uji', $sales->body);
-    assert_not_contains('Order terbaru', $sales->body, 'Sales tidak punya akses PO');
-    assert_not_contains('SJ-REP-NEXT', $sales->body);
+    assert_contains('Order terbaru', $sales->body, 'Sales menginput OEF');
+    assert_contains('SJ-REP-NEXT', $sales->body, 'Sales melihat jadwal delivery');
+    assert_not_contains('Surat jalan mendatang', $sales->body, 'KPI surat jalan khusus PPIC');
     assert_not_contains('Piutang', $sales->body);
     $mgmt = client_as('Management')->get('/');
     assert_contains('Order terbaru', $mgmt->body);
     assert_contains('SJ-REP-NEXT', $mgmt->body);
     assert_not_contains('Telepon konfirmasi laporan', $mgmt->body, 'Management tidak punya modul Follow Up');
-    assert_not_contains('Piutang belum dibayar', $mgmt->body);
+    $ppic = client_as('PPIC')->get('/');
+    assert_contains('Menunggu PPIC', $ppic->body);
+    assert_contains('Surat jalan mendatang', $ppic->body);
+    assert_contains('SJ-REP-NEXT', $ppic->body);
+    assert_not_contains('Telepon konfirmasi laporan', $ppic->body);
+    assert_not_contains('Customer aktif', $ppic->body, 'PPIC tanpa KPI customer');
     // status follow up yang lewat tanggal ikut disinkronkan menjadi Overdue
     assert_same('Overdue', Database::fetchValue("SELECT status FROM follow_up WHERE code = 'FUP-REP0000002'"));
     assert_same('Planned', Database::fetchValue('SELECT status FROM follow_up WHERE id = :id', ['id' => $fu]));
@@ -74,25 +81,26 @@ test('dashboard menampilkan daftar sesuai role (data aktual, otorisasi backend)'
 
 group('Phase 7 · Reports');
 
-test('akses laporan per role (PRD): Management semua + export, Viewer tanpa financial & export', function () use ($repSetup) {
+test('akses laporan per role (PRD): Management semua + export, Viewer tanpa export', function () use ($repSetup) {
     $repSetup();
-    foreach (['Marketing', 'Sales'] as $role) {
+    foreach (['Marketing', 'Sales', 'PPIC', 'Produksi', 'Gudang'] as $role) {
         $c = client_as($role);
         assert_status(403, $c->get('/reports'), $role);
         assert_status(403, $c->get('/reports/po'), $role);
     }
     $m = client_as('Management');
     assert_status(200, $m->get('/reports'));
-    foreach (['customer', 'lead', 'activity', 'po', 'delivery', 'complaint', 'financial'] as $type) {
+    foreach (['customer', 'lead', 'activity', 'po', 'delivery', 'complaint'] as $type) {
         assert_status(200, $m->get('/reports/' . $type), 'Management ' . $type);
     }
+    assert_status(404, $m->get('/reports/financial'), 'laporan Financial dihapus');
     $v = client_as('Viewer');
     $index = $v->get('/reports');
     assert_status(200, $index);
     assert_not_contains('Laporan Financial', $index->body);
     assert_status(200, $v->get('/reports/po'));
     assert_status(200, $v->get('/reports/complaint'), 'Viewer boleh melihat laporan complaint');
-    assert_status(403, $v->get('/reports/financial'));
+    assert_status(404, $v->get('/reports/financial'));
     assert_status(403, $v->get('/reports/po/export', ['format' => 'csv']), 'Viewer tidak boleh export');
     assert_not_contains('/reports/po/export', $v->get('/reports/po')->body, 'tombol export disembunyikan');
     assert_status(404, $m->get('/reports/tidak-ada'));
@@ -117,7 +125,7 @@ test('laporan PO: angka sesuai database, filter periode/customer/PIC', function 
     assert_not_contains('PO/REP/EVIL', $byPic->body, 'PIC = PIC marketing customer');
 });
 
-test('laporan lead (win rate), delivery, financial (umur piutang), customer', function () use ($repSetup) {
+test('laporan lead (win rate), delivery, customer', function () use ($repSetup) {
     $ids = $repSetup();
     $c = client_as('Management');
     $lead = $c->get('/reports/lead', ['from' => '2026-03-01', 'to' => '2026-03-31']);
@@ -126,17 +134,13 @@ test('laporan lead (win rate), delivery, financial (umur piutang), customer', fu
     $del = $c->get('/reports/delivery', ['from' => '2026-03-01', 'to' => '2026-03-31', 'customer_id' => $ids['customer']]);
     assert_contains('Qty diterima customer', $del->body);
     assert_contains('>600<', $del->body, 'hanya Delivered/Partial dihitung');
-    $fin = $c->get('/reports/financial', ['customer_id' => $ids['customer']]);
-    assert_contains('Rp 3.500.000,50', $fin->body, 'nilai invoice');
-    assert_contains('Rp 2.000.000,50', $fin->body, 'sisa tagihan');
-    assert_contains('31–60 hari', $fin->body, 'umur piutang 45 hari');
-    assert_same('Overdue', Database::fetchValue("SELECT status FROM invoices_payments WHERE invoice_number = 'INV/REP/002'"));
     $cust = $c->get('/reports/customer', ['customer_id' => $ids['customer']]);
     assert_contains('PT Laporan Uji', $cust->body);
-    assert_contains('Piutang', $cust->body, 'Management punya reports.financial');
+    assert_contains('1.800', $cust->body, 'qty order customer semua periode: 1.500 + 300');
+    assert_not_contains('Piutang', $cust->body, 'kolom keuangan dihapus');
     $viewer = client_as('Viewer')->get('/reports/customer', ['customer_id' => $ids['customer']]);
     assert_status(200, $viewer);
-    assert_not_contains('Piutang', $viewer->body, 'kolom keuangan tersembunyi tanpa reports.financial');
+    assert_not_contains('Piutang', $viewer->body);
 });
 
 test('export CSV: UTF-8 BOM, header, aman dari formula injection, tercatat di audit', function () use ($repSetup) {
@@ -149,7 +153,7 @@ test('export CSV: UTF-8 BOM, header, aman dari formula injection, tercatat di au
     assert_true(str_starts_with($res->body, "\xEF\xBB\xBF"), 'BOM UTF-8');
     $lines = array_values(array_filter(explode("\n", substr($res->body, 3))));
     $header = str_getcsv($lines[0], ',', '"', '');
-    assert_same('No. PO', $header[0]);
+    assert_same('No. order', $header[0]);
     $rows = array_map(static fn ($l) => str_getcsv($l, ',', '"', ''), array_slice($lines, 1));
     $byNumber = [];
     foreach ($rows as $r) {
@@ -159,14 +163,14 @@ test('export CSV: UTF-8 BOM, header, aman dari formula injection, tercatat di au
     assert_false(isset($byNumber['PO/REP/LUAR']));
     $evil = $byNumber['PO/REP/EVIL'] ?? null;
     assert_true($evil !== null);
-    assert_same("'=HYPERLINK(\"http://x\")", $evil[1], 'sel teks diawali = diberi tanda petik');
+    assert_same("'=HYPERLINK(\"http://x\")", $evil[array_search('Customer', $header, true)], 'sel teks diawali = diberi tanda petik');
     assert_same('1500', $byNumber['PO/REP/001'][array_search('Qty order', $header, true)], 'angka ditulis mentah');
-    assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'export' AND entity_type = 'report' AND entity_label LIKE 'Purchase Order (CSV)%'"));
+    assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'export' AND entity_type = 'report' AND entity_label LIKE 'Order Entry Form (CSV)%'"));
 });
 
 test('export Excel: file .xlsx valid berisi sheet Ringkasan & Data', function () use ($repSetup) {
     $repSetup();
-    $res = client_as('Admin')->get('/reports/financial/export', ['format' => 'xlsx']);
+    $res = client_as('Admin')->get('/reports/po/export', ['format' => 'xlsx']);
     assert_status(200, $res);
     assert_contains('spreadsheetml', $res->headers['content-type'] ?? '');
     assert_true(str_starts_with($res->body, 'PK'), 'arsip ZIP');
@@ -178,7 +182,7 @@ test('export Excel: file .xlsx valid berisi sheet Ringkasan & Data', function ()
     assert_contains('Ringkasan', $workbook);
     assert_contains('Data', $workbook);
     $data = (string) $zip->getFromName('xl/worksheets/sheet2.xml');
-    assert_contains('INV/REP/002', $data);
+    assert_contains('PO/REP/001', $data);
     $zip->close();
     unlink($tmp);
 });

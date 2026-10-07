@@ -616,8 +616,6 @@ textarea.form-control { min-height: 96px; }
   .table-wrap { overflow: visible !important; }
 }
 .print-only { display: none; }
-.finance-card { color: inherit; transition: box-shadow .15s ease; }
-.finance-card:hover { color: inherit; box-shadow: 0 4px 18px rgba(0, 0, 0, .06); }
 .report-table td:first-child { overflow-wrap: anywhere; }
 
 

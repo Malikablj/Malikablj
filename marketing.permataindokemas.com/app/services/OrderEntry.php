@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Helpers\Audit;
 use App\Helpers\Auth;
 use App\Helpers\Database;
+use App\Models\Customer;
 use App\Models\Delivery;
 use App\Models\Notification;
 use App\Models\PoLine;
@@ -21,11 +22,13 @@ use PDOException;
  *
  * Satu OEF = satu produk (diketik manual) dengan spesifikasi & qty. Secara teknis
  * OEF disimpan di tabel purchase_orders + satu baris po_lines, sehingga delivery,
- * retur, outstanding, invoice, dan laporan yang sudah ada tetap berjalan.
+ * retur, outstanding, dan laporan yang sudah ada tetap berjalan.
  *
  * Alur:
- *   1. Sales/Marketing mengisi OEF → produk dicatat otomatis di menu Products
- *      (bila belum ada), jadwal delivery dibuat otomatis dari "Permintaan selesai/kirim",
+ *   1. Sales/Marketing mengisi OEF: No. order, nama customer, dan nama produk diketik
+ *      manual. Customer & produk yang belum ada dicatat otomatis di menu Customers &
+ *      Products (qty & spesifikasi OEF terakhir disimpan di produk sebagai arsip).
+ *      Jadwal delivery dibuat otomatis dari "Permintaan selesai/kirim",
  *      status PPIC = Pending dan user PPIC menerima notifikasi.
  *   2. PPIC menekan "Bisa diproses" (status order → On Process) atau
  *      "Tidak bisa diproses" + alasan (order → Cancelled, jadwal delivery dibatalkan).
@@ -37,46 +40,53 @@ final class OrderEntry
     private const PPIC_FIELDS = ['product_spec', 'is_subcont', 'supplier', 'requested_date'];
 
     /**
-     * @param array<string,mixed> $header kolom purchase_orders (tervalidasi)
-     * @return array{id:int,product_created:bool}
+     * @param array<string,mixed> $header kolom purchase_orders (tervalidasi, termasuk order_number)
+     * @return array{id:int,product_created:bool,customer_created:bool}
      */
-    public static function create(array $header, string $productName, ?string $spec, int $qty): array
+    public static function create(array $header, string $customerName, string $productName, ?string $spec, int $qty): array
     {
-        return Database::transaction(function () use ($header, $productName, $spec, $qty): array {
-            $product = Product::findOrCreateForOrder($productName, $spec);
-            $header['product_spec'] = $spec;
+        return Database::transaction(function () use ($header, $customerName, $productName, $spec, $qty): array {
+            $label = (string) ($header['order_number'] ?? '');
             $header['sales_user_id'] = self::matchUser($header['sales_name'] ?? null);
+            $customer = Customer::findOrCreateForOrder($customerName, $label, $header['sales_user_id']);
+            $product = Product::findOrCreateForOrder($productName, $spec, $label, $qty);
+            $header['customer_id'] = $customer['id'];
+            $header['product_spec'] = $spec;
             $header['ppic_status'] = 'Pending';
             $header['status'] = $header['status'] ?? 'Open';
-            $id = self::insertWithNumber($header);
+            $id = self::insertOrder($header);
             PoLine::create(['po_id' => $id, 'product_id' => $product['id'], 'order_qty' => $qty, 'remark' => null]);
             self::syncSchedule($id, true);
-            $po = PurchaseOrder::find($id) ?? [];
-            if ($product['created']) {
-                Database::update('products', ['notes' => 'Dicatat otomatis dari Order Entry Form ' . PurchaseOrder::displayNumber($po) . '.'], 'id = :id', ['id' => $product['id']]);
-            }
-            self::notifyPpic($po, false);
-            return ['id' => $id, 'product_created' => $product['created']];
+            self::notifyPpic(PurchaseOrder::find($id) ?? [], false);
+            return ['id' => $id, 'product_created' => $product['created'], 'customer_created' => $customer['created']];
         });
     }
 
     /**
      * Simpan perubahan OEF.
      * @param array<string,mixed> $header
+     * @param string|null $customerName null = customer tidak diubah dari form ini
      * @param array{name:string,spec:?string,qty:int}|null $product null = baris produk tidak diubah dari form ini
-     * @return array{resubmitted:bool,product_created:bool}
+     * @return array{resubmitted:bool,product_created:bool,customer_created:bool}
      */
-    public static function update(int $id, array $header, ?array $product): array
+    public static function update(int $id, array $header, ?string $customerName, ?array $product): array
     {
-        return Database::transaction(function () use ($id, $header, $product): array {
+        return Database::transaction(function () use ($id, $header, $customerName, $product): array {
             $before = PurchaseOrder::find($id);
             if ($before === null) {
                 throw new DomainException('Order tidak ditemukan.');
             }
+            $label = (string) (($header['order_number'] ?? null) ?: PurchaseOrder::displayNumber($before));
             $productCreated = false;
+            $customerCreated = false;
             $lineChanged = false;
             if (array_key_exists('sales_name', $header)) {
                 $header['sales_user_id'] = self::matchUser($header['sales_name']);
+            }
+            if ($customerName !== null) {
+                $customer = Customer::findOrCreateForOrder($customerName, $label, $header['sales_user_id'] ?? null);
+                $header['customer_id'] = $customer['id'];
+                $customerCreated = $customer['created'];
             }
             if ($product !== null) {
                 $header['product_spec'] = $product['spec'];
@@ -84,7 +94,7 @@ final class OrderEntry
                 if ($line === null) {
                     throw new DomainException('Produk OEF hanya dapat diubah dari form ini bila order berisi satu baris produk.');
                 }
-                $found = Product::findOrCreateForOrder($product['name'], $product['spec'], PurchaseOrder::displayNumber($before));
+                $found = Product::findOrCreateForOrder($product['name'], $product['spec'], $label, $product['qty']);
                 $productCreated = $found['created'];
                 if ($found['id'] !== (int) $line['product_id'] && self::lineLocked($before, (int) $line['id'])) {
                     throw new DomainException('Produk tidak dapat diganti karena order sudah memiliki pengiriman atau retur. Ubah qty/spesifikasi saja, atau buat OEF baru.');
@@ -117,14 +127,18 @@ final class OrderEntry
                     }
                 }
             }
-            PurchaseOrder::update($id, $header, $before);
+            try {
+                PurchaseOrder::update($id, $header, $before);
+            } catch (PDOException $e) {
+                throw self::duplicateNumber($e) ?? $e;
+            }
             $dateChanged = array_key_exists('requested_date', $header) && (string) $header['requested_date'] !== (string) $before['requested_date'];
             self::syncSchedule($id, $dateChanged);
             PurchaseOrder::syncStatus($id);
             if ($resubmit) {
                 self::notifyPpic(PurchaseOrder::find($id) ?? $before, true);
             }
-            return ['resubmitted' => $resubmit, 'product_created' => $productCreated];
+            return ['resubmitted' => $resubmit, 'product_created' => $productCreated, 'customer_created' => $customerCreated];
         });
     }
 
@@ -184,20 +198,23 @@ final class OrderEntry
 
     // ------------------------------------------------------------------ internal
 
-    /** Insert header dengan nomor OEF unik (retry bila bentrok dengan proses lain). */
-    private static function insertWithNumber(array $header): int
+    /** Insert header OEF. No. order diisi manual; bentrok dengan order lain → pesan yang jelas. */
+    private static function insertOrder(array $header): int
     {
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            $header['order_number'] = PurchaseOrder::nextOrderNumber((string) ($header['po_date'] ?? today()));
-            try {
-                return PurchaseOrder::create($header);
-            } catch (PDOException $e) {
-                if ((int) ($e->errorInfo[1] ?? 0) !== 1062 || !str_contains($e->getMessage(), 'order_number')) {
-                    throw $e;
-                }
-            }
+        try {
+            return PurchaseOrder::create($header);
+        } catch (PDOException $e) {
+            throw self::duplicateNumber($e) ?? $e;
         }
-        throw new DomainException('Nomor order gagal dibuat, silakan coba simpan lagi.');
+    }
+
+    /** Ubah error unique index No. order menjadi pesan untuk user (null = error lain). */
+    private static function duplicateNumber(PDOException $e): ?DomainException
+    {
+        if ((int) ($e->errorInfo[1] ?? 0) === 1062 && str_contains($e->getMessage(), 'order_number')) {
+            return new DomainException('No. order sudah dipakai order lain. Gunakan nomor lain.');
+        }
+        return null;
     }
 
     /** @return array<string,mixed>|null baris produk bila order hanya punya satu baris */
@@ -255,7 +272,8 @@ final class OrderEntry
         if ($line === null || empty($po['requested_date'])) {
             return;
         }
-        $destination = $po['ship_to'] ?: ($po['customer_name'] ?? null);
+        // Tujuan kirim: isian OEF → alamat customer → nama customer
+        $destination = $po['ship_to'] ?: (trim((string) ($po['customer_address'] ?? '')) !== '' ? $po['customer_address'] : ($po['customer_name'] ?? null));
         if ($schedule === null) {
             $deliveryId = Delivery::create([
                 'po_id'         => $poId,

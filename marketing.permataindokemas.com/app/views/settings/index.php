@@ -15,7 +15,6 @@ $labels = [
     'followup_due'      => 'Follow up hari ini',
     'followup_overdue'  => 'Follow up terlewat',
     'delivery_upcoming' => 'Delivery mendatang',
-    'invoice_overdue'   => 'Invoice overdue',
     'lead_closing'      => 'Target closing lead',
 ];
 ?>
@@ -23,7 +22,7 @@ $labels = [
     <div>
         <div class="page-eyebrow">Settings</div>
         <h1 class="page-title">Pengaturan</h1>
-        <p class="page-subtitle">Pengaturan umum aplikasi, keuangan, dan otomasi notifikasi.</p>
+        <p class="page-subtitle">Pengaturan umum aplikasi, otomasi notifikasi, dan email.</p>
     </div>
 </div>
 
@@ -38,19 +37,10 @@ $labels = [
                 </div>
             </div>
             <div class="form-section">
-                <div class="form-section-title">Keuangan</div>
-                <div class="row g-3">
-                    <?= Form::input('invoice_default_due_days', 'Jatuh tempo default invoice', old('invoice_default_due_days', $values), $errors, ['type' => 'number', 'min' => 0, 'max' => 365, 'required' => true, 'col' => 'col-md-6', 'suffix' => 'hari',
-                        'help' => 'Dipakai bila jatuh tempo dikosongkan dan termin PO bukan NET n / CBD / COD.']) ?>
-                    <?= Form::input('ppn_rate', 'Tarif PPN', old('ppn_rate', $values), $errors, ['required' => true, 'col' => 'col-md-6', 'suffix' => '%', 'inputmode' => 'decimal',
-                        'help' => 'Untuk menghitung nilai PO (PO Financials).']) ?>
-                </div>
-            </div>
-            <div class="form-section">
                 <div class="form-section-title">Otomasi &amp; notifikasi</div>
                 <div class="row g-3">
                     <?= Form::input('delivery_reminder_days', 'Pengingat delivery', old('delivery_reminder_days', $values), $errors, ['type' => 'number', 'min' => 0, 'max' => 30, 'required' => true, 'col' => 'col-md-6', 'suffix' => 'hari sebelum',
-                        'help' => 'Delivery terjadwal dalam rentang ini dikirim sebagai notifikasi.']) ?>
+                        'help' => 'Delivery terjadwal dalam rentang ini dikirim sebagai notifikasi ke PPIC & PIC marketing.']) ?>
                     <?= Form::input('automation_interval_minutes', 'Interval otomasi', old('automation_interval_minutes', $values), $errors, ['type' => 'number', 'min' => 5, 'max' => 1440, 'required' => true, 'col' => 'col-md-6', 'suffix' => 'menit',
                         'help' => 'Otomasi berjalan saat aplikasi dipakai, maksimal sekali per interval ini.']) ?>
                 </div>
@@ -95,7 +85,6 @@ $labels = [
                         <li><div class="li-main"><span class="li-title"><?= e($label) ?></span></div><div class="li-end"><?= (int) ($lastResult['notifications'][$key] ?? 0) ?> notifikasi</div></li>
                     <?php endforeach; ?>
                     <li><div class="li-main"><span class="li-title">Follow up ditandai Overdue</span></div><div class="li-end"><?= (int) ($lastResult['followups_overdue'] ?? 0) ?></div></li>
-                    <li><div class="li-main"><span class="li-title">Status invoice diperbarui</span></div><div class="li-end"><?= (int) ($lastResult['invoices_updated'] ?? 0) ?></div></li>
                 </ul>
             <?php endif; ?>
             <div class="surface-footer small text-secondary">Untuk server tanpa pengunjung rutin, jadwalkan cron:

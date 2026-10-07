@@ -66,10 +66,10 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
         <button class="icon-btn d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNav" aria-controls="mobileNav" aria-label="Buka menu">
             <i class="bi bi-list"></i>
         </button>
-        <?php if (can('customers.view') || can('purchase_orders.view') || can('products.view') || can('leads.view')): ?>
+        <?php if (can('customers.view') || can('purchase_orders.view') || can('products.view') || can('leads.view') || can('inbound.view') || can('inbound_supplier.view')): ?>
             <form class="topbar-search" action="<?= e(url('/search')) ?>" method="get" role="search">
                 <i class="bi bi-search"></i>
-                <input type="search" name="q" placeholder="Cari customer, order, lead, produk…" aria-label="Pencarian global" value="<?= e($_GET['q'] ?? '') ?>" maxlength="100">
+                <input type="search" name="q" placeholder="<?= e(can('customers.view') || can('purchase_orders.view') ? 'Cari customer, order, lead, produk…' : 'Cari barang masuk, supplier, surat jalan…') ?>" aria-label="Pencarian global" value="<?= e($_GET['q'] ?? '') ?>" maxlength="100">
             </form>
         <?php else: ?>
             <div class="flex-grow-1"></div>

@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
   name                  VARCHAR(120) NOT NULL,
   email                 VARCHAR(190) NOT NULL,
   password_hash         VARCHAR(255) NOT NULL,
-  role                  ENUM('Admin','Marketing','Sales','Management','PPIC','Viewer') NOT NULL DEFAULT 'Viewer',
+  role                  ENUM('Admin','Marketing','Sales','Management','PPIC','Produksi','Gudang','Viewer') NOT NULL DEFAULT 'Viewer',
   is_active             TINYINT(1)   NOT NULL DEFAULT 1,
   must_change_password  TINYINT(1)   NOT NULL DEFAULT 0,
   last_login_at         DATETIME     NULL,
@@ -127,7 +127,8 @@ CREATE TABLE IF NOT EXISTS products (
   variant           VARCHAR(255) NULL,
   spec              TEXT         NULL COMMENT 'Spesifikasi terakhir dari OEF',
   category          VARCHAR(100) NULL,
-  capacity_per_day  INT UNSIGNED NULL,
+  qty               INT UNSIGNED NULL COMMENT 'Qty dari Order Entry Form terakhir (arsip produk)',
+  capacity_per_day  INT UNSIGNED NULL COMMENT 'Legacy (tidak ditampilkan lagi)',
   unit              VARCHAR(20)  NOT NULL DEFAULT 'pcs',
   is_active         TINYINT(1)   NOT NULL DEFAULT 1,
   source            VARCHAR(50)  NULL,
@@ -258,7 +259,7 @@ CREATE TABLE IF NOT EXISTS follow_up (
 CREATE TABLE IF NOT EXISTS purchase_orders (
   id                    INT UNSIGNED NOT NULL AUTO_INCREMENT,
   code                  VARCHAR(20)  NOT NULL,
-  order_number          VARCHAR(30)  NULL COMMENT 'No. Order Entry Form (OEF-YYMM-NNNN)',
+  order_number          VARCHAR(60)  NULL COMMENT 'No. order Order Entry Form (diisi manual, unik)',
   po_number             VARCHAR(80)  NULL COMMENT 'No. PO dari customer',
   customer_id           INT UNSIGNED NULL COMMENT 'NULL hanya untuk data legacy yang customer-nya tidak ditemukan',
   sales_name            VARCHAR(120) NULL,
@@ -435,7 +436,7 @@ CREATE TABLE IF NOT EXISTS complaint_attachments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
--- INVENTORY: STOCK, LEAD TIME, INBOUND MAKLON
+-- INVENTORY: STOCK, LEAD TIME, INBOUND MAKLON, INBOUND SUPPLIER
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS stock (
   id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -533,8 +534,44 @@ CREATE TABLE IF NOT EXISTS inbound_maklon (
   CONSTRAINT fk_inbound_updated FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Penerimaan barang dari supplier (bahan baku, kemasan, dll.) — diinput Gudang
+CREATE TABLE IF NOT EXISTS inbound_supplier (
+  id             INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  code           VARCHAR(20)   NOT NULL,
+  supplier       VARCHAR(150)  NOT NULL,
+  inbound_date   DATE          NOT NULL COMMENT 'Tanggal barang diterima di gudang',
+  sj_number      VARCHAR(60)   NULL COMMENT 'No. surat jalan supplier',
+  sj_date        DATE          NULL,
+  po_reference   VARCHAR(80)   NULL COMMENT 'No. PO pembelian ke supplier',
+  item_name      VARCHAR(255)  NOT NULL,
+  item_code      VARCHAR(60)   NULL,
+  category       VARCHAR(80)   NULL COMMENT 'Jenis barang, mis. bahan baku, kemasan',
+  unit           VARCHAR(20)   NOT NULL DEFAULT 'pcs',
+  quantity       DECIMAL(15,2) NOT NULL COMMENT 'Qty diterima',
+  reject_qty     DECIMAL(15,2) NULL,
+  total_in       DECIMAL(15,2) NULL COMMENT 'Qty diterima - reject',
+  receiver       VARCHAR(120)  NULL COMMENT 'Penerima / petugas gudang',
+  location       VARCHAR(120)  NULL COMMENT 'Lokasi simpan di gudang',
+  attachment     VARCHAR(500)  NULL,
+  notes          TEXT          NULL,
+  created_by     INT UNSIGNED  NULL,
+  updated_by     INT UNSIGNED  NULL,
+  created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME      NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_inbound_supplier_code (code),
+  KEY idx_inbound_supplier_date (inbound_date),
+  KEY idx_inbound_supplier_supplier (supplier),
+  KEY idx_inbound_supplier_item (item_name),
+  CONSTRAINT fk_inbound_supplier_created FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_inbound_supplier_updated FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- -----------------------------------------------------------------------------
--- FINANCE
+-- FINANCE (data lama / hasil migrasi)
+-- Menu Invoice & Payment dan PO Financials sudah dihapus dari aplikasi karena
+-- dikelola divisi Keuangan. Tabel tetap ada agar data lama & import workbook
+-- tidak hilang.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS invoices_payments (
   id                              INT UNSIGNED  NOT NULL AUTO_INCREMENT,

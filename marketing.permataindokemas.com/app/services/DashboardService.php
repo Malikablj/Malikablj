@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Helpers\Auth;
 use App\Helpers\Database;
 use App\Models\PoLine;
 
@@ -38,10 +39,26 @@ final class DashboardService
 
         $ppicPending = (int) Database::fetchValue("SELECT COUNT(*) FROM purchase_orders WHERE ppic_status = 'Pending'");
         $complaintsOpen = (int) Database::fetchValue("SELECT COUNT(*) FROM returns WHERE complaint_status = 'Open'");
+        $deliveriesUpcoming = (int) Database::fetchValue("SELECT COUNT(*) FROM deliveries WHERE status IN ('Scheduled','On Delivery')");
+        $stock = Database::fetch(
+            "SELECT COUNT(DISTINCT product_id) AS products,
+                    COALESCE(SUM(CASE WHEN stock_type = 'FG' THEN quantity END), 0) AS fg,
+                    COALESCE(SUM(CASE WHEN stock_type = 'Ready' THEN quantity END), 0) AS ready
+             FROM stock WHERE product_id IS NOT NULL"
+        ) ?? [];
+        $monthStart = date('Y-m-01', strtotime($today) ?: time());
+        $inboundMaklon = (int) Database::fetchValue('SELECT COUNT(*) FROM inbound_maklon WHERE actual_inbound_date BETWEEN :a AND :b', ['a' => $monthStart, 'b' => $today]);
+        $inboundSupplier = (int) Database::fetchValue('SELECT COUNT(*) FROM inbound_supplier WHERE inbound_date BETWEEN :a AND :b', ['a' => $monthStart, 'b' => $today]);
 
         return [
             'ppic_pending'       => $ppicPending,
             'complaints_open'    => $complaintsOpen,
+            'deliveries_upcoming' => $deliveriesUpcoming,
+            'stock_products'     => (int) ($stock['products'] ?? 0),
+            'stock_fg'           => (int) ($stock['fg'] ?? 0),
+            'stock_ready'        => (int) ($stock['ready'] ?? 0),
+            'inbound_maklon_month'   => $inboundMaklon,
+            'inbound_supplier_month' => $inboundSupplier,
             'customers_total'    => (int) ($customers['total'] ?? 0),
             'customers_active'   => (int) ($customers['active'] ?? 0),
             'leads_open'         => (int) ($leads['open_count'] ?? 0),
@@ -93,6 +110,32 @@ final class DashboardService
              FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN (' . PoLine::poTotalsSql() . ') t ON t.po_id = p.id
              ORDER BY p.po_date IS NULL, p.po_date DESC, p.id DESC LIMIT ' . max(1, $limit)
+        );
+    }
+
+    /**
+     * Penerimaan barang terbaru (inbound maklon + inbound supplier) sesuai hak akses.
+     * @return list<array<string,mixed>>
+     */
+    public static function recentInbound(int $limit = 6): array
+    {
+        $parts = [];
+        if (Auth::can('inbound.view')) {
+            $parts[] = "SELECT 'maklon' AS kind, id, code, sj_number, actual_inbound_date AS inbound_date, vendor AS partner,
+                               COALESCE(component_name, '') AS item_name, COALESCE(total_in, quantity) AS qty, 'pcs' AS unit
+                        FROM inbound_maklon";
+        }
+        if (Auth::can('inbound_supplier.view')) {
+            $parts[] = "SELECT 'supplier' AS kind, id, code, sj_number, inbound_date, supplier AS partner,
+                               item_name, COALESCE(total_in, quantity) AS qty, unit
+                        FROM inbound_supplier";
+        }
+        if ($parts === []) {
+            return [];
+        }
+        return Database::fetchAll(
+            'SELECT * FROM (' . implode(' UNION ALL ', $parts) . ') x
+             ORDER BY x.inbound_date IS NULL, x.inbound_date DESC, x.id DESC LIMIT ' . max(1, $limit)
         );
     }
 }

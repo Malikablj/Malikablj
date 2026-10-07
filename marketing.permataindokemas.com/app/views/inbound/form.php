@@ -6,8 +6,7 @@ use App\Helpers\Form;
  * @var array<string,mixed>|null $row
  * @var array<string,string> $errors
  * @var array<string,mixed> $preset
- * @var array<int,string> $pos
- * @var array<int,string> $products
+ * @var list<string> $components
  * @var list<string> $vendors
  * @var list<string> $receivers
  * @var list<string> $types
@@ -18,7 +17,7 @@ $cancel = $isEdit ? url('/inbound/' . $row['id']) : url('/inbound');
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/inbound')) ?>">Inbound Maklon</a><i class="bi bi-chevron-right"></i><span><?= $isEdit ? e($row['sj_number'] ?? $row['code']) : 'Catat' ?></span></div>
 <div class="page-header"><div><h1 class="page-title"><?= $isEdit ? 'Edit Inbound Maklon' : 'Catat Inbound Maklon' ?></h1>
-    <p class="page-subtitle">Total masuk dihitung otomatis: Qty diterima − Qty reject.</p></div></div>
+    <p class="page-subtitle">Diinput manual oleh Gudang. Total masuk dihitung otomatis: Qty diterima − Qty reject.</p></div></div>
 
 <div class="row">
     <div class="col-xl-9">
@@ -38,16 +37,16 @@ $cancel = $isEdit ? url('/inbound/' . $row['id']) : url('/inbound');
             </div>
             <div class="form-section">
                 <div class="form-section-title">Barang</div>
-                <div class="form-section-desc">Isi nama komponen, atau pilih produk bila barang ada di master produk.</div>
+                <div class="form-section-desc">Ketik manual. Bila nama barang sama persis dengan produk di master, atau No. order sama dengan Order Entry Form / No. PO customer, data otomatis terhubung.</div>
                 <div class="row g-3">
-                    <?= Form::select('po_id', 'PO terkait (opsional)', $pos, old('po_id', $record), $errors, ['placeholder' => '— Tanpa PO —', 'searchable' => 'Cari nomor PO atau customer…', 'col' => 'col-md-6']) ?>
-                    <?= Form::select('product_id', 'Produk (opsional)', $products, old('product_id', $record), $errors, ['placeholder' => '— Tidak dipilih —', 'searchable' => 'Cari produk…', 'col' => 'col-md-6']) ?>
-                    <?= Form::input('component_name', 'Nama komponen', old('component_name', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-8']) ?>
+                    <?= Form::input('component_name', 'Nama barang / komponen', old('component_name', $record), $errors, ['required' => true, 'maxlength' => 255, 'col' => 'col-md-8', 'list' => 'component-list', 'autocomplete' => 'off']) ?>
+                    <?= Form::input('po_number_legacy', 'No. order / PO terkait (opsional)', old('po_number_legacy', $record), $errors, ['maxlength' => 80, 'col' => 'col-md-4', 'autocomplete' => 'off', 'placeholder' => 'mis. OEF-2610-0001']) ?>
                     <?= Form::input('type', 'Tipe', old('type', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-4', 'list' => 'type-list']) ?>
                     <?= Form::input('internal_component_code', 'Kode komponen internal', old('internal_component_code', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-6']) ?>
                     <?= Form::input('factory_component_code', 'Kode komponen pabrik', old('factory_component_code', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-6']) ?>
                 </div>
                 <datalist id="type-list"><?php foreach ($types as $x): ?><option value="<?= e($x) ?>"><?php endforeach; ?></datalist>
+                <datalist id="component-list"><?php foreach ($components as $x): ?><option value="<?= e($x) ?>"><?php endforeach; ?></datalist>
             </div>
             <div class="form-section">
                 <div class="form-section-title">Jumlah</div>

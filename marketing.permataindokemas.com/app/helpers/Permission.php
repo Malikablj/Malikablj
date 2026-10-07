@@ -7,7 +7,7 @@ namespace App\Helpers;
 /** Evaluasi matriks hak akses di config/permissions.php. */
 final class Permission
 {
-    public const ROLES = ['Admin', 'Marketing', 'Sales', 'Management', 'PPIC', 'Viewer'];
+    public const ROLES = ['Admin', 'Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Gudang', 'Viewer'];
 
     /** @var array<string,list<string>>|null */
     private static ?array $matrix = null;

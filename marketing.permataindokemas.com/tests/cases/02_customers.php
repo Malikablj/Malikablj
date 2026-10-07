@@ -112,20 +112,22 @@ test('otorisasi backend customer per role', function () {
 test('tab detail customer mengikuti hak akses role', function () {
     $id = (int) Database::fetchValue("SELECT id FROM customers WHERE name = 'PT. Maju Jaya Kosmetik'");
     $admin = client_as('Admin');
-    foreach (['overview', 'contacts', 'leads', 'activities', 'followups', 'pos', 'deliveries', 'returns', 'invoices'] as $tab) {
+    foreach (['overview', 'contacts', 'leads', 'activities', 'followups', 'pos', 'deliveries', 'returns'] as $tab) {
         assert_status(200, $admin->get('/customers/' . $id, ['tab' => $tab]), "tab {$tab}");
     }
+    assert_not_contains('tab=invoices', $admin->get('/customers/' . $id)->body, 'tab Invoice dihapus (menu Finance)');
     $sales = client_as('Sales')->get('/customers/' . $id);
     assert_contains('tab=leads', $sales->body);
-    assert_not_contains('tab=pos', $sales->body, 'Sales tidak punya akses PO');
+    assert_contains('tab=pos', $sales->body, 'Sales menginput OEF');
     assert_not_contains('tab=invoices', $sales->body);
     $mgmt = client_as('Management')->get('/customers/' . $id);
     assert_contains('tab=pos', $mgmt->body);
     assert_not_contains('tab=leads', $mgmt->body, 'Management tidak punya akses Leads');
     // tab yang tidak diizinkan jatuh ke overview (tidak membocorkan data)
-    $forced = client_as('Sales')->get('/customers/' . $id, ['tab' => 'invoices']);
+    $forced = client_as('Viewer')->get('/customers/' . $id, ['tab' => 'invoices']);
     assert_status(200, $forced);
     assert_not_contains('Invoice &amp; pembayaran', $forced->body);
+    assert_status(403, client_as('PPIC')->get('/customers/' . $id), 'PPIC tidak membuka menu Customers');
 });
 
 test('ringkasan customer menghitung outstanding dari data PO aktual', function () {
@@ -212,9 +214,11 @@ test('search menemukan customer, kontak, dan PO sesuai hak akses', function () {
     assert_contains('Customers', $res->body);
     assert_contains('PT. Maju Jaya Kosmetik', $res->body);
     $po = $admin->get('/search', ['q' => 'PO/UJI']);
-    assert_contains('Purchase Orders', $po->body);
-    $sales = client_as('Sales')->get('/search', ['q' => 'PO/UJI']);
-    assert_not_contains('Purchase Orders', $sales->body, 'Sales tidak melihat PO');
+    assert_contains('Order Entry Form', $po->body);
+    assert_contains('PO/UJI/001', $po->body);
+    $gudang = client_as('Gudang')->get('/search', ['q' => 'PO/UJI']);
+    assert_status(200, $gudang);
+    assert_not_contains('PO/UJI/001', $gudang->body, 'Gudang tidak melihat order');
     assert_status(200, $admin->get('/search', ['q' => "%' UNION SELECT password_hash FROM users -- "]));
     assert_status(200, $admin->get('/search', ['q' => 'x']));
 });

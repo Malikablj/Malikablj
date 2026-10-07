@@ -10,7 +10,9 @@ use DomainException;
 
 /**
  * Posisi stok per produk & tipe stok.
- * Satu produk boleh memiliki beberapa entri (mis. beberapa batch / lokasi);
+ * Nama produk diketik manual oleh Produksi/Gudang; nama yang sama (tidak peka huruf
+ * besar/kecil & spasi) otomatis masuk ke produk yang sama sehingga stok terkelompok
+ * per produk. Satu produk boleh memiliki beberapa entri (mis. beberapa batch / lokasi);
  * total per tipe = jumlah seluruh entri tipe tersebut.
  */
 final class Stock extends Model
@@ -63,6 +65,10 @@ final class Stock extends Model
             $where[] = 's.product_id = :pid';
             $params['pid'] = (int) $f['product_id'];
         }
+        if (!empty($f['category'])) {
+            $where[] = 'pr.category = :cat';
+            $params['cat'] = (string) $f['category'];
+        }
         if (($f['link'] ?? '') === 'unlinked') {
             $where[] = 's.product_id IS NULL';
         }
@@ -74,8 +80,8 @@ final class Stock extends Model
     {
         [$where, $params] = self::filters($f);
         return Paginator::query(
-            "SELECT s.*, pr.name AS product_name, pr.variant, pr.product_code, pr.unit
-             FROM stock s LEFT JOIN products pr ON pr.id = s.product_id
+            "SELECT s.*, pr.name AS product_name, pr.variant, pr.product_code, pr.unit, pr.category, u.name AS created_by_name
+             FROM stock s LEFT JOIN products pr ON pr.id = s.product_id LEFT JOIN users u ON u.id = s.created_by
              WHERE " . $where,
             $params,
             "s.product_id IS NULL, COALESCE(pr.name, s.product_legacy), FIELD(s.stock_type, 'FG','WIP','Ready','Reserved'), s.id",
@@ -89,7 +95,7 @@ final class Stock extends Model
         $f['link'] = '';
         [$where, $params] = self::filters($f);
         return Paginator::query(
-            "SELECT s.product_id, pr.code AS product_id_code, pr.name AS product_name, pr.variant, pr.product_code, pr.unit,
+            "SELECT s.product_id, pr.code AS product_id_code, pr.name AS product_name, pr.variant, pr.product_code, pr.unit, pr.category,
                     SUM(CASE WHEN s.stock_type = 'FG' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS fg,
                     SUM(CASE WHEN s.stock_type = 'WIP' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS wip,
                     SUM(CASE WHEN s.stock_type = 'Ready' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS ready,
@@ -98,7 +104,7 @@ final class Stock extends Model
                     MAX(COALESCE(s.updated_at, s.created_at)) AS last_update
              FROM stock s JOIN products pr ON pr.id = s.product_id
              WHERE " . $where . '
-             GROUP BY s.product_id, pr.code, pr.name, pr.variant, pr.product_code, pr.unit',
+             GROUP BY s.product_id, pr.code, pr.name, pr.variant, pr.product_code, pr.unit, pr.category',
             $params,
             'product_name, s.product_id',
             $page
@@ -141,6 +147,14 @@ final class Stock extends Model
         );
     }
 
+    /** @return list<string> kategori produk yang punya stok (filter pengelompokan) */
+    public static function categories(): array
+    {
+        return array_map('strval', Database::fetchColumn(
+            "SELECT DISTINCT pr.category FROM stock s JOIN products pr ON pr.id = s.product_id WHERE pr.category IS NOT NULL AND pr.category <> '' ORDER BY pr.category"
+        ));
+    }
+
     /** @return list<string> status yang sudah pernah dipakai (untuk saran input) */
     public static function statuses(): array
     {
@@ -156,16 +170,26 @@ final class Stock extends Model
     }
 
     /**
-     * Simpan entri stok. Bila produk baru dihubungkan ke entri legacy,
-     * issue migrasi terkait otomatis ditandai selesai.
-     * @param array<string,mixed> $data
+     * Simpan entri stok. Nama produk yang diketik manual dicari / dicatat otomatis di
+     * master produk (pengelompokan per produk). Bila produk baru dihubungkan ke entri
+     * legacy, issue migrasi terkait otomatis ditandai selesai.
+     * @param array<string,mixed> $data kolom stock (tanpa product_id bila $productName diisi)
+     * @return array{id:int,product_id:int|null,product_created:bool}
      */
-    public static function saveStock(?int $id, array $data): int
+    public static function saveStock(?int $id, array $data, ?string $productName = null): array
     {
-        return Database::transaction(function () use ($id, $data): int {
+        return Database::transaction(function () use ($id, $data, $productName): array {
             $before = $id !== null ? self::find($id) : null;
             if ($id !== null && $before === null) {
                 throw new DomainException('Data stok tidak ditemukan.');
+            }
+            $created = false;
+            if ($productName !== null && trim($productName) !== '') {
+                $product = Product::findOrCreateForStock($productName);
+                $data['product_id'] = $product['id'];
+                $created = $product['created'];
+            } elseif (!array_key_exists('product_id', $data)) {
+                $data['product_id'] = $before['product_id'] ?? null;
             }
             if ($id === null) {
                 $id = self::create($data);
@@ -175,7 +199,7 @@ final class Stock extends Model
             if ($data['product_id'] !== null && ($before === null || $before['product_id'] === null)) {
                 MigrationIssue::resolveForRecord('STOCK', $id, self::LINK_ISSUES, 'Entri stok dihubungkan ke master produk oleh user.');
             }
-            return $id;
+            return ['id' => $id, 'product_id' => $data['product_id'] !== null ? (int) $data['product_id'] : null, 'product_created' => $created];
         });
     }
 
