@@ -3,13 +3,16 @@
 # Pemasang update PIK Marketing Control (ikut di dalam pik-update.zip).
 #
 # Cara pakai di cPanel (langkah yang SAMA untuk setiap update):
-#   1. Upload pik-update.zip ke folder home (folder paling atas di File Manager,
-#      tempat folder public_html berada). Timpa bila file lama sudah ada.
+#   1. Upload pik-update.zip ke folder aplikasi public_html/marketing.permataindokemas.com
+#      (File Manager). Timpa bila file lama sudah ada.
 #   2. cPanel › Terminal, tempel:
-#        cd ~ && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh
+#        cd ~/public_html/marketing.permataindokemas.com && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh
 #
 # Kembalikan file ke versi sebelum update terakhir:
-#        cd ~ && bash pik-update/pasang-update.sh --rollback
+#        cd ~/public_html/marketing.permataindokemas.com && bash pik-update/pasang-update.sh --rollback
+#
+# (Zip boleh juga diekstrak di folder lain; perintah rollback yang benar selalu
+#  ditampilkan di akhir proses.)
 #
 # Yang dilakukan (berhenti otomatis bila ada langkah yang gagal):
 #   1. mencari folder aplikasi (yang berisi .env) di home Anda
@@ -31,6 +34,10 @@ BACKUP_DIR="$HOME/pik-backup"
 MODE="${1:-update}"
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$PKG_DIR/$SUBDIR"
+# Perintah rollback sesuai lokasi zip diekstrak (mis. ~/public_html/marketing.permataindokemas.com)
+RUN_DIR="$(dirname "$PKG_DIR")"
+case "$RUN_DIR" in "$HOME") RUN_SHOW="~" ;; "$HOME"/*) RUN_SHOW="~${RUN_DIR#"$HOME"}" ;; *) RUN_SHOW="$RUN_DIR" ;; esac
+ROLLBACK_CMD="cd $RUN_SHOW && bash $(basename "$PKG_DIR")/pasang-update.sh --rollback"
 
 if [ -t 1 ]; then G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; B=$'\e[1m'; N=$'\e[0m'; else G=''; R=''; Y=''; B=''; N=''; fi
 step() { printf '\n%s==> %s%s\n' "$B" "$1" "$N"; }
@@ -136,7 +143,9 @@ TS="$(date +%Y%m%d-%H%M%S)"
 NAME="$(basename "$APP_DIR")"
 FILES_BACKUP="$BACKUP_DIR/files-$NAME-$TS.tar.gz"
 DB_BACKUP="$BACKUP_DIR/db-$NAME-$TS.sql.gz"
-tar -czf "$FILES_BACKUP" -C "$(dirname "$APP_DIR")" --exclude="$NAME/storage/logs" --exclude="$NAME/storage/cache" "$NAME"
+# Paket update (bila diekstrak di dalam folder aplikasi) tidak ikut di-backup.
+tar -czf "$FILES_BACKUP" -C "$(dirname "$APP_DIR")" --exclude="$NAME/storage/logs" --exclude="$NAME/storage/cache" \
+    --exclude="$NAME/$(basename "$PKG_DIR")" --exclude="$NAME/pik-update.zip" "$NAME"
 ok "File     : $FILES_BACKUP ($(du -h "$FILES_BACKUP" | cut -f1))"
 
 CNF="$(mktemp "$BACKUP_DIR/.my-XXXXXX.cnf")"
@@ -200,7 +209,7 @@ fi
 # ----------------------------------------------------------------------------- migrasi
 step "6/6 Migrasi database"
 if ! (cd "$APP_DIR" && "$PHP" database/migrate.php); then
-    printf '\n%sMigrasi gagal.%s Kembalikan file dengan:  cd ~ && bash pik-update/pasang-update.sh --rollback\n' "$R" "$N" >&2
+    printf '\n%sMigrasi gagal.%s Kembalikan file dengan:  %s\n' "$R" "$N" "$ROLLBACK_CMD" >&2
     printf 'lalu kirim pesan error di atas.\n' >&2
     exit 1
 fi
@@ -211,7 +220,7 @@ cat <<EOF
   Backup database : $DB_BACKUP
 
 Bila ada masalah, kembalikan file ke versi sebelumnya dengan:
-  cd ~ && bash pik-update/pasang-update.sh --rollback
+  $ROLLBACK_CMD
 EOF
 if [ -f "$PKG_DIR/LANGKAH-SETELAH-UPDATE.txt" ]; then
     printf '\n%sLangkah berikutnya:%s\n' "$B" "$N"

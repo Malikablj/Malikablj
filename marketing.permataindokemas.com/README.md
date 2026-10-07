@@ -443,11 +443,11 @@ Gunakan tombol **Kirim email percobaan** setelah menyimpan. Bila email gagal, co
 
 Setiap update dikirim sebagai **`pik-update.zip`** (di repository: folder `update-zip/`).
 
-1. cPanel › **File Manager** → buka folder home (folder paling atas, tempat `public_html` berada) → **Upload** `pik-update.zip` (timpa bila sudah ada).
+1. cPanel › **File Manager** → buka folder aplikasi `public_html/marketing.permataindokemas.com` → **Upload** `pik-update.zip` (timpa bila sudah ada). Folder `pik-update/` & zip di sana tidak bisa diakses dari browser (diblokir `.htaccess`).
 2. cPanel › **Terminal**, tempel:
 
 ```bash
-cd ~ && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh
+cd ~/public_html/marketing.permataindokemas.com && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh
 ```
 
 Pemasang `pasang-update.sh` otomatis: mencari folder aplikasi, **backup file + database** ke `~/pik-backup/`, memeriksa syntax PHP, memasang file (tanpa menyentuh `.env`, `.htaccess` utama, dan `storage/`), menghapus file lama yang tidak dipakai, lalu menjalankan migrasi database. Bila backup gagal, tidak ada file yang diubah.
@@ -455,7 +455,7 @@ Pemasang `pasang-update.sh` otomatis: mencari folder aplikasi, **backup file + d
 Mengembalikan file ke versi sebelum update terakhir:
 
 ```bash
-cd ~ && bash pik-update/pasang-update.sh --rollback
+cd ~/public_html/marketing.permataindokemas.com && bash pik-update/pasang-update.sh --rollback
 ```
 
 Bila folder aplikasi atau PHP tidak terdeteksi otomatis, tulis misalnya `APP_DIR=/home/USER/marketing.permataindokemas.com` atau `PHP_BIN=/opt/cpanel/ea-php83/root/usr/bin/php` sebelum kata `bash`. Developer membuat zip dengan `bash update-zip/buat-zip.sh` (dari versi yang sudah di-commit).

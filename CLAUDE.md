@@ -20,10 +20,11 @@ Setiap kali mengubah aplikasi:
 4. Commit perubahan aplikasi, lalu `bash update-zip/buat-zip.sh` (zip dibuat dari versi yang sudah di-commit;
    file yang dihapus dari repo otomatis masuk `hapus-file-lama.txt`), lalu commit `update-zip/pik-update.zip`.
 5. Kirim `update-zip/pik-update.zip` ke user dan ulangi langkah yang sama (lihat `update-zip/CARA-UPDATE.md`):
-   - upload `pik-update.zip` ke folder home cPanel (timpa yang lama)
+   - upload `pik-update.zip` ke folder aplikasi `public_html/marketing.permataindokemas.com` (timpa yang lama)
+     — lokasi aplikasi user di server: `~/public_html/marketing.permataindokemas.com`
    - cPanel › Terminal:
-     `cd ~ && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh`
-   - rollback: `cd ~ && bash pik-update/pasang-update.sh --rollback`
+     `cd ~/public_html/marketing.permataindokemas.com && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh`
+   - rollback: `cd ~/public_html/marketing.permataindokemas.com && bash pik-update/pasang-update.sh --rollback`
 
 ### Lainnya
 
