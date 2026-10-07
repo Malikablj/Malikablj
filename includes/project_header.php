@@ -7,6 +7,7 @@ declare(strict_types=1);
  * @var int $id
  * @var string $tab overview|processes|timeline|history
  * @var string|null $crumbPart nama part (timeline Level 2)
+ * @var string|null $headerActions HTML tombol tambahan (sudah di-escape) di kanan judul
  */
 ?>
 <nav class="breadcrumbs" aria-label="<?= t('common.breadcrumbs') ?>">
@@ -30,9 +31,26 @@ declare(strict_types=1);
   </div>
   <div class="page-actions">
     <a class="btn" href="<?= e(url('npr-edit.php', ['id' => $project['npr_id']])) ?>"><?= icon('file-text') ?> <?= t('project.open_npr') ?></a>
+    <?= $headerActions ?? '' ?>
   </div>
 </div>
 
+<?php if ((int) $project['is_archived'] === 1): ?>
+  <?php $__arch = \App\Core\Db::value('SELECT name FROM users WHERE id = ?', [(int) $project['archived_by']]); ?>
+  <div class="flash flash-info" role="status"><?= icon('archive') ?><span><?= t('lifecycle.archived_banner', ['date' => \App\Core\I18n::dateTime($project['archived_at']), 'user' => (string) ($__arch ?: '–'), 'reason' => (string) $project['archive_reason']]) ?></span></div>
+<?php endif; ?>
+<?php if ($project['cancelled_at'] !== null): ?>
+  <div class="flash flash-info" role="status"><?= icon('x') ?><span><?= t('lifecycle.cancelled_banner', ['date' => \App\Core\I18n::dateTime($project['cancelled_at']), 'reason' => (string) $project['cancel_reason']]) ?></span></div>
+<?php endif; ?>
+<?php foreach ((new \App\Project\HoldService())->openHolds($id) as $__h): ?>
+  <?php $__days = (int) floor((\App\Core\Clock::now()->getTimestamp() - strtotime((string) $__h['held_at'])) / 86400); ?>
+  <div class="flash flash-warning hold-banner" role="status"><?= icon('pause') ?>
+    <span><?= $__h['part_id'] === null
+        ? t('hold.banner_project', ['date' => \App\Core\I18n::date(substr((string) $__h['held_at'], 0, 10)), 'days' => $__days, 'reason' => (string) $__h['reason']])
+        : t('hold.banner_part', ['part' => (string) $__h['part_name'], 'date' => \App\Core\I18n::date(substr((string) $__h['held_at'], 0, 10)), 'reason' => (string) $__h['reason']]) ?>
+      <?php if ($__h['expected_resume_date']): ?><span class="muted"> · <?= t('hold.expected', ['date' => \App\Core\I18n::date($__h['expected_resume_date'])]) ?></span><?php endif; ?></span>
+  </div>
+<?php endforeach; ?>
 <?php $__overdue = (int) $project['is_on_hold'] === 1 ? [] : (new \App\Notification\OverdueService())->overdueProcesses(['project_id' => $id]); ?>
 <?php if ($__overdue): ?>
   <div class="flash flash-error overdue-banner" role="alert">

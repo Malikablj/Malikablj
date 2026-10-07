@@ -187,6 +187,31 @@ final class WorkflowInstantiator
         );
     }
 
+    /**
+     * Kaitkan kembali part yang dibuka kembali ke gate & Project Finish (kebalikan detachPart).
+     * Gate yang sudah diputuskan tidak dikaitkan ulang agar tidak menunggu part ini.
+     */
+    public function attachPart(int $projectPartId): void
+    {
+        $part = Db::fetch('SELECT pp.project_id, pj.gate_enabled FROM project_parts pp JOIN projects pj ON pj.id = pp.project_id WHERE pp.id = ?', [$projectPartId]);
+        if (!$part) {
+            return;
+        }
+        $projectId = (int) $part['project_id'];
+        $level = [];
+        foreach (Db::fetchAll('SELECT id, code, status FROM processes WHERE project_id = ? AND part_id IS NULL', [$projectId]) as $r) {
+            $level[(string) $r['code']] = $r;
+        }
+        $milestone = Db::value('SELECT id FROM processes WHERE part_id = ? AND is_gate_milestone = 1 ORDER BY sort_order LIMIT 1', [$projectPartId]);
+        $finish = Db::value("SELECT id FROM processes WHERE part_id = ? AND step_type = 'finish' ORDER BY sort_order LIMIT 1", [$projectPartId]);
+        if ((int) $part['gate_enabled'] === 1 && isset($level['G1']) && $milestone && $level['G1']['status'] === 'not_started') {
+            $this->addDep((int) $level['G1']['id'], (int) $milestone, 'FS', 0);
+        }
+        if (isset($level['PF']) && $finish && !in_array($level['PF']['status'], ['completed', 'skipped'], true)) {
+            $this->addDep((int) $level['PF']['id'], (int) $finish, 'FS', 0);
+        }
+    }
+
     public function addDep(int $processId, int $predId, string $type, int $lag, string $source = 'template', ?int $userId = null): void
     {
         if ($processId === $predId) {

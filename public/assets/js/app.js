@@ -195,6 +195,8 @@
     var opener = e.target.closest('[data-open-dialog]');
     if (opener) {
       var d = doc.getElementById(opener.getAttribute('data-open-dialog'));
+      var menu = opener.closest('details.menu');
+      if (menu) { menu.removeAttribute('open'); }
       if (d && d.showModal) { d.showModal(); }
     }
     var closer = e.target.closest('[data-close-dialog]');

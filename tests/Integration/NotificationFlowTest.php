@@ -196,17 +196,23 @@ final class NotificationFlowTest extends DbTestCase
         $svc = new NotificationSettings();
         $admin = $this->makeUser('admin');
         try {
-            $svc->save($admin, ['due_soon_days' => '0', 'no_update_days' => '45', 'smtp_port' => '587', 'smtp_encryption' => 'tls', 'mail_enabled' => '1']);
+            $svc->save($admin, ['due_soon_days' => '0', 'no_update_days' => '45', 'smtp_port' => '587', 'smtp_encryption' => 'tls', 'mail_enabled' => '1',
+                'hold_reminder_days' => '0', 'hold_reminder_repeat_days' => '120']);
             $this->fail('validasi');
         } catch (ValidationException $e) {
+            $this->assertArrayHasKey('hold_reminder_days', $e->errors());
+            $this->assertArrayHasKey('hold_reminder_repeat_days', $e->errors());
             $this->assertArrayHasKey('due_soon_days', $e->errors());
             $this->assertArrayHasKey('no_update_days', $e->errors());
             $this->assertArrayHasKey('mail_enabled', $e->errors());
         }
         $svc->save($admin, ['due_soon_days' => '5', 'no_update_days' => '10', 'smtp_host' => 'smtp.pik.co.id', 'smtp_port' => '587', 'smtp_encryption' => 'tls',
-            'smtp_username' => 'npd', 'smtp_password' => 'Rahasia#2026', 'from_address' => 'npd@pik.co.id', 'from_name' => 'NPD', 'mail_enabled' => '1', 'types' => ['project_overdue' => '1']]);
+            'smtp_username' => 'npd', 'smtp_password' => 'Rahasia#2026', 'from_address' => 'npd@pik.co.id', 'from_name' => 'NPD', 'mail_enabled' => '1', 'types' => ['project_overdue' => '1'],
+            'hold_reminder_days' => '45', 'hold_reminder_repeat_days' => '14']);
         Settings::flush();
         $this->assertSame(5, Settings::int('notify.due_soon_days'));
+        $this->assertSame(45, Settings::int('hold.reminder_days'), 'ambang pengingat Hold dapat diatur Admin (PRD §8.3)');
+        $this->assertSame(14, Settings::int('hold.reminder_repeat_days'));
         $this->assertSame('Rahasia#2026', Settings::get('mail.smtp_password'));
         $stored = (string) Db::value("SELECT setting_value FROM application_settings WHERE setting_key = 'mail.smtp_password'");
         $this->assertStringNotContainsString('Rahasia', $stored, 'tersimpan terenkripsi');

@@ -54,6 +54,9 @@ final class NextActionService
             throw new NotFoundException(I18n::t('error.not_found'));
         }
         Gate::authorize($actor, 'project.edit', ['owner_ids' => [$project['sales_pic_id'], $project['npd_pic_id']]]);
+        if ((int) $project['is_archived'] === 1 || $project['finished_at'] !== null || $project['cancelled_at'] !== null) {
+            throw new \App\Core\BusinessRuleException(I18n::t('hold.project_closed'));
+        }
         if ($partId !== null && !Db::value('SELECT id FROM project_parts WHERE id = ? AND project_id = ?', [$partId, $projectId])) {
             throw new NotFoundException(I18n::t('error.not_found'));
         }

@@ -292,6 +292,8 @@ code, kbd { font-family: var(--font-mono); font-size: 0.92em; }
 }
 .menu-panel a:hover, .menu-panel button:hover { background: var(--surface-3); text-decoration: none; }
 .menu-panel form { margin: 0; }
+.menu[open] > summary { margin-bottom: 0; }
+.page-actions .menu-panel { min-width: 220px; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
 .user-chip { display: flex; align-items: center; gap: 10px; padding: 4px 8px 4px 4px; border-radius: 999px; color: var(--text); }
 .user-chip:hover { background: var(--surface-3); }
@@ -381,7 +383,7 @@ fieldset { border: 0; padding: 0; margin: 0; }
 legend { font-weight: 600; padding: 0; margin-bottom: 10px; }
 
 /* ---------- Tabel ---------- */
-.table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius-lg); }
+.table-wrap { position: relative; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius-lg); }
 .table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
 .table th, .table td { padding: 11px 14px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border); }
 .table th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }

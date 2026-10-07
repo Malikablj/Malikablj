@@ -33,7 +33,7 @@ final class StatusService
         $statuses = [];
         foreach ($parts as $part) {
             $id = (int) $part['id'];
-            $new = self::partStatus($part, $active[$id] ?? []);
+            $new = self::partStatus($part, $active[$id] ?? [], (int) $project['is_on_hold'] === 1);
             $statuses[$id] = $new;
             if ($new !== $part['status']) {
                 Db::update('project_parts', ['status' => $new], ['id' => $id]);
@@ -49,8 +49,9 @@ final class StatusService
     /**
      * @param array<string,mixed> $part
      * @param list<array<string,mixed>> $activeProcesses
+     * @param bool $projectOnHold Hold level project berlaku untuk semua part aktif (PRD §8.1)
      */
-    public static function partStatus(array $part, array $activeProcesses): string
+    public static function partStatus(array $part, array $activeProcesses, bool $projectOnHold = false): string
     {
         if ($part['cancelled_at'] !== null) {
             return 'cancelled';
@@ -58,7 +59,7 @@ final class StatusService
         if ($part['completed_at'] !== null) {
             return 'completed';
         }
-        if ((int) $part['is_on_hold'] === 1) {
+        if ((int) $part['is_on_hold'] === 1 || ($projectOnHold && $part['start_date'] !== null)) {
             return 'hold';
         }
         if ($part['start_date'] === null) {

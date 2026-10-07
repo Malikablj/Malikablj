@@ -43,12 +43,24 @@ final class ScheduleService
         if (!$project) {
             throw new NotFoundException(I18n::t('error.not_found'));
         }
-        $parts = Db::fetchAll('SELECT id, status, start_date, is_on_hold, cancelled_at FROM project_parts WHERE project_id = ?', [$projectId]);
+        $parts = Db::fetchAll('SELECT id, status, start_date, schedule_floor, is_on_hold, cancelled_at FROM project_parts WHERE project_id = ?', [$projectId]);
         $partStart = [];
         $cancelled = [];
         $held = [];
+        // Batas bawah setelah Resume: proses yang belum mulai tidak dijadwalkan sebelum tanggal mulai kembali
+        if ($project['schedule_floor'] !== null && $project['schedule_floor'] > $project['start_date']) {
+            $project['start_date'] = $project['schedule_floor'];
+        }
         foreach ($parts as $p) {
-            $partStart[(int) $p['id']] = $p['start_date'];
+            $start = $p['start_date'];
+            if ($start !== null) {
+                foreach ([$p['schedule_floor'], $project['schedule_floor']] as $floor) {
+                    if ($floor !== null && $floor > $start) {
+                        $start = $floor;
+                    }
+                }
+            }
+            $partStart[(int) $p['id']] = $start;
             if ($p['cancelled_at'] !== null) {
                 $cancelled[(int) $p['id']] = true;
             }

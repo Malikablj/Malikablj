@@ -44,6 +44,7 @@ final class WorkflowEngine
         $p = Db::fetch(
             'SELECT pr.*, r.code AS pic_role_code, pj.code AS project_code, pj.name AS project_name, pj.sales_pic_id, pj.npd_pic_id,
                     pj.is_on_hold AS project_on_hold, pj.status AS project_status, pj.finished_at AS project_finished_at,
+                    pj.cancelled_at AS project_cancelled_at, pj.is_archived AS project_archived,
                     pp.name AS part_name, pp.is_on_hold AS part_on_hold, pp.cancelled_at AS part_cancelled_at, pp.start_date AS part_start_date, pp.part_type
              FROM processes pr
              JOIN roles r ON r.id = pr.pic_role_id
@@ -614,6 +615,7 @@ final class WorkflowEngine
         Gate::authorize($actor, 'process.skip');
         Db::transaction(function () use ($actor, $processId, $reason): void {
             $p = $this->load($processId, true);
+            $this->assertNotHeld($p);
             if ($p['status'] !== 'skipped') {
                 throw new BusinessRuleException(I18n::t('wf.not_skipped'));
             }
@@ -717,6 +719,7 @@ final class WorkflowEngine
         }
         Db::transaction(function () use ($actor, $processId, $target, $reason, $manualStart): void {
             $p = $this->load($processId, true);
+            $this->assertNotClosed($p);
             $old = $p['status'];
             if ($old === $target) {
                 return;
@@ -837,6 +840,7 @@ final class WorkflowEngine
             if (isset($input['lock_version']) && $input['lock_version'] !== null && $input['lock_version'] !== '' && (int) $input['lock_version'] !== (int) $p['lock_version']) {
                 throw new ConflictException(I18n::t('error.conflict'));
             }
+            $this->assertNotClosed($p);
             if (in_array($p['status'], ['completed', 'skipped'], true)) {
                 throw new BusinessRuleException(I18n::t('wf.plan_closed'));
             }
@@ -942,8 +946,22 @@ final class WorkflowEngine
         $this->status->refresh($projectId);
     }
 
+    /** Project selesai/batal/arsip atau part batal: proses tidak dapat diubah lagi (PRD §8.4). */
+    public function isClosed(array $p): bool
+    {
+        return $p['project_finished_at'] !== null || $p['project_cancelled_at'] !== null || (int) $p['project_archived'] === 1 || ($p['part_cancelled_at'] ?? null) !== null;
+    }
+
+    private function assertNotClosed(array $p): void
+    {
+        if ($this->isClosed($p)) {
+            throw new BusinessRuleException(I18n::t('wf.closed'));
+        }
+    }
+
     private function assertNotHeld(array $p): void
     {
+        $this->assertNotClosed($p);
         if ($this->isOnHold($p)) {
             throw new BusinessRuleException(I18n::t('wf.on_hold'));
         }

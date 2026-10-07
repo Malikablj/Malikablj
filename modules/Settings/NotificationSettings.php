@@ -19,6 +19,8 @@ final class NotificationSettings
         return [
             'due_soon_days' => Settings::int('notify.due_soon_days', 3),
             'no_update_days' => Settings::int('notify.no_update_days', 7),
+            'hold_reminder_days' => Settings::int('hold.reminder_days', 30),
+            'hold_reminder_repeat_days' => Settings::int('hold.reminder_repeat_days', 7),
             'mail_enabled' => Settings::bool('mail.enabled', false),
             'smtp_host' => (string) Settings::get('mail.smtp_host', ''),
             'smtp_port' => Settings::int('mail.smtp_port', 587),
@@ -40,6 +42,14 @@ final class NotificationSettings
             $v = trim((string) ($in[$k] ?? ''));
             if (!preg_match('/^\d{1,2}$/', $v) || (int) $v < 1 || (int) $v > 30) {
                 $errors[$k] = I18n::t('nset.range_1_30');
+            }
+        }
+        // Pengingat Hold (PRD §8.3): pertama setelah N hari (1–365), ulang tiap M hari (1–90); tidak dikirim = tetap
+        $in += ['hold_reminder_days' => (string) Settings::int('hold.reminder_days', 30), 'hold_reminder_repeat_days' => (string) Settings::int('hold.reminder_repeat_days', 7)];
+        foreach (['hold_reminder_days' => 365, 'hold_reminder_repeat_days' => 90] as $k => $max) {
+            $v = trim((string) ($in[$k] ?? ''));
+            if (!preg_match('/^\d{1,3}$/', $v) || (int) $v < 1 || (int) $v > $max) {
+                $errors[$k] = I18n::t('nset.range_n', ['max' => $max]);
             }
         }
         $port = trim((string) ($in['smtp_port'] ?? '587'));
@@ -67,6 +77,8 @@ final class NotificationSettings
         }
         Settings::set('notify.due_soon_days', (string) (int) $in['due_soon_days'], $actor->id);
         Settings::set('notify.no_update_days', (string) (int) $in['no_update_days'], $actor->id);
+        Settings::set('hold.reminder_days', (string) (int) $in['hold_reminder_days'], $actor->id);
+        Settings::set('hold.reminder_repeat_days', (string) (int) $in['hold_reminder_repeat_days'], $actor->id);
         Settings::set('mail.enabled', $enabled ? '1' : '0', $actor->id);
         Settings::set('mail.smtp_host', $host, $actor->id);
         Settings::set('mail.smtp_port', (string) (int) $port, $actor->id);

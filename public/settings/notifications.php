@@ -61,6 +61,10 @@ require APP_ROOT . '/includes/layout/header.php';
         <input class="input" type="number" min="1" max="30" id="ns-due" name="due_soon_days" value="<?= e((string) $c['due_soon_days']) ?>" required><?= $err('due_soon_days') ?><p class="field-hint"><?= t('nset.due_soon_hint') ?></p></div>
       <div class="field<?= isset($errors['no_update_days']) ? ' has-error' : '' ?>"><label for="ns-nu"><?= t('nset.no_update') ?></label>
         <input class="input" type="number" min="1" max="30" id="ns-nu" name="no_update_days" value="<?= e((string) $c['no_update_days']) ?>" required><?= $err('no_update_days') ?><p class="field-hint"><?= t('nset.no_update_hint') ?></p></div>
+      <div class="field<?= isset($errors['hold_reminder_days']) ? ' has-error' : '' ?>"><label for="ns-hold"><?= t('nset.hold_reminder') ?></label>
+        <input class="input" type="number" min="1" max="365" id="ns-hold" name="hold_reminder_days" value="<?= e((string) $c['hold_reminder_days']) ?>" required><?= $err('hold_reminder_days') ?><p class="field-hint"><?= t('nset.hold_reminder_hint') ?></p></div>
+      <div class="field<?= isset($errors['hold_reminder_repeat_days']) ? ' has-error' : '' ?>"><label for="ns-hold-rep"><?= t('nset.hold_repeat') ?></label>
+        <input class="input" type="number" min="1" max="90" id="ns-hold-rep" name="hold_reminder_repeat_days" value="<?= e((string) $c['hold_reminder_repeat_days']) ?>" required><?= $err('hold_reminder_repeat_days') ?><p class="field-hint"><?= t('nset.hold_repeat_hint') ?></p></div>
     </div></section>
   <section class="card"><div class="card-header"><h2><?= t('nset.email') ?></h2></div>
     <div class="card-body form-grid">

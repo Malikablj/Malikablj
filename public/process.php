@@ -135,7 +135,7 @@ $status = (string) $p['status'];
 $isActive = in_array($status, WorkflowEngine::ACTIVE, true);
 $held = $engine->isOnHold($p);
 $isNprStep = in_array($p['step_type'], ['request', 'feedback'], true);
-$projectClosed = $p['project_finished_at'] !== null || $p['project_status'] === 'cancelled' || $p['part_cancelled_at'] !== null;
+$projectClosed = $engine->isClosed($p);
 $canExecute = $engine->canExecute($user, $p);
 $overdue = $isActive && !$held ? Lateness::overdueDays($cal, $p['planned_finish'], $today) : 0;
 $options = $engine->decisionOptions($p);

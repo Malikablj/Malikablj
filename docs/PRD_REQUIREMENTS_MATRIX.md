@@ -133,7 +133,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | FR-OVD-02 | Panel Overdue: project, part, proses, PIC, hari terlambat, menunggu siapa | 7.2 | Must | 8/10 | `public/dashboard.php` | Planned | `DashboardServiceTest` |
 | FR-OVD-03 | Notifikasi web + email ke PIC hari pertama overdue; ringkasan harian | 7.3 | Must | 8 | `OverdueService::scan` (`cron/overdue.php`), `DailyDigest` (`cron/daily-report.php`) | Done | `NotificationFlowTest`::testScanSendsFirstDayOverdueOnceWithEmail, ::testDailyDigestOnePerRecipientWorkingDaysOnly |
 | FR-OVD-04 | Notifikasi web semua kejadian §7.3; email hanya yang bertanda Ya | 7.3 | Must | 8 | `Notifier::EMAIL_TYPES`, `OverdueService`, services | Done | `NotificationFlowTest`, `WorkflowEngineTest`, `ScheduleServiceTest` |
-| FR-OVD-05 | Masa Hold dikecualikan dari overdue & aging | 7.1, 8.1 | Must | 8/9 | `OverdueService`, `ProjectQuery`, `PortfolioQuery` | Partial | `NotificationFlowTest`::testOverdueCountsWorkingDaysAndExcludesHold; aging & hari Hold KPI di fase 9/10 |
+| FR-OVD-05 | Masa Hold dikecualikan dari overdue & aging | 7.1, 8.1 | Must | 8/9 | `OverdueService`, `ProjectQuery`, `PortfolioQuery`, `HoldService` (hari Hold → `process_runs.hold_working_days`) | Done | `NotificationFlowTest`::testOverdueCountsWorkingDaysAndExcludesHold, `HoldLifecycleTest`::testHoldProjectFreezesProcessesAndIsNotOverdue / testResume…; pemakaian di KPI pada fase 10 |
 | FR-OVD-06 | Pengaturan ambang & email oleh Admin; antrean email dengan retry | 7.3 | Should | 8 | `NotificationSettings`, `MailQueue`, `SmtpTransport` (PHPMailer), `cron/notifications.php`, `public/settings/notifications.php`, `public/settings/email-queue.php` | Done | `NotificationFlowTest`::testMailQueueSendsRetriesWithBackoffAndFails, ::testNotificationSettingsValidationAndSecret, `NotificationHttpTest` |
 | NTF-07 | Bell, daftar, tandai dibaca, tautan ke proses | 7.3 | Must | 8 | `NotificationCenter`, `public/notifications.php`, lonceng di header | Done | `NotificationFlowTest`, `NotificationHttpTest::testBellListOpenAndOwnership` |
 | NTF-08 | Email memakai bahasa penerima; deduplikasi; pemindaian terjadwal tiap jam di hari kerja | 7.3 | Must | 8 | `Notifier` (bahasa penerima, `dedupe_key`), cron jam kerja | Done | `NotificationFlowTest` |
@@ -144,13 +144,13 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-HLD-01 | Hold project/part, alasan wajib; proses beku; dikecualikan overdue/aging/KPI | 8.1 | Must | 9 | `HoldService` | Planned | `HoldServiceTest` (UAT-16) |
-| FR-HLD-02 | Resume wajib Target Finish baru + jadwal ulang dengan pratinjau; baseline baru | 8.2 | Must | 9 | `HoldService::previewResume/resume` | Planned | `HoldServiceTest` (UAT-17) |
-| FR-HLD-03 | Pengingat Hold 30 hari (dapat diatur), ulang tiap 7 hari, web + email | 8.3 | Must | 9 | `cron/overdue.php` | Planned | `HoldServiceTest` |
-| FR-HLD-04 | Arsip & pulihkan oleh Admin dengan alasan & audit; tanpa hapus permanen | 8.4 | Must | 9 | `ProjectService::archive/restore` | Planned | `ProjectServiceTest` (UAT-24) |
-| FR-HLD-05 | Cancel part/project dengan alasan; Cancelled hanya dibuka Admin | 8.4 | Must | 9 | `ProjectService::cancel` | Planned | `ProjectServiceTest` |
-| HLD-06 | Komentar & unggah dokumen tetap diizinkan saat Hold | 8.1 | Must | 9 | `CommentService`, `DocumentService` | Planned | `HoldServiceTest` |
-| HLD-07 | Sisa durasi bawaan = durasi rencana − hari kerja terpakai sebelum Hold | 8.2 | Must | 9 | `HoldService` | Planned | `HoldServiceTest` |
+| FR-HLD-01 | Hold project/part, alasan wajib; proses beku; dikecualikan overdue/aging/KPI | 8.1 | Must | 9 | `HoldService::hold`, `WorkflowEngine` (guard), `ScheduleService` (frozen) | Done | `HoldLifecycleTest` (UAT-16), `HoldHttpTest`, browser `hold_flow.py` |
+| FR-HLD-02 | Resume wajib Target Finish baru + jadwal ulang dengan pratinjau; baseline baru | 8.2 | Must | 9 | `HoldService::previewResume/resume`, `public/resume.php` (pratinjau server, token HMAC) | Done | `HoldLifecycleTest`::testResumeRequiresTargetPreviewsAndCreatesBaseline (UAT-17), `HoldHttpTest` |
+| FR-HLD-03 | Pengingat Hold 30 hari (dapat diatur), ulang tiap 7 hari, web + email | 8.3 | Must | 9 | `HoldService::sendReminders` via `cron/overdue.php` | Done | `HoldLifecycleTest`::testHoldRemindersAfterThirtyDaysThenWeekly |
+| FR-HLD-04 | Arsip & pulihkan oleh Admin dengan alasan & audit; tanpa hapus permanen | 8.4 | Must | 9 | `LifecycleService::archive/restore` | Done | `HoldLifecycleTest`::testArchiveHidesProjectAndRestoreKeepsDataAndAudit (UAT-24), `HoldHttpTest` |
+| FR-HLD-05 | Cancel part/project dengan alasan; Cancelled hanya dibuka Admin | 8.4 | Must | 9 | `LifecycleService::cancelPart/cancelProject/reopenPart/reopenProject` (OQ-27) | Done | `HoldLifecycleTest`::testCancel…/testPartCancelledBeforeStartCannotBeReopened |
+| HLD-06 | Komentar & unggah dokumen tetap diizinkan saat Hold | 8.1 | Must | 9 | `CommentService`, `DocumentService` (hanya diblok saat arsip/batal) | Done | `DocumentApprovalRecordTest`, `HoldLifecycleTest` |
+| HLD-07 | Sisa durasi bawaan = durasi rencana − hari kerja terpakai sebelum Hold | 8.2 | Must | 9 | `HoldService::resumeContext` | Done | `HoldLifecycleTest`::testResumeRequiresTargetPreviewsAndCreatesBaseline |
 
 ## 9. Dokumen, approval, record, audit (PRD §9, Lampiran B)
 
@@ -208,7 +208,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | NFR-01 | PHP 8.2+, MySQL 8 InnoDB utf8mb4 | 13.1 | Must | 0/1 | `database/schema.sql` | Done | `SchemaTest` |
 | NFR-02 | Mesin jadwal di server sebagai satu-satunya sumber kebenaran, satu transaksi | 13.1 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
-| NFR-03 | Tugas terjadwal: overdue/due soon, Hold reminder, ringkasan harian, antrean email | 13.1 | Must | 8 | `cron/*.php` | Planned | `CronTest` |
+| NFR-03 | Tugas terjadwal: overdue/due soon, Hold reminder, ringkasan harian, antrean email | 13.1 | Must | 8/9 | `cron/overdue.php`, `cron/notifications.php`, `cron/daily-report.php` (`JobRunner`: GET_LOCK + `job_runs`) | Done | `DailyActivationTest`, `NotificationFlowTest`, `HoldLifecycleTest`::testHoldReminders… |
 | NFR-04 | PDF & Excel dibuat server (mPDF, PhpSpreadsheet) | 13.1 | Must | 2/6 | `modules/Report` | Done | `PdfExportTest` |
 | NFR-05 | Zona waktu Asia/Jakarta | 13.1 | Must | 1 | `config/config.php` | Done | `ConfigTest` |
 | NFR-06 | Konfigurasi lewat environment (.env) untuk dev/UAT/prod | 13.1 | Must | 1 | `config/config.php`, `.env.example` | Done | `ConfigTest` |
@@ -238,13 +238,13 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | UAT-13 | Dependency melingkar ditolak | 4 | `DependencyServiceTest::testCycleIsRejected`, `ProjectHttpTest` | Done |
 | UAT-14 | Selesaikan proses FF sebelum predecessor selesai → ditolak | 4 | `WorkflowEngineTest::testFinishToFinishBlocksEarlyCompletion` | Done |
 | UAT-15 | Customer Artwork Approval Not Approved → kembali ke Artwork, iterasi +1, jadwal dihitung ulang | 4 | `WorkflowEngineTest::testArtworkNotApprovedReturnsToArtwork` | Done |
-| UAT-16 | Hold part lalu project 30 hari → beku, tidak overdue, pengingat 30 hari | 9 | `HoldServiceTest::testUat16` | Planned |
-| UAT-17 | Resume project → target baru wajib, baseline baru, jadwal lama tersimpan | 9 | `HoldServiceTest::testUat17` | Planned |
+| UAT-16 | Hold part lalu project 30 hari → beku, tidak overdue, pengingat 30 hari | 9 | `HoldLifecycleTest`::testHoldProjectFreezesProcessesAndIsNotOverdue, testPartHoldOnlyAffectsThatPart, testHoldRemindersAfterThirtyDaysThenWeekly | Done |
+| UAT-17 | Resume project → target baru wajib, baseline baru, jadwal lama tersimpan | 9 | `HoldLifecycleTest`::testResumeRequiresTargetPreviewsAndCreatesBaseline, `HoldHttpTest`, browser `hold_flow.py` | Done |
 | UAT-18 | Management buka timeline, klik part BODY → Level 2, tidak dapat mengubah | 6 | `TimelineHttpTest::testPagesRenderForAllRoles` (Management melihat Level 1/2 tanpa form planning) | Done |
 | UAT-19 | Export timeline PDF & Excel, PIK-FORM-NPD-07 di kanan atas, overdue merah | 6 | `TimelineTest::testTimelinePdfHasDocNumberOnEveryPageAndOverdueRows`, `testTimelineExcelSheetsDatesFreezeFilterAndDocNumber`, `TimelineHttpTest::testExports` | Done |
 | UAT-20 | KPI PIC: Management & Admin bisa, Sales ditolak UI & API | 10 | `AuthorizationHttpTest::testUat20` | Planned |
 | UAT-21 | Mode gelap semua halaman #000000 | 11 | browser test `tests/browser` | Planned |
 | UAT-22 | NPR, timeline, dashboard di tablet & HP | 11 | browser test `tests/browser` | Planned |
 | UAT-23 | Ganti bahasa ID/EN: label, menu, status, email berganti; isian tidak | 1/11 | `I18nTest`, `LayoutHttpTest` | Partial (label/menu/tersimpan di profil; email & status menyusul) |
-| UAT-24 | Arsip project Hold lalu pulihkan | 9 | `ProjectServiceTest::testUat24` | Planned |
+| UAT-24 | Arsip project Hold lalu pulihkan | 9 | `HoldLifecycleTest`::testArchiveHidesProjectAndRestoreKeepsDataAndAudit, `HoldHttpTest`, browser `hold_flow.py` | Done |
 | UAT-25 | Tidak ada AI Assistant | 1 | `SchemaTest::testNoAiAssistantArtifacts`, `AuthorizationHttpTest::testNoAiAssistantEndpoint` | Done |

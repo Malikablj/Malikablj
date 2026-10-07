@@ -484,6 +484,8 @@ CREATE TABLE IF NOT EXISTS projects (
   start_date         DATE         NOT NULL,
   target_finish      DATE         NULL,
   forecast_finish    DATE         NULL,
+  -- batas bawah jadwal proses yang belum mulai (diisi saat Resume — PRD §8.2)
+  schedule_floor     DATE         NULL,
   status             VARCHAR(30)  NOT NULL DEFAULT 'not_started',
   is_on_hold         TINYINT(1)   NOT NULL DEFAULT 0,
   gate_enabled       TINYINT(1)   NOT NULL DEFAULT 0,
@@ -528,6 +530,7 @@ CREATE TABLE IF NOT EXISTS project_parts (
   status                        VARCHAR(30)  NOT NULL DEFAULT 'not_started',
   start_date                    DATE         NULL,
   forecast_finish               DATE         NULL,
+  schedule_floor                DATE         NULL,
   is_on_hold                    TINYINT(1)   NOT NULL DEFAULT 0,
   needs_new_masterbatch         TINYINT(1)   NULL,
   mold_supplier                 VARCHAR(190) NULL,

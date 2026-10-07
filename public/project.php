@@ -18,6 +18,8 @@ use App\Core\ValidationException;
 use App\Approval\ApprovalService;
 use App\Document\DocumentService;
 use App\Master\MasterService;
+use App\Project\HoldService;
+use App\Project\LifecycleService;
 use App\Project\NextActionService;
 use App\Project\ProjectQuery;
 use App\Record\RecordService;
@@ -71,6 +73,46 @@ if (Request::isPost()) {
                 (new NextActionService())->complete($user, (int) Request::int('next_action_id'));
                 Session::flash('success', I18n::t('next.done_msg'));
                 break;
+            case 'hold':
+                $partId = Request::int('part_id');
+                if ($partId !== null && !\App\Core\Db::value('SELECT id FROM project_parts WHERE id = ? AND project_id = ?', [$partId, $id])) {
+                    Response::error(404, I18n::t('error.not_found'));
+                }
+                (new HoldService())->hold($user, $id, $partId, (string) Request::post('reason'), (string) Request::post('expected_resume_date'));
+                Session::flash('success', $partId === null ? I18n::t('hold.done_project')
+                    : I18n::t('hold.done_part', ['part' => (string) \App\Core\Db::value('SELECT name FROM project_parts WHERE id = ?', [$partId])]));
+                break;
+            case 'cancel_part':
+            case 'reopen_part':
+                $partId = (int) Request::int('part_id');
+                $partName = \App\Core\Db::value('SELECT name FROM project_parts WHERE id = ? AND project_id = ?', [$partId, $id]);
+                if ($partName === null) {
+                    Response::error(404, I18n::t('error.not_found'));
+                }
+                if ($action === 'cancel_part') {
+                    (new LifecycleService())->cancelPart($user, $partId, (string) Request::post('reason'));
+                    Session::flash('success', I18n::t('lifecycle.done_cancel_part', ['part' => (string) $partName]));
+                } else {
+                    (new LifecycleService())->reopenPart($user, $partId, (string) Request::post('reason'));
+                    Session::flash('success', I18n::t('lifecycle.done_reopen_part', ['part' => (string) $partName]));
+                }
+                break;
+            case 'cancel_project':
+                (new LifecycleService())->cancelProject($user, $id, (string) Request::post('reason'));
+                Session::flash('success', I18n::t('lifecycle.done_cancel_project'));
+                break;
+            case 'reopen_project':
+                (new LifecycleService())->reopenProject($user, $id, (string) Request::post('reason'));
+                Session::flash('success', I18n::t('lifecycle.done_reopen_project'));
+                break;
+            case 'archive':
+                (new LifecycleService())->archive($user, $id, (string) Request::post('reason'));
+                Session::flash('success', I18n::t('lifecycle.done_archive'));
+                break;
+            case 'restore':
+                (new LifecycleService())->restore($user, $id, (string) Request::post('reason'));
+                Session::flash('success', I18n::t('lifecycle.done_restore'));
+                break;
             case 'baseline':
                 $partId = Request::int('part_id');
                 if ($partId !== null && !\App\Core\Db::value('SELECT id FROM project_parts WHERE id = ? AND project_id = ?', [$partId, $id])) {
@@ -119,6 +161,54 @@ $canBaseline = Gate::can($user, 'baseline.create');
 $canEdit = Gate::can($user, 'project.edit', ['owner_ids' => [$project['sales_pic_id'], $project['npd_pic_id']]]);
 $users = $canPlan ? $query->usersByRole() : [];
 $closed = in_array($project['status'], ['completed', 'cancelled'], true) || (int) $project['is_archived'] === 1;
+
+$life = new LifecycleService();
+$lifeAb = $life->abilities($user, $project);
+
+/** Dialog alasan (wajib) untuk aksi lifecycle; $partId null = level project. */
+$reasonDialog = static function (string $dlgId, string $action, string $title, string $hint, ?int $partId, string $submit, bool $danger = false, bool $expected = false) use ($tab, $failed): string {
+    ob_start(); ?>
+  <dialog class="modal" id="<?= e($dlgId) ?>" aria-labelledby="<?= e($dlgId) ?>-title"<?= $failed === $action && Request::int('part_id') === $partId ? ' data-autoopen' : '' ?>>
+    <form method="post">
+      <?= csrf_field() ?><input type="hidden" name="action" value="<?= e($action) ?>"><input type="hidden" name="tab" value="<?= e($tab) ?>">
+      <?php if ($partId !== null): ?><input type="hidden" name="part_id" value="<?= $partId ?>"><?php endif; ?>
+      <div class="modal-header"><h2 id="<?= e($dlgId) ?>-title"><?= e($title) ?></h2><button type="button" class="icon-btn" data-close-dialog aria-label="<?= t('common.close') ?>"><?= icon('x') ?></button></div>
+      <div class="modal-body stack">
+        <p class="muted small"><?= e($hint) ?></p>
+        <div class="field"><label for="<?= e($dlgId) ?>-reason"><?= t('common.reason_required') ?></label>
+          <textarea class="input" id="<?= e($dlgId) ?>-reason" name="reason" rows="3" required maxlength="1000"></textarea></div>
+        <?php if ($expected): ?>
+          <div class="field"><label for="<?= e($dlgId) ?>-exp"><?= t('hold.expected_resume') ?></label>
+            <input class="input" type="date" id="<?= e($dlgId) ?>-exp" name="expected_resume_date"></div>
+        <?php endif; ?>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn" data-close-dialog><?= t('common.cancel') ?></button>
+        <button type="submit" class="btn <?= $danger ? 'btn-danger' : 'btn-primary' ?>"><?= e($submit) ?></button></div>
+    </form>
+  </dialog>
+    <?php return (string) ob_get_clean();
+};
+
+$lifeItems = [];
+if ($lifeAb['hold']) {
+    $lifeItems[] = '<button type="button" role="menuitem" data-open-dialog="dlg-hold-0">' . icon('pause') . ' ' . t('hold.hold_project') . '</button>';
+}
+if ($lifeAb['resume']) {
+    $lifeItems[] = '<a role="menuitem" href="' . e(url('resume.php', ['project' => $id])) . '">' . icon('play') . ' ' . t('hold.resume_project') . '</a>';
+}
+if ($lifeAb['cancel']) {
+    $lifeItems[] = '<button type="button" role="menuitem" data-open-dialog="dlg-cancel-project">' . icon('x') . ' ' . t('lifecycle.cancel_project') . '</button>';
+}
+if ($lifeAb['reopen']) {
+    $lifeItems[] = '<button type="button" role="menuitem" data-open-dialog="dlg-reopen-project">' . icon('refresh') . ' ' . t('lifecycle.reopen_project') . '</button>';
+}
+if ($lifeAb['archive']) {
+    $lifeItems[] = '<button type="button" role="menuitem" data-open-dialog="dlg-archive">' . icon('archive') . ' ' . t('lifecycle.archive') . '</button>';
+}
+if ($lifeAb['restore']) {
+    $lifeItems[] = '<button type="button" role="menuitem" data-open-dialog="dlg-restore">' . icon('refresh') . ' ' . t('lifecycle.restore') . '</button>';
+}
+$headerActions = $lifeItems ? '<details class="menu project-menu"><summary class="btn">' . t('lifecycle.actions') . ' ' . icon('chevron-down', 'icon icon-sm') . '</summary><div class="menu-panel" role="menu">' . implode('', $lifeItems) . '</div></details>' : '';
 
 $procName = static fn (array $p): string => ProjectQuery::processName($p);
 $pName = static fn (array $p): string => e($p['code']) . ' · ' . e(ProjectQuery::processName($p));
@@ -245,6 +335,9 @@ $renderNext = static function (int $partKey, string $scopeName) use ($nextAction
         <?= status_badge((string) $pt['status']) ?>
       </div>
       <div class="card-body stack">
+        <?php if ($pt['cancelled_at'] && $pt['start_date']): ?>
+          <p class="small muted"><?= t('lifecycle.part_cancelled_note', ['date' => I18n::dateTime($pt['cancelled_at']), 'reason' => (string) $pt['cancel_reason']]) ?></p>
+        <?php endif; ?>
         <?php if ($pt['start_date']): ?>
           <div>
             <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?= $pct ?>" aria-label="<?= t('project.progress') ?>"><span style="width: <?= $pct ?>%"></span></div>
@@ -273,8 +366,20 @@ $renderNext = static function (int $partKey, string $scopeName) use ($nextAction
           <?php endforeach; ?>
         </dl>
       </div>
-      <?php if ($canPlan && !$closed && $pt['cancelled_at'] === null && $pt['completed_at'] === null): ?>
-        <div class="card-footer"><button type="button" class="btn btn-sm" data-open-dialog="dlg-pics-<?= (int) $pt['id'] ?>"><?= icon('users') ?> <?= t('project.assign_pics') ?></button></div>
+      <?php $pab = $life->partAbilities($user, $project, $pt); $canPics = $canPlan && !$closed && $pt['cancelled_at'] === null && $pt['completed_at'] === null; ?>
+      <?php if ($canPics || in_array(true, $pab, true)): ?>
+        <div class="card-footer">
+          <?php if ($canPics): ?><button type="button" class="btn btn-sm" data-open-dialog="dlg-pics-<?= (int) $pt['id'] ?>"><?= icon('users') ?> <?= t('project.assign_pics') ?></button><?php endif; ?>
+          <?php if ($pab['hold']): ?><button type="button" class="btn btn-sm" data-open-dialog="dlg-hold-<?= (int) $pt['id'] ?>"><?= icon('pause') ?> <?= t('hold.hold_part') ?></button><?php endif; ?>
+          <?php if ($pab['resume']): ?><a class="btn btn-sm" href="<?= e(url('resume.php', ['project' => $id, 'part' => $pt['id']])) ?>"><?= icon('play') ?> <?= t('hold.resume_part') ?></a><?php endif; ?>
+          <?php if ($pab['cancel']): ?><button type="button" class="btn btn-sm btn-ghost" data-open-dialog="dlg-cancel-<?= (int) $pt['id'] ?>"><?= icon('x') ?> <?= t('lifecycle.cancel_part') ?></button><?php endif; ?>
+          <?php if ($pab['reopen']): ?><button type="button" class="btn btn-sm" data-open-dialog="dlg-reopen-<?= (int) $pt['id'] ?>"><?= icon('refresh') ?> <?= t('lifecycle.reopen_part') ?></button><?php endif; ?>
+        </div>
+        <?php if ($pab['hold']): ?><?= $reasonDialog('dlg-hold-' . (int) $pt['id'], 'hold', I18n::t('hold.hold_part') . ' — ' . $pt['name'], I18n::t('hold.confirm_hint'), (int) $pt['id'], I18n::t('hold.hold'), false, true) ?><?php endif; ?>
+        <?php if ($pab['cancel']): ?><?= $reasonDialog('dlg-cancel-' . (int) $pt['id'], 'cancel_part', I18n::t('lifecycle.cancel_part') . ' — ' . $pt['name'], I18n::t('lifecycle.cancel_hint'), (int) $pt['id'], I18n::t('lifecycle.cancel_part'), true) ?><?php endif; ?>
+        <?php if ($pab['reopen']): ?><?= $reasonDialog('dlg-reopen-' . (int) $pt['id'], 'reopen_part', I18n::t('lifecycle.reopen_part') . ' — ' . $pt['name'], I18n::t('lifecycle.reopen_hint'), (int) $pt['id'], I18n::t('lifecycle.reopen')) ?><?php endif; ?>
+      <?php endif; ?>
+      <?php if ($canPics): ?>
         <dialog class="modal" id="dlg-pics-<?= (int) $pt['id'] ?>" aria-labelledby="dlg-pics-title-<?= (int) $pt['id'] ?>"<?= $failed === 'part_pics' && (int) Request::post('part_id') === (int) $pt['id'] ? ' data-autoopen' : '' ?>>
           <form method="post">
             <?= csrf_field() ?><input type="hidden" name="action" value="part_pics"><input type="hidden" name="part_id" value="<?= (int) $pt['id'] ?>">
@@ -475,7 +580,7 @@ $actPages = max(1, (int) ceil($actTotal / 50));
 </section>
 
 <?php else: ?>
-<?php $history = RevisionHistory::forProject($id); $changes = $query->scheduleChanges($id); $baselines = $query->baselines($id); $gates = $query->gates($id); ?>
+<?php $history = RevisionHistory::forProject($id); $changes = $query->scheduleChanges($id); $baselines = $query->baselines($id); $gates = $query->gates($id); $holds = (new HoldService())->history($id); ?>
 <div class="grid grid-2">
   <section class="card" aria-labelledby="sec-rev">
     <div class="card-header"><h2 id="sec-rev"><?= t('project.revision_history') ?></h2></div>
@@ -526,6 +631,28 @@ $actPages = max(1, (int) ceil($actTotal / 50));
     <?php endif; ?>
   </div>
 </div>
+<section class="card section" aria-labelledby="sec-hold">
+  <div class="card-header"><h2 id="sec-hold"><?= t('hold.history') ?></h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th scope="col"><?= t('hold.scope') ?></th><th scope="col"><?= t('hold.held_at') ?></th><th scope="col"><?= t('common.reason') ?></th><th scope="col"><?= t('hold.resumed_at') ?></th><th scope="col" class="right"><?= t('hold.working_days') ?></th><th scope="col"><?= t('hold.new_target') ?></th></tr></thead>
+      <tbody>
+        <?php if (!$holds): ?><tr><td colspan="6" class="table-empty"><?= t('hold.history_empty') ?></td></tr><?php endif; ?>
+        <?php foreach ($holds as $h): ?>
+          <tr>
+            <td class="small"><?= $h['part_id'] === null ? t('hold.scope_project') : e($h['part_name']) ?></td>
+            <td class="small nowrap"><?= fmt_datetime($h['held_at']) ?><div class="muted"><?= e($h['held_by_name'] ?? '–') ?></div></td>
+            <td class="small"><?= e($h['reason']) ?><?= $h['expected_resume_date'] ? '<div class="muted">' . t('hold.expected', ['date' => I18n::date($h['expected_resume_date'])]) . '</div>' : '' ?>
+              <?= (int) $h['reminder_count'] > 0 ? '<div class="muted">' . t('hold.reminders') . ': ' . (int) $h['reminder_count'] . '</div>' : '' ?></td>
+            <td class="small nowrap"><?php if ($h['resumed_at']): ?><?= fmt_datetime($h['resumed_at']) ?><div class="muted"><?= e($h['resumed_by_name'] ?? '–') ?></div><?= $h['resume_note'] ? '<div>' . e($h['resume_note']) . '</div>' : '' ?><?php else: ?><span class="badge badge-neutral"><?= t('hold.still_on_hold') ?></span><?php endif; ?></td>
+            <td class="right small"><?= $h['hold_working_days'] === null ? '–' : (int) $h['hold_working_days'] ?></td>
+            <td class="small nowrap"><?= $h['new_target_finish'] ? fmt_date($h['new_target_finish']) : '–' ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</section>
 <section class="card section" aria-labelledby="sec-shift">
   <div class="card-header"><h2 id="sec-shift"><?= t('project.schedule_changes') ?></h2></div>
   <div class="table-wrap">
@@ -609,4 +736,9 @@ $actPages = max(1, (int) ceil($actTotal / 50));
     </form>
   </dialog>
 <?php endif; ?>
+<?php if ($lifeAb['hold']): ?><?= $reasonDialog('dlg-hold-0', 'hold', I18n::t('hold.hold_project') . ' — ' . $project['code'], I18n::t('hold.confirm_hint'), null, I18n::t('hold.hold'), false, true) ?><?php endif; ?>
+<?php if ($lifeAb['cancel']): ?><?= $reasonDialog('dlg-cancel-project', 'cancel_project', I18n::t('lifecycle.cancel_project') . ' — ' . $project['code'], I18n::t('lifecycle.cancel_hint') . ' ' . I18n::t('lifecycle.cancel_project_hint'), null, I18n::t('lifecycle.cancel_project'), true) ?><?php endif; ?>
+<?php if ($lifeAb['reopen']): ?><?= $reasonDialog('dlg-reopen-project', 'reopen_project', I18n::t('lifecycle.reopen_project') . ' — ' . $project['code'], I18n::t('lifecycle.reopen_hint'), null, I18n::t('lifecycle.reopen')) ?><?php endif; ?>
+<?php if ($lifeAb['archive']): ?><?= $reasonDialog('dlg-archive', 'archive', I18n::t('lifecycle.archive') . ' — ' . $project['code'], I18n::t('lifecycle.archive_hint'), null, I18n::t('lifecycle.archive')) ?><?php endif; ?>
+<?php if ($lifeAb['restore']): ?><?= $reasonDialog('dlg-restore', 'restore', I18n::t('lifecycle.restore') . ' — ' . $project['code'], I18n::t('lifecycle.archive_hint'), null, I18n::t('lifecycle.restore')) ?><?php endif; ?>
 <?php require APP_ROOT . '/includes/layout/footer.php'; ?>
