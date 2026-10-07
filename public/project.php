@@ -106,30 +106,7 @@ $pageTitle = $project['code'] . ' — ' . $project['name'];
 $activeNav = 'projects';
 require APP_ROOT . '/includes/layout/header.php';
 ?>
-<nav class="breadcrumbs" aria-label="<?= t('common.breadcrumbs') ?>">
-  <a href="<?= e(url('projects.php')) ?>"><?= t('project.list_title') ?></a><span class="breadcrumbs-sep">/</span><span class="mono"><?= e($project['code']) ?></span>
-</nav>
-<div class="page-header">
-  <div>
-    <p class="eyebrow mono"><?= e($project['code']) ?> · <?= e($project['npr_number']) ?></p>
-    <h1><?= e($project['name']) ?></h1>
-    <p>
-      <?= status_badge((string) $project['status']) ?>
-      <?php if ($project['at_risk']): ?><span class="badge badge-warning"><?= icon('flag', 'icon icon-sm') ?> <?= t('project.at_risk') ?></span><?php endif; ?>
-      <?php if ((int) $project['is_archived'] === 1): ?><span class="badge badge-neutral"><?= t('project.archived_badge') ?></span><?php endif; ?>
-      <span class="badge badge-neutral"><?= t('project.priority.' . $project['priority']) ?></span>
-    </p>
-  </div>
-  <div class="page-actions">
-    <a class="btn" href="<?= e(url('npr-edit.php', ['id' => $project['npr_id']])) ?>"><?= icon('file-text') ?> <?= t('project.open_npr') ?></a>
-  </div>
-</div>
-
-<nav class="tabs" aria-label="<?= t('project.tabs') ?>">
-  <?php foreach (['overview' => 'project.tab.overview', 'processes' => 'project.tab.processes', 'history' => 'project.tab.history'] as $k => $label): ?>
-    <a href="<?= e(url('project.php', ['id' => $id, 'tab' => $k])) ?>"<?= $tab === $k ? ' class="active" aria-current="page"' : '' ?>><?= t($label) ?></a>
-  <?php endforeach; ?>
-</nav>
+<?php require APP_ROOT . '/includes/project_header.php'; ?>
 
 <?php if ($tab === 'overview'): ?>
 <div class="grid grid-2">

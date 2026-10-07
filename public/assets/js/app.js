@@ -185,6 +185,11 @@
   // --- Dialog yang dibuka otomatis (mis. setelah validasi gagal) ---
   doc.querySelectorAll('dialog[data-autoopen]').forEach(function (d) { if (d.showModal) { d.showModal(); } });
 
+  // --- Filter yang langsung dikirim saat berubah: <select data-autosubmit> ---
+  doc.addEventListener('change', function (e) {
+    if (e.target.matches && e.target.matches('[data-autosubmit]') && e.target.form) { e.target.form.submit(); }
+  });
+
   // --- Dialog: <button data-open-dialog="id"> & [data-close-dialog] ---
   doc.addEventListener('click', function (e) {
     var opener = e.target.closest('[data-open-dialog]');

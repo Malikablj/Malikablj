@@ -68,6 +68,7 @@ if (Request::isPost()) {
             case 'plan':
                 $engine->plan($user, $id, is_array($_POST['plan'] ?? null) ? $_POST['plan'] + ['lock_version' => Request::post('lock_version')] : [], Request::post('reason'));
                 Session::flash('success', I18n::t('process.plan_saved'));
+                $back = Request::safeReturnPath(Request::post('return'), $back); // mis. kembali ke timeline part
                 break;
             case 'deps':
                 $depSvc->save($user, $id, is_array($_POST['deps'] ?? null) ? array_values($_POST['deps']) : [], Request::post('reason') ?: null, Request::int('lock_version'));

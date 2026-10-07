@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * Export dokumen yang dibuat di server (PDF via mPDF, Excel via PhpSpreadsheet).
  *   export.php?type=npr_pdf&id=<npr_id>
+ *   export.php?type=timeline_pdf|timeline_xlsx&project=<id>&scope=project|part|all[&part=<id>]
  * Setiap export dicatat di audit log (PRD §4.6, §9.4).
  */
 
@@ -15,6 +16,8 @@ use App\Core\I18n;
 use App\Core\Request;
 use App\Core\Response;
 use App\Report\NprPdf;
+use App\Report\TimelineExcel;
+use App\Report\TimelinePdf;
 
 $user = require_login();
 $type = (string) Request::query('type', '');
@@ -41,6 +44,18 @@ switch ($type) {
         $projectId = \App\Core\Db::value('SELECT id FROM projects WHERE npr_id = ?', [$id]);
         AuditLogger::log($pdf['final'] ? 'export.npr_pdf' : 'export.npr_pdf_preview', 'npr', $id, null, ['filename' => $pdf['filename']], null, $projectId !== null ? (int) $projectId : null, $user);
         $send($pdf['content'], $pdf['filename'], 'application/pdf', !$pdf['final']);
+        // no break
+    case 'timeline_pdf':
+    case 'timeline_xlsx':
+        Gate::authorize($user, 'export.timeline');
+        $projectId = (int) Request::int('project', 0);
+        $scope = (string) Request::query('scope', 'project');
+        $partId = Request::int('part');
+        $file = $type === 'timeline_pdf'
+            ? (new TimelinePdf())->build($user, $projectId, $scope, $partId)
+            : (new TimelineExcel())->build($user, $projectId, $scope, $partId);
+        AuditLogger::log('export.' . $type, 'project', $projectId, null, ['filename' => $file['filename'], 'scope' => $scope, 'part_id' => $partId], null, $projectId, $user);
+        $send($file['content'], $file['filename'], $type === 'timeline_pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         // no break
     default:
         Response::error(404, I18n::t('error.not_found'));

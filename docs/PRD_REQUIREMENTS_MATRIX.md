@@ -47,7 +47,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | DATA-01 | Hierarki Project → Part → Proses; part beda jenis dalam satu project | 3.1 | Must | 3 | `projects`, `project_parts`, `processes`, `ProjectService`, `ProjectQuery`, `public/project.php` | Done | `WorkflowEngineTest`, `ProjectHttpTest` |
 | DATA-02 | Part ditolak/dibatalkan tidak membatalkan project; project Cancelled bila semua part Cancelled | 3.1 | Must | 3 | `StatusService`, `ProjectService::cancelPartForNprPart`, `WorkflowEngine::onPartCancelled` | Done | `StatusServiceTest`, `WorkflowEngineTest::testPartCancelledAfterStartDetachesFromGate`, `NprServiceTest` |
-| DATA-03 | Project satu part tampil sederhana | 3.1 | Must | 6 | `public/project.php` | Partial | `ProjectHttpTest` (timeline sederhana menyusul fase 6) |
+| DATA-03 | Project satu part tampil sederhana | 3.1 | Must | 6 | `public/project.php` | Done | `TimelineHttpTest`, `ProjectHttpTest` (project satu part tampil sederhana: satu baris part) |
 | DATA-04 | Status proses: Not Started, Current, Completed, Revision, Problem, Skipped; >1 proses aktif per part | 3.3 | Must | 4 | `WorkflowEngine` | Done | `WorkflowEngineTest` (N1 & N3 aktif bersamaan) |
 | DATA-05 | Status turunan part/project sesuai tabel §3.3 (Waiting Approval > Waiting External > On Progress, Hold, Siap Finish, Cancelled) | 3.3 | Must | 4 | `App\Project\StatusService` | Done | `StatusServiceTest`, `WorkflowEngineTest` |
 | DATA-06 | Overdue = tanda tambahan terhitung (bukan status dasar) | 3.3, 7.1 | Must | 8 | `App\Scheduling\Lateness`, `ProjectQuery` | Partial | `ProjectQuery` menampilkan Overdue (hari kerja); notifikasi & panel fase 8 |
@@ -84,7 +84,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-WF-01 | Banyak proses aktif bersamaan per part; Tracker & detail part menampilkan semuanya | 5 | Must | 4/6 | `WorkflowEngine`, `public/project.php`, `public/process.php` | Partial | `WorkflowEngineTest` (UAT-06); Tracker fase 6 |
+| FR-WF-01 | Banyak proses aktif bersamaan per part; Tracker & detail part menampilkan semuanya | 5 | Must | 4/6 | `WorkflowEngine`, `public/project.php`, `public/process.php` | Done | `WorkflowEngineTest` (UAT-06), `TimelineTest` (Tracker menampilkan semua proses aktif) |
 | FR-WF-02 | Dependency FS, SS, FF, Paralel; lag ±; banyak predecessor | 5.3 | Must | 4/5 | `DependencyService`, `Scheduler` | Done | `SchedulerTest`, `DependencyServiceTest` |
 | FR-WF-03 | Aktivasi otomatis saat syarat terpenuhi; FF memblokir penyelesaian dini | 5.4 | Must | 4 | `WorkflowEngine::activateReady/complete/ffBlockers`, `cron/overdue.php` | Done | `WorkflowEngineTest`, `DailyActivationTest`, `SchedulerTest` (FF) |
 | FR-WF-04 | Tolak dependency melingkar (template & override) | 5.3 | Must | 4 | `DependencyService`, `Scheduler::topologicalOrder` (CycleException) | Partial | `DependencyServiceTest::testCycleIsRejected` (UAT-13); validasi template fase 4/Pengaturan Workflow |
@@ -110,18 +110,18 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | FR-SCH-03 | Tanggal manual = "tidak mulai sebelum"; peringatan bila bertentangan dependency | 6.1 | Must | 5 | `Scheduler` | Done | `SchedulerTest` (UAT-08) |
 | FR-SCH-04 | Aktual ≠ rencana → proses bergantung bergeser; proses tak terkait tidak; semua tercatat | 6.4 | Must | 5 | `Scheduler`, `ScheduleService::recalculate`, `schedule_changes` | Done | `SchedulerTest` (contoh §6.4), `WorkflowEngineTest::testCompleteActivatesSuccessorAndShiftsLateSchedule` (UAT-07) |
 | FR-SCH-05 | Forecast Finish proses & perkiraan selesai part/project; Target Finish tetap; tanda Berisiko | 6.3, 6.4 | Must | 5 | `Scheduler`, `ScheduleService::checkTargetRisk`, `ProjectQuery::atRisk` | Done | `SchedulerTest`, `ScheduleServiceTest` (UAT-10) |
-| FR-SCH-06 | Timeline dua level (Project & Part) dengan klik part | 6.6 | Must | 6 | `public/project.php?tab=timeline` | Planned | `TimelineHttpTest` (UAT-18) |
-| FR-SCH-07 | Export timeline PDF & Excel dengan No. Dokumen PIK-FORM-NPD-07 pojok kanan atas | 6.7 | Must | 6 | `TimelinePdf`, `TimelineExcel` | Planned | `PdfExportTest`, `ExcelExportTest` (UAT-19) |
-| FR-SCH-08 | Baseline berversi + batang baseline di Gantt | 6.5 | Should | 5/6 | `ScheduleService::createBaseline/setBaseline` | Partial | `ScheduleServiceTest`; batang baseline Gantt fase 6 |
-| FR-SCH-09 | Penyorotan jalur kritis pada Gantt | 6 | Could | 6 | `Scheduler::criticalPath` | Partial | `Scheduler::criticalPath` + `SchedulerTest`; penyorotan Gantt fase 6 |
+| FR-SCH-06 | Timeline dua level (Project & Part) dengan klik part | 6.6 | Must | 6 | `TimelineService`, `public/timeline.php`, `includes/gantt.php`, `public/assets/js/gantt.js` | Done | `TimelineTest`, `TimelineHttpTest` (UAT-18), `tests/browser/timeline_flow.py` |
+| FR-SCH-07 | Export timeline PDF & Excel dengan No. Dokumen PIK-FORM-NPD-07 pojok kanan atas | 6.7 | Must | 6 | `TimelineExport`, `TimelinePdf` (mPDF), `TimelineExcel` (PhpSpreadsheet), `public/export.php` | Done | `TimelineTest` (No. dokumen tiap halaman/sheet, tanggal asli, freeze, filter), `TimelineHttpTest` (UAT-19) |
+| FR-SCH-08 | Baseline berversi + batang baseline di Gantt | 6.5 | Should | 5/6 | `ScheduleService::createBaseline/setBaseline`, batang baseline Gantt | Done | `ScheduleServiceTest`, `TimelineTest`, browser toggle baseline |
+| FR-SCH-09 | Penyorotan jalur kritis pada Gantt | 6 | Could | 6 | `TimelineService::criticalInPart`, toggle Gantt | Done | `TimelineTest::testPartLevelRowsDependenciesCriticalAndBars` |
 | FR-SCH-10 | Pengaturan "tarik maju jadwal bila selesai lebih awal" | 6.4 | Should | 5 | `Scheduler` + setting `schedule.pull_forward_on_early_finish` | Done | `SchedulerTest` |
 | SCH-11 | Planned Start/Finish selalu hari kerja; tanggal aktual boleh hari apa pun | 6.2 | Must | 5 | `Scheduler` | Done | `SchedulerTest`, `WorkflowEngineTest` |
 | SCH-12 | Urutan topologis; FF memperpanjang durasi; Skipped durasi nol meneruskan tanggal | 6.3 | Must | 5 | `Scheduler` | Done | `SchedulerTest` |
 | SCH-13 | Proses berjalan mempertahankan Planned; Forecast = max(Planned Finish, hari ini) | 6.3 | Must | 5 | `Scheduler` | Done | `SchedulerTest` |
-| SCH-14 | Ikon kunci tanggal manual; proses Overdue merah; Skipped bergaris | 6.6 | Must | 6 | Gantt/timeline | Planned | `TimelineHttpTest` |
-| SCH-15 | Gantt lintas project (Project/Part), filter customer/PIC/status/jenis, baseline opsional | 6.8 | Must | 6 | `public/gantt.php`, `public/assets/js/gantt.js` | Planned | `GanttApiTest` |
-| SCH-16 | Process Tracker: kartu per part-proses aktif | 6.8 | Must | 6 | `public/tracker.php` | Planned | `TrackerHttpTest` |
-| SCH-17 | Kalender: deadline, approval, trial, commissioning, material, validasi, agenda manual, libur | 6.8 | Must | 6 | `public/calendar.php`, `CalendarService` | Planned | `CalendarServiceTest` |
+| SCH-14 | Ikon kunci tanggal manual; proses Overdue merah; Skipped bergaris | 6.6 | Must | 6 | `includes/gantt.php`, `public/timeline.php` | Done | `TimelineTest`, `timeline_flow.py` (kunci tanggal manual, Overdue merah, Skipped bergaris) |
+| SCH-15 | Gantt lintas project (Project/Part), filter customer/PIC/status/jenis, baseline opsional | 6.8 | Must | 6 | `PortfolioQuery::gantt`, `public/gantt.php` | Done | `TimelineTest::testPortfolioGanttFiltersAndTracker`, `TimelineHttpTest` |
+| SCH-16 | Process Tracker: kartu per part-proses aktif | 6.8 | Must | 6 | `PortfolioQuery::tracker`, `public/tracker.php` | Done | `TimelineTest`, `TimelineHttpTest` |
+| SCH-17 | Kalender: deadline, approval, trial, commissioning, material, validasi, agenda manual, libur | 6.8 | Must | 6 | `CalendarService`, `public/calendar.php` | Done | `TimelineTest::testCalendarEventsAndAgendaPermissions`, `TimelineHttpTest` |
 | SCH-18 | Hitung ulang jadwal satu project ≤ 1 detik (10 part × 20 proses), dalam satu transaksi | 13.1, 13.3 | Must | 5/12 | `Scheduler` | Done | `SchedulerTest` (201 node < 1 dtk), recalc dalam transaksi + `FOR UPDATE` |
 | SCH-19 | Persetujuan Target Finish baru oleh NPD/Admin dengan alasan; tidak mengubah baseline | 6.4 | Must | 5 | `ScheduleService::changeTarget` | Done | `ScheduleServiceTest` |
 
@@ -240,8 +240,8 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | UAT-15 | Customer Artwork Approval Not Approved → kembali ke Artwork, iterasi +1, jadwal dihitung ulang | 4 | `WorkflowEngineTest::testArtworkNotApprovedReturnsToArtwork` | Done |
 | UAT-16 | Hold part lalu project 30 hari → beku, tidak overdue, pengingat 30 hari | 9 | `HoldServiceTest::testUat16` | Planned |
 | UAT-17 | Resume project → target baru wajib, baseline baru, jadwal lama tersimpan | 9 | `HoldServiceTest::testUat17` | Planned |
-| UAT-18 | Management buka timeline, klik part BODY → Level 2, tidak dapat mengubah | 6 | `TimelineHttpTest::testUat18` | Planned |
-| UAT-19 | Export timeline PDF & Excel, PIK-FORM-NPD-07 di kanan atas, overdue merah | 6 | `ExcelExportTest`, `PdfExportTest` | Planned |
+| UAT-18 | Management buka timeline, klik part BODY → Level 2, tidak dapat mengubah | 6 | `TimelineHttpTest::testPagesRenderForAllRoles` (Management melihat Level 1/2 tanpa form planning) | Done |
+| UAT-19 | Export timeline PDF & Excel, PIK-FORM-NPD-07 di kanan atas, overdue merah | 6 | `TimelineTest::testTimelinePdfHasDocNumberOnEveryPageAndOverdueRows`, `testTimelineExcelSheetsDatesFreezeFilterAndDocNumber`, `TimelineHttpTest::testExports` | Done |
 | UAT-20 | KPI PIC: Management & Admin bisa, Sales ditolak UI & API | 10 | `AuthorizationHttpTest::testUat20` | Planned |
 | UAT-21 | Mode gelap semua halaman #000000 | 11 | browser test `tests/browser` | Planned |
 | UAT-22 | NPR, timeline, dashboard di tablet & HP | 11 | browser test `tests/browser` | Planned |
