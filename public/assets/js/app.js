@@ -235,4 +235,30 @@
       fallback();
     }
   });
+
+  // --- Tabel → kartu di HP: label kolom dari <th> (PRD §11.6) ---
+  doc.querySelectorAll('table.table-cards').forEach(function (t) {
+    var heads = Array.prototype.map.call(t.querySelectorAll('thead th'), function (th) { return th.textContent.trim(); });
+    t.querySelectorAll('tbody tr').forEach(function (tr) {
+      Array.prototype.forEach.call(tr.children, function (td, i) {
+        if (!td.hasAttribute('data-label')) { td.setAttribute('data-label', heads[i] || ''); }
+      });
+    });
+  });
+
+  // --- Angka kartu KPI naik singkat sekali saat pertama tampil (PRD §11.5); dimatikan bila reduce motion ---
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  doc.querySelectorAll('[data-countup]').forEach(function (el) {
+    var target = parseInt(el.textContent, 10);
+    if (reduce || !(target > 0) || !window.requestAnimationFrame) { return; }
+    var start = null, dur = 450;
+    el.textContent = '0';
+    var step = function (ts) {
+      if (start === null) { start = ts; }
+      var p = Math.min(1, (ts - start) / dur);
+      el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) { window.requestAnimationFrame(step); }
+    };
+    window.requestAnimationFrame(step);
+  });
 })();

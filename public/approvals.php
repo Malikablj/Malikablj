@@ -78,7 +78,7 @@ require APP_ROOT . '/includes/layout/header.php';
 
 <div class="card">
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-cards">
       <thead><tr>
         <th scope="col"><?= t('approval.code') ?></th><th scope="col"><?= t('approval.type') ?></th><th scope="col"><?= t('project.project') ?> / <?= t('process.process') ?></th>
         <th scope="col"><?= t('common.status') ?></th><th scope="col"><?= t('approval.document') ?></th><th scope="col"><?= t('approval.requested') ?></th>

@@ -106,7 +106,7 @@ require APP_ROOT . '/includes/layout/header.php';
 
 <div class="card">
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-cards">
       <thead>
         <tr>
           <th scope="col"><?= t('project.project') ?></th>

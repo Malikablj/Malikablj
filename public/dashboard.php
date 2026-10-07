@@ -100,7 +100,7 @@ require APP_ROOT . '/includes/layout/header.php';
     <?php $c = $data['cards'][$k]; ?>
     <a class="card kpi-card<?= isset($tone[$k]) && $c['projects'] > 0 ? ' kpi-' . $tone[$k] : '' ?>" href="<?= e(url('projects.php', $cardLinks[$k] + $base)) ?>" data-kpi="<?= e($k) ?>">
       <span class="kpi-head"><span class="kpi-icon"><?= icon($cardIcons[$k]) ?></span><span class="kpi-label"><?= t('dash.card.' . $k) ?></span></span>
-      <span class="kpi-value"><?= (int) $c['projects'] ?></span>
+      <span class="kpi-value" data-countup data-value="<?= (int) $c['projects'] ?>"><?= (int) $c['projects'] ?></span>
       <span class="kpi-sub"><?= t('dash.projects_parts', ['parts' => (int) $c['parts']]) ?></span>
     </a>
   <?php endforeach; ?>

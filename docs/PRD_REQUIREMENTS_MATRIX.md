@@ -138,7 +138,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | NTF-07 | Bell, daftar, tandai dibaca, tautan ke proses | 7.3 | Must | 8 | `NotificationCenter`, `public/notifications.php`, lonceng di header | Done | `NotificationFlowTest`, `NotificationHttpTest::testBellListOpenAndOwnership` |
 | NTF-08 | Email memakai bahasa penerima; deduplikasi; pemindaian terjadwal tiap jam di hari kerja | 7.3 | Must | 8 | `Notifier` (bahasa penerima, `dedupe_key`), cron jam kerja | Done | `NotificationFlowTest` |
 | NTF-09 | Kegagalan email tidak menggagalkan proses bisnis dan terlihat Admin | 7.3 | Must | 8 | `MailQueue` (antrean terpisah dari transaksi), halaman Antrean Email | Done | `NotificationFlowTest`, `NotificationHttpTest` |
-| NTF-10 | Overdue selalu merah + ikon + teks "Overdue" (tidak hanya warna) | 7.1, 11.8 | Must | 8/11 | lencana Overdue + ikon peringatan + teks | Partial | Halaman project/proses/tracker/timeline; audit kontras di fase 11 |
+| NTF-10 | Overdue selalu merah + ikon + teks "Overdue" (tidak hanya warna) | 7.1, 11.8 | Must | 8/11 | lencana Overdue + ikon peringatan + teks; warna teks AA (`--danger-text`) | Done | browser `ui_audit.py` (kontras), `project_flow.py`, `report_flow.py` |
 
 ## 8. Hold, Resume, Cancel, Arsip (PRD §8)
 
@@ -189,14 +189,14 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-UI-01 | Token warna, font Inter self-hosted, aturan aksen | 11.2–11.4 | Must | 1/11 | `public/assets/css/app.css` | Partial | `UiContractTest` |
-| FR-UI-02 | Mode gelap #000000 di semua halaman/komponen, tanpa kilatan terang | 11.3 | Must | 1/11 | CSS tokens + `data-theme` | Partial | `UiContractTest`, browser test (UAT-21) |
-| FR-UI-03 | Responsif laptop/tablet/HP (drawer, kartu, stepper, Gantt scroll, target sentuh ≥ 44px) | 11.6 | Must | 11 | CSS | Planned | browser test (UAT-22) |
-| FR-UI-04 | Animasi 150–250 ms, menghormati reduce motion | 11.5 | Should | 11 | CSS | Planned | `UiContractTest` |
-| FR-UI-05 | Kolom NPR biru/pink dengan legenda dan varian gelap | 11.2 | Must | 2 | CSS `--sales-tint`/`--npd-tint` | Planned | `UiContractTest` |
-| UI-06 | Logo PIK di login, header, kop PDF/Excel; varian mode gelap | 11.4 | Must | 1/6 | `public/assets/images/logo-*.png` | Partial | `UiContractTest` |
+| FR-UI-01 | Token warna, font Inter self-hosted, aturan aksen | 11.2–11.4 | Must | 1/11 | `public/assets/css/app.css` (token PRD; teks di atas latar lembut & tautan memakai varian AA — OQ-32) | Done | `UiContractTest` |
+| FR-UI-02 | Mode gelap #000000 di semua halaman/komponen, tanpa kilatan terang | 11.3 | Must | 1/11 | CSS tokens + `data-theme` (skrip tema sebelum CSS), `color-scheme`, token chip/tooltip gelap | Done | `UiContractTest`, browser `ui_audit.py` (36 halaman × HP/tablet/desktop: latar #000, tanpa permukaan terang) |
+| FR-UI-03 | Responsif laptop/tablet/HP (drawer, kartu, stepper, Gantt scroll, target sentuh ≥ 44px) | 11.6 | Must | 2/6/11 | drawer, `.table-cards` (daftar → kartu di HP), kolom pertama menempel di tablet, stepper NPR, timeline default daftar di HP, `@media (pointer: coarse)` 44 px | Done | browser `ui_audit.py` (tanpa scroll horizontal, target ≥ 44 px), `UiContractTest` |
+| FR-UI-04 | Animasi 150–250 ms, menghormati reduce motion | 11.5 | Should | 11 | CSS (masuk halaman, dialog, toast, batang progres/Gantt tumbuh), angka KPI naik sekali (`data-countup`) | Done | `UiContractTest::testFocusVisibleReducedMotionAndDurations` |
+| FR-UI-05 | Kolom NPR biru/pink dengan legenda dan varian gelap | 11.2 | Must | 2 | CSS `--sales-tint`/`--npd-tint` + legenda; teks sekunder di area tint AA | Done | `NprHttpTest`, browser `npr_flow.py`, `ui_audit.py` |
+| UI-06 | Logo PIK di login, header, kop PDF/Excel; varian mode gelap | 11.4 | Must | 1/6/10 | `public/assets/images/logo-light.png`/`logo-dark.png` (login, sidebar), `PdfFactory::logoPath` (PDF NPR/Timeline/KPI), `ReportWorkbook`/`TimelineExcel` | Done | `UiContractTest`, `NprPdfTest`, `ReportsTest` |
 | UI-07 | Navigasi: Dashboard · Project · Process Tracker · Gantt · Kalender · Dokumen · Approval · Laporan · Notifikasi · Pengaturan (Admin) | 11.7 | Must | 1 | `includes/layout/sidebar.php` | Done | `LayoutHttpTest` |
-| UI-08 | Aksesibilitas: kontras WCAG AA, keyboard, fokus terlihat, status tidak hanya warna | 11.8 | Must | 11 | CSS/markup | Planned | `UiContractTest` |
+| UI-08 | Aksesibilitas: kontras WCAG AA, keyboard, fokus terlihat, status tidak hanya warna | 11.8 | Must | 11 | token AA, `:focus-visible`, label form & alt gambar, lencana berteks | Done | browser `ui_audit.py` (kontras AA, label, alt, fokus), `UiContractTest` |
 | I18N-01 | Bahasa Indonesia (bawaan) & Inggris; pilihan di header, tersimpan di profil | 12 | Must | 1 | `lang/id.php`, `lang/en.php`, `I18n` | Done | `I18nTest` (UAT-23) |
 | I18N-02 | Diterjemahkan: label, menu, tombol, status, pesan, email, judul/kolom export; isian user tidak | 12 | Must | 1+ | `t()` | Partial | `I18nTest` (kunci lengkap kedua bahasa) |
 | I18N-03 | Format tanggal per bahasa (05 Okt 2026 / 05 Oct 2026) | 12 | Must | 1 | `I18n::date()` | Done | `I18nTest` |
@@ -243,8 +243,8 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | UAT-18 | Management buka timeline, klik part BODY → Level 2, tidak dapat mengubah | 6 | `TimelineHttpTest::testPagesRenderForAllRoles` (Management melihat Level 1/2 tanpa form planning) | Done |
 | UAT-19 | Export timeline PDF & Excel, PIK-FORM-NPD-07 di kanan atas, overdue merah | 6 | `TimelineTest::testTimelinePdfHasDocNumberOnEveryPageAndOverdueRows`, `testTimelineExcelSheetsDatesFreezeFilterAndDocNumber`, `TimelineHttpTest::testExports` | Done |
 | UAT-20 | KPI PIC: Management & Admin bisa, Sales ditolak UI & API | 10 | `ReportsHttpTest`::testKpiOnlyForAdminAndManagement, browser `report_flow.py` | Done |
-| UAT-21 | Mode gelap semua halaman #000000 | 11 | browser test `tests/browser` | Planned |
-| UAT-22 | NPR, timeline, dashboard di tablet & HP | 11 | browser test `tests/browser` | Planned |
-| UAT-23 | Ganti bahasa ID/EN: label, menu, status, email berganti; isian tidak | 1/11 | `I18nTest`, `LayoutHttpTest` | Partial (label/menu/tersimpan di profil; email & status menyusul) |
+| UAT-21 | Mode gelap semua halaman #000000 | 11 | browser `ui_audit.py` (36 halaman + login + dialog/menu terbuka, HP/tablet/desktop) | Done |
+| UAT-22 | NPR, timeline, dashboard di tablet & HP | 11 | browser `ui_audit.py`, `npr_flow.py`, `timeline_flow.py`, `report_flow.py` (mobile) | Done |
+| UAT-23 | Ganti bahasa ID/EN: label, menu, status, email berganti; isian tidak | 1/8/11 | `I18nTest`, `LayoutHttpTest`, `I18nFlowTest` (notifikasi & email bahasa penerima, isian tidak diterjemahkan) | Done |
 | UAT-24 | Arsip project Hold lalu pulihkan | 9 | `HoldLifecycleTest`::testArchiveHidesProjectAndRestoreKeepsDataAndAudit, `HoldHttpTest`, browser `hold_flow.py` | Done |
 | UAT-25 | Tidak ada AI Assistant | 1 | `SchemaTest::testNoAiAssistantArtifacts`, `AuthorizationHttpTest::testNoAiAssistantEndpoint` | Done |

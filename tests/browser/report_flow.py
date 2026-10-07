@@ -37,8 +37,8 @@ with sync_playwright() as p:
 
     login(page, 'andi@pik.local')
     assert page.locator('[data-kpi]').count() == 8, '8 kartu KPI'
-    total = int(page.locator('[data-kpi="total"] .kpi-value').inner_text())
-    overdue = int(page.locator('[data-kpi="overdue"] .kpi-value').inner_text())
+    total = int(page.locator('[data-kpi="total"] .kpi-value').get_attribute('data-value'))
+    overdue = int(page.locator('[data-kpi="overdue"] .kpi-value').get_attribute('data-value'))
     print('cards: total', total, 'overdue', overdue)
     assert page.locator('.chart-card').count() == 6
     page.screenshot(path=f'{outdir}/01-dashboard.png', full_page=True)
@@ -56,7 +56,7 @@ with sync_playwright() as p:
     page.goto(base + '/dashboard.php')
     page.select_option('#d-type', 'subcont')
     page.wait_for_url(re.compile(r'part_type=subcont'))
-    assert int(page.locator('[data-kpi="new_mold"] .kpi-value').inner_text()) <= total
+    assert int(page.locator('[data-kpi="new_mold"] .kpi-value').get_attribute('data-value')) <= total
 
     # Laporan: Weekly
     page.goto(base + '/reports.php')

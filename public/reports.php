@@ -288,7 +288,7 @@ require APP_ROOT . '/includes/layout/header.php';
 <section class="card section" aria-labelledby="kpi-rank">
   <div class="card-header"><h2 id="kpi-rank"><?= t('kpi.ranking') ?></h2></div>
   <div class="table-wrap">
-    <table class="table" data-kpi-table>
+    <table class="table table-cards" data-kpi-table>
       <thead><tr><th scope="col">#</th><th scope="col">PIC</th><th scope="col"><?= t('kpi.role') ?></th><th scope="col" class="right"><?= t('kpi.completed') ?></th>
         <th scope="col" class="right"><?= t('kpi.on_time_rate') ?></th><th scope="col" class="right"><?= t('kpi.avg_actual') ?></th><th scope="col" class="right"><?= t('kpi.avg_planned') ?></th>
         <th scope="col" class="right"><?= t('kpi.avg_diff') ?></th><th scope="col" class="right"><?= t('kpi.ratio') ?></th><th scope="col" class="right"><?= t('kpi.overdue') ?></th></tr></thead>
