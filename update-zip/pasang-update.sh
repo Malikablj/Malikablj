@@ -122,9 +122,13 @@ fi
 [ -f "$SRC/app/helpers/Migrator.php" ] || fail "Isi paket tidak lengkap: folder $SUBDIR tidak ada di samping pasang-update.sh. Ekstrak ulang pik-update.zip."
 printf '%sUpdate PIK Marketing Control%s\n' "$B" "$N"
 [ -f "$PKG_DIR/VERSI.txt" ] && sed 's/^/  /' "$PKG_DIR/VERSI.txt"
-for tool in tar gzip mysqldump; do
+for tool in tar gzip; do
     command -v "$tool" >/dev/null 2>&1 || fail "Perintah '$tool' tidak tersedia di server ini."
 done
+# MariaDB baru: mariadb-dump (nama mysqldump sudah usang); MySQL: mysqldump
+DUMP="$(command -v mariadb-dump 2>/dev/null || command -v mysqldump 2>/dev/null || true)"
+[ -n "$DUMP" ] || fail "Perintah mariadb-dump / mysqldump tidak tersedia di server ini."
+
 
 step "1/6 Mencari folder aplikasi & PHP"
 find_app_dir
@@ -162,12 +166,20 @@ DB_NAME="$("$PHP" -r '
     echo $c["database"];
 ' "$APP_DIR" "$CNF")" || fail "Tidak dapat membaca konfigurasi database dari $APP_DIR/.env"
 [ -n "$DB_NAME" ] || fail "DB_DATABASE kosong di .env"
-if ! mysqldump --defaults-extra-file="$CNF" --single-transaction --no-tablespaces --skip-lock-tables "$DB_NAME" | gzip > "$DB_BACKUP"; then
+if ! "$DUMP" --defaults-extra-file="$CNF" --single-transaction --no-tablespaces --skip-lock-tables "$DB_NAME" | gzip > "$DB_BACKUP"; then
     rm -f "$DB_BACKUP"
     fail "Backup database '$DB_NAME' gagal. Update dibatalkan — tidak ada file yang diubah."
 fi
-gzip -dc "$DB_BACKUP" | grep -q "CREATE TABLE" || fail "Backup database kosong/tidak valid. Update dibatalkan — tidak ada file yang diubah."
-ok "Database : $DB_BACKUP ($(du -h "$DB_BACKUP" | cut -f1))"
+# Cek isi backup: ada tabel & dump selesai sampai akhir. (grep -c / tail membaca seluruh isi,
+# jadi tidak memicu SIGPIPE pada gzip seperti grep -q di bawah pipefail.)
+TABLES="$(gzip -dc "$DB_BACKUP" | grep -c 'CREATE TABLE' || true)"
+LAST_LINE="$(gzip -dc "$DB_BACKUP" | tail -n 1 || true)"
+case "$LAST_LINE" in
+    *"Dump completed"*) ;;
+    *) fail "Backup database tidak selesai (baris terakhir: ${LAST_LINE:-kosong}). Update dibatalkan — tidak ada file yang diubah." ;;
+esac
+[ "${TABLES:-0}" -gt 0 ] 2>/dev/null || fail "Backup database tidak berisi tabel. Update dibatalkan — tidak ada file yang diubah."
+ok "Database : $DB_BACKUP ($(du -h "$DB_BACKUP" | cut -f1), $TABLES tabel)"
 rm -f "$CNF"
 CNF=""
 
