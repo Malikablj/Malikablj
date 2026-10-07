@@ -46,7 +46,7 @@ chmod 755 "$PKG/pasang-update.sh"
 SCHEMA="$(grep -o "VERSION = '[0-9.]*'" "$PKG/$APP/app/helpers/Migrator.php" | head -n 1 | cut -d"'" -f2)"
 {
     echo "Dibuat      : $(date '+%Y-%m-%d %H:%M')"
-    echo "Commit      : $(git rev-parse --short HEAD) — $(git log -1 --format=%s -- "$APP")"
+    echo "Commit      : $(git rev-parse --short HEAD) — $(git log -1 --format=%s)"
     echo "Skema DB    : $SCHEMA"
 } > "$PKG/VERSI.txt"
 
