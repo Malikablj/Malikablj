@@ -205,4 +205,34 @@
       if (dlg) { dlg.close(); }
     }
   });
+
+  // --- Periode laporan: tampilkan isian sesuai jenis (Mingguan/Bulanan/Rentang) ---
+  doc.querySelectorAll('[data-period-form]').forEach(function (form) {
+    var sel = form.querySelector('[data-period-type]');
+    if (!sel) { return; }
+    var sync = function () {
+      form.querySelectorAll('[data-period-group]').forEach(function (g) {
+        var on = g.getAttribute('data-period-group') === sel.value;
+        g.hidden = !on;
+        g.querySelectorAll('input').forEach(function (i) { i.disabled = !on; });
+      });
+    };
+    sel.addEventListener('change', sync);
+    sync();
+  });
+
+  // --- Salin teks laporan: <button data-copy-target="id"> ---
+  doc.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-copy-target]');
+    if (!btn) { return; }
+    var el = doc.getElementById(btn.getAttribute('data-copy-target'));
+    if (!el) { return; }
+    var done = function () { if (NPD.toast) { NPD.toast(btn.getAttribute('data-copied') || 'OK', 'success'); } };
+    var fallback = function () { el.focus(); el.select(); try { doc.execCommand('copy'); done(); } catch (err) { /* pengguna dapat menyalin manual */ } };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(el.value).then(done, fallback);
+    } else {
+      fallback();
+    }
+  });
 })();

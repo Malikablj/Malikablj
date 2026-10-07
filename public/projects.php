@@ -9,6 +9,7 @@ use App\Core\Db;
 use App\Core\I18n;
 use App\Core\Request;
 use App\Project\ProjectQuery;
+use App\Project\ProjectService;
 
 $user = require_permission('project.view');
 $query = new ProjectQuery();
@@ -21,6 +22,9 @@ $filters = [
     'mine' => Request::query('mine') === '1',
     'archived' => Request::query('archived') === '1',
     'overdue' => Request::query('overdue') === '1',
+    'due_soon' => Request::query('due_soon') === '1',
+    'part_type' => in_array(Request::query('part_type'), ['new_mold', 'subcont'], true) ? Request::query('part_type') : null,
+    'priority' => in_array(Request::query('priority'), ProjectService::PRIORITIES, true) ? Request::query('priority') : null,
 ];
 $page = max(1, (int) Request::int('page', 1));
 $perPage = 25;
@@ -30,7 +34,8 @@ $pages = max(1, (int) ceil($result['total'] / $perPage));
 $customers = Db::fetchAll('SELECT id, name FROM customers ORDER BY name');
 $npdUsers = Db::fetchAll("SELECT u.id, u.name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.code IN ('npd_staff', 'admin') ORDER BY u.name");
 $qs = array_filter(['q' => $filters['q'], 'status' => $filters['status'], 'customer_id' => $filters['customer_id'], 'npd_pic_id' => $filters['npd_pic_id'],
-    'mine' => $filters['mine'] ? '1' : null, 'archived' => $filters['archived'] ? '1' : null, 'overdue' => $filters['overdue'] ? '1' : null], static fn ($v) => $v !== null && $v !== '');
+    'mine' => $filters['mine'] ? '1' : null, 'archived' => $filters['archived'] ? '1' : null, 'overdue' => $filters['overdue'] ? '1' : null,
+    'due_soon' => $filters['due_soon'] ? '1' : null, 'part_type' => $filters['part_type'], 'priority' => $filters['priority']], static fn ($v) => $v !== null && $v !== '');
 
 $pageTitle = I18n::t('project.list_title');
 $activeNav = 'projects';
@@ -41,6 +46,9 @@ require APP_ROOT . '/includes/layout/header.php';
     <h1><?= t('project.list_title') ?></h1>
     <p><?= t('project.list_subtitle') ?></p>
   </div>
+  <?php if (can('export.report')): ?>
+    <div class="page-actions"><a class="btn" href="<?= e(url('export.php', ['type' => 'projects_xlsx'] + $qs)) ?>"><?= icon('download') ?> <?= t('report.export_excel') ?></a></div>
+  <?php endif; ?>
 </div>
 
 <form method="get" class="filter-bar" role="search">
@@ -75,8 +83,23 @@ require APP_ROOT . '/includes/layout/header.php';
       <?php endforeach; ?>
     </select>
   </div>
+  <div class="field">
+    <label for="f-type"><?= t('report.part_type') ?></label>
+    <select class="input" id="f-type" name="part_type">
+      <option value=""><?= t('common.all') ?></option>
+      <?php foreach (['new_mold', 'subcont'] as $pt): ?><option value="<?= $pt ?>"<?= $filters['part_type'] === $pt ? ' selected' : '' ?>><?= t('part_type.' . $pt) ?></option><?php endforeach; ?>
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-prio"><?= t('project.priority') ?></label>
+    <select class="input" id="f-prio" name="priority">
+      <option value=""><?= t('common.all') ?></option>
+      <?php foreach (ProjectService::PRIORITIES as $pr): ?><option value="<?= $pr ?>"<?= $filters['priority'] === $pr ? ' selected' : '' ?>><?= t('project.priority.' . $pr) ?></option><?php endforeach; ?>
+    </select>
+  </div>
   <label class="check"><input type="checkbox" name="mine" value="1"<?= $filters['mine'] ? ' checked' : '' ?>> <span><?= t('project.mine') ?></span></label>
   <label class="check"><input type="checkbox" name="overdue" value="1"<?= $filters['overdue'] ? ' checked' : '' ?>> <span><?= t('status.overdue') ?></span></label>
+  <label class="check"><input type="checkbox" name="due_soon" value="1"<?= $filters['due_soon'] ? ' checked' : '' ?>> <span><?= t('status.due_soon') ?></span></label>
   <label class="check"><input type="checkbox" name="archived" value="1"<?= $filters['archived'] ? ' checked' : '' ?>> <span><?= t('project.archived') ?></span></label>
   <div class="field"><button type="submit" class="btn"><?= icon('filter') ?> <?= t('common.filter') ?></button></div>
 </form>

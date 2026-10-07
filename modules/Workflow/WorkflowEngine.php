@@ -390,7 +390,7 @@ final class WorkflowEngine
         Db::update('processes', ['outcome' => $outcome, 'outcome_comment' => $comment, 'loop_count' => (int) $p['loop_count'] + 1], ['id' => (int) $p['id']]);
         $this->activate((int) $p['id'], $repeatStatus, $actor, true);
         $this->bumpLock((int) $p['id']);
-        RevisionHistory::record('loop', I18n::t('wf.rev.repeat', ['process' => $p['name'], 'outcome' => (string) $outcome], 'id'),
+        RevisionHistory::record('loop', I18n::t('wf.rev.repeat', ['process' => $p['name'], 'outcome' => $this->outcomeLabel($p, $outcome)], 'id'),
             ['outcome' => $outcome, 'comment' => $comment, 'iteration' => (int) $p['iteration'] + 1], null, (int) $p['project_id'], $p['part_id'] !== null ? (int) $p['part_id'] : null, (int) $p['id'], $actor->id);
     }
 
@@ -407,7 +407,7 @@ final class WorkflowEngine
         $this->resetProcesses(array_diff($reset, [$tid]), $actor);
         $this->activate($tid, 'revision', $actor, true);
         $this->bumpLock($tid);
-        RevisionHistory::record('loop', I18n::t('wf.rev.loop', ['process' => $p['name'], 'outcome' => (string) $outcome, 'target' => $target['name']], 'id'),
+        RevisionHistory::record('loop', I18n::t('wf.rev.loop', ['process' => $p['name'], 'outcome' => $this->outcomeLabel($p, $outcome), 'target' => $target['name']], 'id'),
             ['outcome' => $outcome, 'comment' => $comment, 'target_process_id' => $tid, 'reset' => array_values(array_diff($reset, [$tid]))],
             null, (int) $p['project_id'], $p['part_id'] !== null ? (int) $p['part_id'] : null, (int) $p['id'], $actor->id);
     }
@@ -426,7 +426,7 @@ final class WorkflowEngine
         $this->resetProcesses($reset, $actor);
         Db::update('processes', ['loop_after_process_id' => (int) $x['id']], ['id' => (int) $r['id']]);
         $this->activate((int) $x['id'], 'current', $actor, true);
-        RevisionHistory::record('loop', I18n::t('wf.rev.activate', ['process' => $p['name'], 'outcome' => (string) $outcome, 'activate' => $x['name'], 'reopen' => $r['name']], 'id'),
+        RevisionHistory::record('loop', I18n::t('wf.rev.activate', ['process' => $p['name'], 'outcome' => $this->outcomeLabel($p, $outcome), 'activate' => $x['name'], 'reopen' => $r['name']], 'id'),
             ['outcome' => $outcome, 'comment' => $comment, 'activated' => (int) $x['id'], 'reopened' => (int) $r['id']],
             null, (int) $p['project_id'], (int) $p['part_id'], (int) $p['id'], $actor->id);
     }
@@ -944,6 +944,17 @@ final class WorkflowEngine
         $this->schedule->recalculate($projectId, 'auto_shift', null, null, $actor);
         $this->activateReady($projectId, $actor);
         $this->status->refresh($projectId);
+    }
+
+    /** Label keputusan (bahasa Indonesia, untuk Revision History yang tersimpan) — bukan kode mentah. */
+    private function outcomeLabel(array $p, ?string $outcome): string
+    {
+        foreach ($this->decisionOptions($p) as $o) {
+            if (($o['code'] ?? null) === $outcome) {
+                return (string) ($o['label_id'] ?? $outcome);
+            }
+        }
+        return (string) $outcome;
     }
 
     /** Project selesai/batal/arsip atau part batal: proses tidak dapat diubah lagi (PRD §8.4). */

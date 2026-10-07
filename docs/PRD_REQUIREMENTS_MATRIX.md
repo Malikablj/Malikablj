@@ -106,7 +106,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | FR-SCH-01 | Input planning opsional (durasi, Planned Start, Planned Finish); yang kosong otomatis | 6.1 | Must | 5 | `Scheduler`, `WorkflowEngine::plan/previewPlan`, `public/process.php` | Done | `SchedulerTest` (tabel §6.1), `WorkflowEngineTest::testPlanChangesDurationAndShiftsSuccessorsWithPreview` |
-| FR-SCH-02 | Hari kerja Senin–Jumat + hari libur Admin | 6.2 | Must | 5 | `WorkingCalendar` | Done | `WorkingCalendarTest` |
+| FR-SCH-02 | Hari kerja Senin–Jumat + hari libur Admin | 6.2 | Must | 5/10b | `WorkingCalendar` (perhitungan Done) | Partial | `WorkingCalendarTest`; halaman Admin pengelola hari libur (+ hitung ulang jadwal) dikerjakan berikutnya |
 | FR-SCH-03 | Tanggal manual = "tidak mulai sebelum"; peringatan bila bertentangan dependency | 6.1 | Must | 5 | `Scheduler` | Done | `SchedulerTest` (UAT-08) |
 | FR-SCH-04 | Aktual ≠ rencana → proses bergantung bergeser; proses tak terkait tidak; semua tercatat | 6.4 | Must | 5 | `Scheduler`, `ScheduleService::recalculate`, `schedule_changes` | Done | `SchedulerTest` (contoh §6.4), `WorkflowEngineTest::testCompleteActivatesSuccessorAndShiftsLateSchedule` (UAT-07) |
 | FR-SCH-05 | Forecast Finish proses & perkiraan selesai part/project; Target Finish tetap; tanda Berisiko | 6.3, 6.4 | Must | 5 | `Scheduler`, `ScheduleService::checkTargetRisk`, `ProjectQuery::atRisk` | Done | `SchedulerTest`, `ScheduleServiceTest` (UAT-10) |
@@ -130,10 +130,10 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | FR-OVD-01 | Overdue per proses (hari kerja), merah di dashboard, detail, timeline, tracker, daftar, export | 7.1, 7.2 | Must | 8 | `Lateness`, `OverdueService`, project banner, daftar (filter Overdue), timeline, tracker, export | Partial | `NotificationFlowTest`, `TimelineTest`; panel dashboard fase 10 |
-| FR-OVD-02 | Panel Overdue: project, part, proses, PIC, hari terlambat, menunggu siapa | 7.2 | Must | 8/10 | `public/dashboard.php` | Planned | `DashboardServiceTest` |
+| FR-OVD-02 | Panel Overdue: project, part, proses, PIC, hari terlambat, menunggu siapa | 7.2 | Must | 8/10 | `public/dashboard.php` (#overdue), `OverdueService` | Done | `ReportsTest`::testDashboardCardsPanelsChartsAndFilters, `ReportsHttpTest` |
 | FR-OVD-03 | Notifikasi web + email ke PIC hari pertama overdue; ringkasan harian | 7.3 | Must | 8 | `OverdueService::scan` (`cron/overdue.php`), `DailyDigest` (`cron/daily-report.php`) | Done | `NotificationFlowTest`::testScanSendsFirstDayOverdueOnceWithEmail, ::testDailyDigestOnePerRecipientWorkingDaysOnly |
 | FR-OVD-04 | Notifikasi web semua kejadian §7.3; email hanya yang bertanda Ya | 7.3 | Must | 8 | `Notifier::EMAIL_TYPES`, `OverdueService`, services | Done | `NotificationFlowTest`, `WorkflowEngineTest`, `ScheduleServiceTest` |
-| FR-OVD-05 | Masa Hold dikecualikan dari overdue & aging | 7.1, 8.1 | Must | 8/9 | `OverdueService`, `ProjectQuery`, `PortfolioQuery`, `HoldService` (hari Hold → `process_runs.hold_working_days`) | Done | `NotificationFlowTest`::testOverdueCountsWorkingDaysAndExcludesHold, `HoldLifecycleTest`::testHoldProjectFreezesProcessesAndIsNotOverdue / testResume…; pemakaian di KPI pada fase 10 |
+| FR-OVD-05 | Masa Hold dikecualikan dari overdue & aging | 7.1, 8.1 | Must | 8/9/10 | `OverdueService`, `ProjectQuery`, `PortfolioQuery`, `HoldService` (hari Hold → `process_runs.hold_working_days`), `KpiService` | Done | `NotificationFlowTest`::testOverdueCountsWorkingDaysAndExcludesHold, `HoldLifecycleTest`, `ReportsTest`::testKpiExcludesHoldDaysAndUsesPlanAtActivation |
 | FR-OVD-06 | Pengaturan ambang & email oleh Admin; antrean email dengan retry | 7.3 | Should | 8 | `NotificationSettings`, `MailQueue`, `SmtpTransport` (PHPMailer), `cron/notifications.php`, `public/settings/notifications.php`, `public/settings/email-queue.php` | Done | `NotificationFlowTest`::testMailQueueSendsRetriesWithBackoffAndFails, ::testNotificationSettingsValidationAndSecret, `NotificationHttpTest` |
 | NTF-07 | Bell, daftar, tandai dibaca, tautan ke proses | 7.3 | Must | 8 | `NotificationCenter`, `public/notifications.php`, lonceng di header | Done | `NotificationFlowTest`, `NotificationHttpTest::testBellListOpenAndOwnership` |
 | NTF-08 | Email memakai bahasa penerima; deduplikasi; pemindaian terjadwal tiap jam di hari kerja | 7.3 | Must | 8 | `Notifier` (bahasa penerima, `dedupe_key`), cron jam kerja | Done | `NotificationFlowTest` |
@@ -177,13 +177,13 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-RPT-01 | Dashboard: 8 kartu KPI, Panel Overdue, Attention Required, tugas saya, 6 grafik; sadar part/paralel | 10.1 | Must | 10 | `DashboardService`, `public/dashboard.php` | Planned | `DashboardServiceTest` |
-| FR-RPT-02 | Weekly NPD Report & Analytics; periode mingguan/bulanan/bebas | 10.2 | Must | 10 | `ReportService` | Planned | `ReportServiceTest` |
-| FR-RPT-03 | KPI per PIC (on-time rate, aktual vs planned, jumlah overdue) + drill-down, filter, tren | 10.3 | Must | 10 | `KpiService` | Planned | `KpiServiceTest` |
-| FR-RPT-04 | KPI PIC hanya Management & Admin (UI dan API) | 10.3 | Must | 10 | `Gate('kpi.view')` | Planned | `AuthorizationHttpTest` (UAT-20) |
-| FR-RPT-05 | Export laporan ke Excel; KPI juga PDF | 10.4 | Should | 10 | `ReportExcel`, `KpiPdf` | Planned | `ExcelExportTest`, `PdfExportTest` |
-| RPT-06 | Filter dashboard: jenis, customer, NPD PIC, prioritas; kartu klik ke daftar terfilter | 10.1 | Must | 10 | `public/dashboard.php`, `public/projects.php` | Planned | `DashboardServiceTest` |
-| RPT-07 | Excel profesional: header, lebar kolom, format angka/tanggal, border, freeze pane, filter | brief §16 | Must | 6/10 | `modules/Report/ExcelWriter.php` | Planned | `ExcelExportTest` |
+| FR-RPT-01 | Dashboard: 8 kartu KPI, Panel Overdue, Attention Required, tugas saya, 6 grafik; sadar part/paralel | 10.1 | Must | 10 | `DashboardService`, `public/dashboard.php` (grafik batang HTML/CSS, OQ-30) | Done | `ReportsTest`::testDashboardCardsPanelsChartsAndFilters, `ReportsHttpTest`, browser `report_flow.py` |
+| FR-RPT-02 | Weekly NPD Report & Analytics; periode mingguan/bulanan/bebas | 10.2 | Must | 10 | `WeeklyReport` (salin teks), `AnalyticsService` (loop Artwork/T0/Trial), `ReportPeriod`, `public/reports.php` | Done | `ReportPeriodTest`, `ReportsTest`::testWeeklyReportAnalyticsAndExports, `ReportsHttpTest` |
+| FR-RPT-03 | KPI per PIC (on-time rate, aktual vs planned, jumlah overdue) + drill-down, filter, tren | 10.3 | Must | 10 | `KpiService` (dasar: Planned Finish saat aktivasi, PIC saat selesai, tanpa Hold/Skipped; OQ-29) | Done | `ReportsTest`::testKpiPerPicDefinitionsDrilldownAndTrend, ::testKpiExcludesHoldDaysAndUsesPlanAtActivation |
+| FR-RPT-04 | KPI PIC hanya Management & Admin (UI dan API) | 10.3 | Must | 10 | `Gate('kpi.view')` di `KpiService`, `reports.php`, `export.php` | Done | `ReportsHttpTest`::testKpiOnlyForAdminAndManagement (UAT-20), `ReportsTest` |
+| FR-RPT-05 | Export laporan ke Excel; KPI juga PDF | 10.4 | Should | 10 | `ReportExports` (Weekly/Analytics/KPI/daftar project → Excel; KPI → PDF mPDF), `ReportWorkbook` | Done | `ReportsTest` (xlsx dibaca ulang, PDF), `ReportsHttpTest`::testReportAndProjectExportsAreAudited |
+| RPT-06 | Filter dashboard: jenis, customer, NPD PIC, prioritas; kartu klik ke daftar terfilter | 10.1 | Must | 10 | `public/dashboard.php`, `public/projects.php` (filter part_type/priority/due_soon) | Done | `ReportsTest` (kartu = daftar), browser `report_flow.py` |
+| RPT-07 | Excel profesional: header, lebar kolom, format angka/tanggal, border, freeze pane, filter | brief §16 | Must | 6/10 | `TimelineExcel`, `ReportWorkbook` (kop berlogo, tanggal Excel, angka/persen, freeze, autofilter, cegah formula injection) | Done | `TimelineTest`, `ReportsTest` |
 
 ## 11. UI/UX, bahasa (PRD §11, §12)
 
@@ -207,7 +207,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | NFR-01 | PHP 8.2+, MySQL 8 InnoDB utf8mb4 | 13.1 | Must | 0/1 | `database/schema.sql` | Done | `SchemaTest` |
-| NFR-02 | Mesin jadwal di server sebagai satu-satunya sumber kebenaran, satu transaksi | 13.1 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
+| NFR-02 | Mesin jadwal di server sebagai satu-satunya sumber kebenaran, satu transaksi | 13.1 | Must | 5 | `Scheduler`, `ScheduleService::recalculate` (transaksi + kunci baris project) | Done | `SchedulerTest`, `ScheduleServiceTest` |
 | NFR-03 | Tugas terjadwal: overdue/due soon, Hold reminder, ringkasan harian, antrean email | 13.1 | Must | 8/9 | `cron/overdue.php`, `cron/notifications.php`, `cron/daily-report.php` (`JobRunner`: GET_LOCK + `job_runs`) | Done | `DailyActivationTest`, `NotificationFlowTest`, `HoldLifecycleTest`::testHoldReminders… |
 | NFR-04 | PDF & Excel dibuat server (mPDF, PhpSpreadsheet) | 13.1 | Must | 2/6 | `modules/Report` | Done | `PdfExportTest` |
 | NFR-05 | Zona waktu Asia/Jakarta | 13.1 | Must | 1 | `config/config.php` | Done | `ConfigTest` |
@@ -231,7 +231,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | UAT-06 | Part New Mold mulai: Masterbatch & 3D aktif bersamaan; 2D menunggu keduanya | 4 | `WorkflowEngineTest::testFeedbackCompletedStartsAcceptedPartsWithBaseline` | Done |
 | UAT-07 | Develop MB terlambat 2 hari kerja → turunan bergeser +2, 3D tidak, tercatat, notifikasi | 5 | `SchedulerTest` (contoh §6.4), `WorkflowEngineTest::testCompleteActivatesSuccessorAndShiftsLateSchedule` | Done |
 | UAT-08 | Planned Start manual lebih awal dari dependency → peringatan & tanggal dependency | 5 | `SchedulerTest` (manual_before_dependency) | Done |
-| UAT-09 | Proses lewat Planned Finish → merah, panel overdue, email hari pertama | 8 | `OverdueServiceTest::testUat09` | Planned |
+| UAT-09 | Proses lewat Planned Finish → merah, panel overdue, email hari pertama | 8/10 | `NotificationFlowTest`::testScanSendsFirstDayOverdueOnceWithEmail, `ReportsTest` (Panel Overdue), browser `project_flow.py`/`report_flow.py` | Done |
 | UAT-10 | Perkiraan selesai > Target Finish → target tetap, ditandai, target baru lewat persetujuan | 5 | `ScheduleServiceTest` | Done |
 | UAT-11 | "Tidak dijalankan" 3D Prototype (pasangan Customer 3D Approval) | 4 | `WorkflowEngineTest::testSkipGroupPassesThroughAuditsAndUnskipRules` | Done |
 | UAT-12 | Ubah dependency 2D Drawing jadi paralel dengan approval 3D → pratinjau + audit | 4/5 | `DependencyServiceTest::testParallelOverrideWithPreviewThenSaveAndAudit` | Done |
@@ -242,7 +242,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | UAT-17 | Resume project → target baru wajib, baseline baru, jadwal lama tersimpan | 9 | `HoldLifecycleTest`::testResumeRequiresTargetPreviewsAndCreatesBaseline, `HoldHttpTest`, browser `hold_flow.py` | Done |
 | UAT-18 | Management buka timeline, klik part BODY → Level 2, tidak dapat mengubah | 6 | `TimelineHttpTest::testPagesRenderForAllRoles` (Management melihat Level 1/2 tanpa form planning) | Done |
 | UAT-19 | Export timeline PDF & Excel, PIK-FORM-NPD-07 di kanan atas, overdue merah | 6 | `TimelineTest::testTimelinePdfHasDocNumberOnEveryPageAndOverdueRows`, `testTimelineExcelSheetsDatesFreezeFilterAndDocNumber`, `TimelineHttpTest::testExports` | Done |
-| UAT-20 | KPI PIC: Management & Admin bisa, Sales ditolak UI & API | 10 | `AuthorizationHttpTest::testUat20` | Planned |
+| UAT-20 | KPI PIC: Management & Admin bisa, Sales ditolak UI & API | 10 | `ReportsHttpTest`::testKpiOnlyForAdminAndManagement, browser `report_flow.py` | Done |
 | UAT-21 | Mode gelap semua halaman #000000 | 11 | browser test `tests/browser` | Planned |
 | UAT-22 | NPR, timeline, dashboard di tablet & HP | 11 | browser test `tests/browser` | Planned |
 | UAT-23 | Ganti bahasa ID/EN: label, menu, status, email berganti; isian tidak | 1/11 | `I18nTest`, `LayoutHttpTest` | Partial (label/menu/tersimpan di profil; email & status menyusul) |

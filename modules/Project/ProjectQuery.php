@@ -29,7 +29,7 @@ final class ProjectQuery
     }
 
     /**
-     * @param array{q?:?string,status?:?string,customer_id?:?int,npd_pic_id?:?int,mine?:bool,archived?:bool,overdue?:bool} $f
+     * @param array{q?:?string,status?:?string,customer_id?:?int,npd_pic_id?:?int,mine?:bool,archived?:bool,overdue?:bool,due_soon?:bool,part_type?:?string,priority?:?string} $f
      * @return array{rows:list<array<string,mixed>>,total:int}
      */
     public function list(User $user, array $f, int $page = 1, int $perPage = 25): array
@@ -60,6 +60,25 @@ final class ProjectQuery
                         WHERE ox.project_id = p.id AND ox.status IN ('current', 'revision', 'problem') AND ox.planned_finish < ?
                           AND (op.id IS NULL OR (op.is_on_hold = 0 AND op.cancelled_at IS NULL))))";
             $params[] = $lastWd;
+        }
+        if (!empty($f['part_type']) && in_array($f['part_type'], ['new_mold', 'subcont'], true)) {
+            $where[] = 'EXISTS (SELECT 1 FROM project_parts tx WHERE tx.project_id = p.id AND tx.part_type = ? AND tx.cancelled_at IS NULL)';
+            $params[] = $f['part_type'];
+        }
+        if (!empty($f['priority']) && in_array($f['priority'], ProjectService::PRIORITIES, true)) {
+            $where[] = 'p.priority = ?';
+            $params[] = $f['priority'];
+        }
+        if (!empty($f['due_soon'])) {
+            // Due Soon: Planned Finish hari ini s/d N hari kerja ke depan (sama dengan kartu dashboard), tidak Hold
+            $today = Clock::todayString();
+            $soon = max(1, min(30, \App\Core\Settings::int('notify.due_soon_days', 3)));
+            // batas = sehari sebelum hari kerja ke-(N+1) — identik dengan Lateness::isDueSoon
+            $limit = WorkingCalendar::shift($this->calendar()->addWorkingDays($this->calendar()->nextWorkingDay($today), $soon), -1);
+            $where[] = "(p.is_on_hold = 0 AND p.finished_at IS NULL AND p.cancelled_at IS NULL AND EXISTS (SELECT 1 FROM processes dx LEFT JOIN project_parts dp ON dp.id = dx.part_id
+                        WHERE dx.project_id = p.id AND dx.status IN ('current', 'revision', 'problem') AND dx.planned_finish BETWEEN ? AND ?
+                          AND (dp.id IS NULL OR (dp.is_on_hold = 0 AND dp.cancelled_at IS NULL))))";
+            array_push($params, $today, $limit);
         }
         if (!empty($f['mine'])) {
             $where[] = '(p.sales_pic_id = ? OR p.npd_pic_id = ? OR EXISTS (SELECT 1 FROM processes x WHERE x.project_id = p.id AND x.pic_user_id = ?))';
