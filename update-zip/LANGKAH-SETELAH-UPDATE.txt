@@ -1,0 +1,5 @@
+1. Buka aplikasi di browser dan login sebagai Admin.
+2. Settings › Users → buat akun untuk divisi PPIC, Produksi, dan Gudang.
+3. Isi update ini: OEF (No. order & customer diketik manual), PPIC (tinjau OEF + surat jalan),
+   role Produksi & Gudang (Stock), Inbound Maklon manual, menu baru Inbound Supplier,
+   menu Finance dihapus. Detail: README.md bagian 18.

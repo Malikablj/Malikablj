@@ -1,47 +1,36 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Update otomatis PIK Marketing Control di hosting cPanel (menu Terminal).
+# Pemasang update PIK Marketing Control (ikut di dalam pik-update.zip).
 #
-# Cukup tempel SATU perintah ini di cPanel › Terminal:
+# Cara pakai di cPanel (langkah yang SAMA untuk setiap update):
+#   1. Upload pik-update.zip ke folder home (folder paling atas di File Manager,
+#      tempat folder public_html berada). Timpa bila file lama sudah ada.
+#   2. cPanel › Terminal, tempel:
+#        cd ~ && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh
 #
-#   curl -fsSL https://raw.githubusercontent.com/Malikablj/Malikablj/claude/magical-cori-1m350e/marketing.permataindokemas.com/database/update-cpanel.sh | bash
+# Kembalikan file ke versi sebelum update terakhir:
+#        cd ~ && bash pik-update/pasang-update.sh --rollback
 #
-# Yang dilakukan skrip (berhenti otomatis bila ada langkah yang gagal):
+# Yang dilakukan (berhenti otomatis bila ada langkah yang gagal):
 #   1. mencari folder aplikasi (yang berisi .env) di home Anda
 #   2. backup file aplikasi + database ke ~/pik-backup/
-#   3. mengunduh versi baru dari GitHub
-#   4. memeriksa semua file PHP baru (syntax) dengan PHP di server
-#   5. menimpa file aplikasi — .env, .htaccess utama, dan folder storage/ TIDAK disentuh
-#   6. menghapus file menu Finance yang sudah tidak dipakai
-#   7. menjalankan migrasi database (php database/migrate.php), tanpa menghapus data
+#   3. memeriksa semua file PHP baru dengan PHP server
+#   4. menimpa file aplikasi — .env, .htaccess utama, dan folder storage/ TIDAK disentuh
+#   5. menghapus file lama yang sudah tidak dipakai (daftar: hapus-file-lama.txt)
+#   6. menjalankan migrasi database (php database/migrate.php), tanpa menghapus data
 #
-# Kembalikan file ke versi sebelum update (memakai backup terakhir):
-#   curl -fsSL <url skrip yang sama> | bash -s -- --rollback
-#
-# Opsional (bila deteksi otomatis gagal):
+# Opsional (bila deteksi otomatis gagal), tulis sebelum "bash":
 #   APP_DIR=/home/USER/marketing.permataindokemas.com   folder aplikasi
 #   PHP_BIN=/opt/cpanel/ea-php83/root/usr/bin/php          PHP CLI 8.1+
-#   REF=<commit/branch>                                    versi yang diunduh
-#   contoh: curl -fsSL <url> | APP_DIR=/home/USER/folder bash
 # =============================================================================
 
 set -eo pipefail
 
-REPO="Malikablj/Malikablj"
-REF="${REF:-claude/magical-cori-1m350e}"
 SUBDIR="marketing.permataindokemas.com"
 BACKUP_DIR="$HOME/pik-backup"
 MODE="${1:-update}"
-
-OLD_FILES=(
-    app/controllers/InvoiceController.php
-    app/controllers/PoFinancialController.php
-    app/models/Invoice.php
-    app/models/PoFinancial.php
-    app/views/customers/tabs/invoices.php
-    app/views/invoices
-    app/views/po_financials
-)
+PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="$PKG_DIR/$SUBDIR"
 
 if [ -t 1 ]; then G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; B=$'\e[1m'; N=$'\e[0m'; else G=''; R=''; Y=''; B=''; N=''; fi
 step() { printf '\n%s==> %s%s\n' "$B" "$1" "$N"; }
@@ -49,16 +38,14 @@ ok()   { printf '    %s✓%s %s\n' "$G" "$N" "$1"; }
 warn() { printf '    %s!%s %s\n' "$Y" "$N" "$1"; }
 fail() { printf '\n%sGAGAL:%s %s\n' "$R" "$N" "$1" >&2; exit 1; }
 
-TMP_DIR=""
 CNF=""
 cleanup() {
     [ -n "$CNF" ] && rm -f "$CNF"
-    [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
     return 0
 }
 trap cleanup EXIT
 
-# ----------------------------------------------------------------------------- 1. folder aplikasi
+# ----------------------------------------------------------------------------- folder aplikasi
 find_app_dir() {
     if [ -n "${APP_DIR:-}" ]; then
         APP_DIR="${APP_DIR%/}"
@@ -79,17 +66,17 @@ find_app_dir() {
             if [ -f "$d/.env" ] && [ -f "$d/config/permissions.php" ]; then
                 list="$list$d"$'\n'
             fi
-        done < <(find "$HOME" -maxdepth 5 -path '*/app/helpers/Migrator.php' -not -path "$BACKUP_DIR/*" -not -path '*/.pik-update-*' 2>/dev/null || true)
+        done < <(find "$HOME" -maxdepth 5 -path '*/app/helpers/Migrator.php' -not -path "$BACKUP_DIR/*" -not -path "$PKG_DIR/*" 2>/dev/null || true)
         list="$(printf '%s' "$list" | sed '/^$/d' | sort -u)"
         local count
         count="$(printf '%s' "$list" | grep -c . || true)"
         if [ "$count" = "1" ]; then
             found="$list"
         elif [ "$count" = "0" ]; then
-            fail "Folder aplikasi tidak ditemukan di $HOME. Jalankan ulang dengan APP_DIR=/path/folder-aplikasi (lihat keterangan di awal skrip)."
+            fail "Folder aplikasi tidak ditemukan di $HOME. Jalankan ulang dengan APP_DIR=/path/folder-aplikasi sebelum kata bash."
         else
             printf '%s\n' "Ditemukan beberapa folder aplikasi:" "$list" >&2
-            fail "Pilih salah satu dengan APP_DIR=/path/folder-aplikasi lalu jalankan ulang."
+            fail "Pilih salah satu dengan APP_DIR=/path/folder-aplikasi sebelum kata bash, lalu jalankan ulang."
         fi
     fi
     APP_DIR="$found"
@@ -107,7 +94,7 @@ find_php() {
             return
         fi
     done
-    fail "PHP 8.1+ (dengan pdo_mysql) tidak ditemukan. Jalankan ulang dengan PHP_BIN=/opt/cpanel/ea-php83/root/usr/bin/php"
+    fail "PHP 8.1+ (dengan pdo_mysql) tidak ditemukan. Jalankan ulang dengan PHP_BIN=/opt/cpanel/ea-php83/root/usr/bin/php sebelum kata bash."
 }
 
 # ----------------------------------------------------------------------------- rollback
@@ -119,14 +106,16 @@ if [ "$MODE" = "--rollback" ]; then
     [ -n "$LAST" ] || fail "Backup file tidak ditemukan di $BACKUP_DIR."
     tar -xzf "$LAST" -C "$(dirname "$APP_DIR")"
     ok "File dikembalikan dari $LAST"
-    printf '\n%sSelesai.%s Aplikasi kembali ke versi sebelum update. Struktur database baru tidak perlu dikembalikan\n' "$G" "$N"
-    printf '(hanya menambah kolom/tabel). Backup database tetap ada di %s bila diperlukan.\n' "$BACKUP_DIR"
+    printf '\n%sSelesai.%s Aplikasi kembali ke versi sebelum update. Struktur database tidak perlu dikembalikan\n' "$G" "$N"
+    printf '(migrasi hanya menambah kolom/tabel). Backup database tetap ada di %s bila diperlukan.\n' "$BACKUP_DIR"
     exit 0
 fi
-[ "$MODE" = "update" ] || fail "Pilihan tidak dikenal: $MODE (gunakan tanpa argumen, atau --rollback)."
+[ "$MODE" = "update" ] || fail "Pilihan tidak dikenal: $MODE (jalankan tanpa tambahan, atau dengan --rollback)."
 
-printf '%sUpdate PIK Marketing Control%s (versi: %s)\n' "$B" "$N" "$REF"
-for tool in curl tar gzip mysqldump; do
+[ -f "$SRC/app/helpers/Migrator.php" ] || fail "Isi paket tidak lengkap: folder $SUBDIR tidak ada di samping pasang-update.sh. Ekstrak ulang pik-update.zip."
+printf '%sUpdate PIK Marketing Control%s\n' "$B" "$N"
+[ -f "$PKG_DIR/VERSI.txt" ] && sed 's/^/  /' "$PKG_DIR/VERSI.txt"
+for tool in tar gzip mysqldump; do
     command -v "$tool" >/dev/null 2>&1 || fail "Perintah '$tool' tidak tersedia di server ini."
 done
 
@@ -136,9 +125,10 @@ find_php
 ok "Folder aplikasi : $APP_DIR"
 ok "PHP             : $PHP ($("$PHP" -r 'echo PHP_VERSION;'))"
 CURRENT="$(grep -o "VERSION = '[0-9.]*'" "$APP_DIR/app/helpers/Migrator.php" | head -n 1 | cut -d"'" -f2 || true)"
-ok "Versi skema saat ini: ${CURRENT:-tidak diketahui}"
+NEW="$(grep -o "VERSION = '[0-9.]*'" "$SRC/app/helpers/Migrator.php" | head -n 1 | cut -d"'" -f2 || true)"
+ok "Versi skema database: ${CURRENT:-?} → ${NEW:-?}"
 
-# ----------------------------------------------------------------------------- 2. backup
+# ----------------------------------------------------------------------------- backup
 step "2/6 Backup file & database ke $BACKUP_DIR"
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -172,34 +162,16 @@ ok "Database : $DB_BACKUP ($(du -h "$DB_BACKUP" | cut -f1))"
 rm -f "$CNF"
 CNF=""
 
-# ----------------------------------------------------------------------------- 3. unduh
-step "3/6 Mengunduh versi baru dari GitHub"
-TMP_DIR="$(mktemp -d "$HOME/.pik-update-XXXXXX")"
-if [ -n "${SRC_TARBALL:-}" ]; then
-    cp "$SRC_TARBALL" "$TMP_DIR/src.tar.gz"          # untuk pengujian tanpa internet
-else
-    if printf '%s' "$REF" | grep -Eq '^[0-9a-f]{7,40}$'; then
-        URL="https://github.com/$REPO/archive/$REF.tar.gz"
-    else
-        URL="https://github.com/$REPO/archive/refs/heads/$REF.tar.gz"
-    fi
-    curl -fsSL --retry 3 -o "$TMP_DIR/src.tar.gz" "$URL" || fail "Gagal mengunduh $URL"
-fi
-tar -xzf "$TMP_DIR/src.tar.gz" -C "$TMP_DIR"
-SRC="$(find "$TMP_DIR" -mindepth 2 -maxdepth 2 -type d -name "$SUBDIR" | head -n 1)"
-[ -n "$SRC" ] && [ -f "$SRC/app/helpers/Migrator.php" ] || fail "Isi unduhan tidak sesuai (folder $SUBDIR tidak ada)."
-NEW="$(grep -o "VERSION = '[0-9.]*'" "$SRC/app/helpers/Migrator.php" | head -n 1 | cut -d"'" -f2 || true)"
-ok "Versi skema baru: ${NEW:-tidak diketahui}"
-
-# ----------------------------------------------------------------------------- 4. cek syntax
-step "4/6 Memeriksa file PHP baru dengan PHP server"
+# ----------------------------------------------------------------------------- cek syntax
+step "3/6 Memeriksa file PHP baru dengan PHP server"
 ERRORS="$(find "$SRC" -name '*.php' -print0 | xargs -0 -n 1 "$PHP" -l 2>&1 | grep -v '^No syntax errors' || true)"
 [ -z "$ERRORS" ] || { printf '%s\n' "$ERRORS" >&2; fail "Ada file PHP yang tidak cocok dengan PHP server. Tidak ada file yang diubah."; }
 ok "Semua file PHP valid"
 
-# ----------------------------------------------------------------------------- 5. pasang file
-step "5/6 Memasang file baru (.env, .htaccess utama & storage/ tidak disentuh)"
+# ----------------------------------------------------------------------------- pasang file
+step "4/6 Memasang file baru (.env, .htaccess utama & storage/ tidak disentuh)"
 for dir in app config cron database public tests; do
+    [ -d "$SRC/$dir" ] || continue
     mkdir -p "$APP_DIR/$dir"
     cp -Rf "$SRC/$dir/." "$APP_DIR/$dir/"
 done
@@ -207,18 +179,29 @@ for file in README.md .env.example .gitignore robots.txt; do
     [ -f "$SRC/$file" ] && cp -f "$SRC/$file" "$APP_DIR/$file"
 done
 ok "File aplikasi diperbarui"
-for old in "${OLD_FILES[@]}"; do
-    if [ -e "$APP_DIR/$old" ]; then
-        rm -rf "${APP_DIR:?}/$old"
-        ok "Dihapus: $old"
-    fi
-done
 
-# ----------------------------------------------------------------------------- 6. migrasi
+step "5/6 Menghapus file lama yang tidak dipakai"
+REMOVED=0
+if [ -f "$PKG_DIR/hapus-file-lama.txt" ]; then
+    while IFS= read -r old || [ -n "$old" ]; do
+        old="${old%$'\r'}"
+        case "$old" in ''|'#'*) continue ;; esac
+        case "$old" in /*|*..*|.env|storage*|.htaccess) warn "Dilewati (tidak aman): $old"; continue ;; esac
+        if [ -e "$APP_DIR/$old" ]; then
+            rm -rf "${APP_DIR:?}/$old"
+            rmdir "$(dirname "$APP_DIR/$old")" 2>/dev/null || true   # folder yang jadi kosong
+            ok "Dihapus: $old"
+            REMOVED=$((REMOVED + 1))
+        fi
+    done < "$PKG_DIR/hapus-file-lama.txt"
+fi
+[ "$REMOVED" -gt 0 ] || ok "Tidak ada file lama yang perlu dihapus"
+
+# ----------------------------------------------------------------------------- migrasi
 step "6/6 Migrasi database"
 if ! (cd "$APP_DIR" && "$PHP" database/migrate.php); then
-    printf '\n%sMigrasi gagal.%s Kembalikan file dengan perintah rollback (lihat di bawah), lalu kirim pesan error di atas.\n' "$R" "$N" >&2
-    printf '  curl -fsSL https://raw.githubusercontent.com/%s/%s/%s/database/update-cpanel.sh | bash -s -- --rollback\n' "$REPO" "$REF" "$SUBDIR" >&2
+    printf '\n%sMigrasi gagal.%s Kembalikan file dengan:  cd ~ && bash pik-update/pasang-update.sh --rollback\n' "$R" "$N" >&2
+    printf 'lalu kirim pesan error di atas.\n' >&2
     exit 1
 fi
 
@@ -227,10 +210,10 @@ cat <<EOF
   Backup file     : $FILES_BACKUP
   Backup database : $DB_BACKUP
 
-Langkah berikutnya:
-  1. Buka aplikasi di browser dan login sebagai Admin.
-  2. Settings › Users → buat akun untuk divisi PPIC, Produksi, dan Gudang.
-
 Bila ada masalah, kembalikan file ke versi sebelumnya dengan:
-  curl -fsSL https://raw.githubusercontent.com/$REPO/$REF/$SUBDIR/database/update-cpanel.sh | bash -s -- --rollback
+  cd ~ && bash pik-update/pasang-update.sh --rollback
 EOF
+if [ -f "$PKG_DIR/LANGKAH-SETELAH-UPDATE.txt" ]; then
+    printf '\n%sLangkah berikutnya:%s\n' "$B" "$N"
+    sed 's/^/  /' "$PKG_DIR/LANGKAH-SETELAH-UPDATE.txt"
+fi

@@ -439,21 +439,26 @@ Gunakan tombol **Kirim email percobaan** setelah menyimpan. Bila email gagal, co
 
 ## 18. Pembagian tugas per divisi, Stock & Inbound Supplier (update Oktober 2026 — 2)
 
-### Cara update server — cukup 1 perintah (cPanel › Terminal)
+### Cara update server (berlaku untuk setiap update)
+
+Setiap update dikirim sebagai **`pik-update.zip`** (di repository: folder `update-zip/`).
+
+1. cPanel › **File Manager** → buka folder home (folder paling atas, tempat `public_html` berada) → **Upload** `pik-update.zip` (timpa bila sudah ada).
+2. cPanel › **Terminal**, tempel:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Malikablj/Malikablj/claude/magical-cori-1m350e/marketing.permataindokemas.com/database/update-cpanel.sh | bash
+cd ~ && rm -rf pik-update && unzip -oq pik-update.zip -d pik-update && bash pik-update/pasang-update.sh
 ```
 
-Skrip `database/update-cpanel.sh` otomatis: mencari folder aplikasi, **backup file + database** ke `~/pik-backup/`, mengunduh versi baru, memeriksa syntax PHP, memasang file (tanpa menyentuh `.env`, `.htaccess` utama, dan `storage/`), menghapus file menu Finance, lalu menjalankan migrasi database. Bila satu langkah gagal, skrip berhenti; bila backup gagal, tidak ada file yang diubah.
+Pemasang `pasang-update.sh` otomatis: mencari folder aplikasi, **backup file + database** ke `~/pik-backup/`, memeriksa syntax PHP, memasang file (tanpa menyentuh `.env`, `.htaccess` utama, dan `storage/`), menghapus file lama yang tidak dipakai, lalu menjalankan migrasi database. Bila backup gagal, tidak ada file yang diubah.
 
-Mengembalikan file ke versi sebelum update:
+Mengembalikan file ke versi sebelum update terakhir:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Malikablj/Malikablj/claude/magical-cori-1m350e/marketing.permataindokemas.com/database/update-cpanel.sh | bash -s -- --rollback
+cd ~ && bash pik-update/pasang-update.sh --rollback
 ```
 
-Bila folder aplikasi atau PHP tidak terdeteksi otomatis, tambahkan misalnya `APP_DIR=/home/USER/marketing.permataindokemas.com` atau `PHP_BIN=/opt/cpanel/ea-php83/root/usr/bin/php` sebelum `bash` (contoh: `… | APP_DIR=/home/USER/folder bash`).
+Bila folder aplikasi atau PHP tidak terdeteksi otomatis, tulis misalnya `APP_DIR=/home/USER/marketing.permataindokemas.com` atau `PHP_BIN=/opt/cpanel/ea-php83/root/usr/bin/php` sebelum kata `bash`. Developer membuat zip dengan `bash update-zip/buat-zip.sh` (dari versi yang sudah di-commit).
 
 ### Cara update server — manual (tanpa Terminal)
 
