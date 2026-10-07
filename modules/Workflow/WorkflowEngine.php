@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Workflow;
 
+use App\Approval\ApprovalService;
 use App\Core\AuditLogger;
 use App\Core\AuthorizationException;
 use App\Core\BusinessRuleException;
@@ -199,6 +200,7 @@ final class WorkflowEngine
         Db::update('processes', $data, ['id' => $processId]);
         $p = array_merge($p, $data);
         ProcessRuns::open($p, (string) $data['activated_at']);
+        ApprovalService::requestFor($p, $actor); // approval Pending untuk iterasi ini (PRD §9.2)
         $this->notifyAssigned($p, $actor);
     }
 
@@ -313,8 +315,12 @@ final class WorkflowEngine
             $projectId = (int) $p['project_id'];
             $picAtCompletion = $p['pic_user_id'] !== null ? (int) $p['pic_user_id'] : $actor->id;
             ProcessRuns::close($processId, 'completed', $p['actual_start'], $finish, $outcome ?? 'completed', $picAtCompletion, $actor->id);
+            if ($p['record_type'] === 'validation' && $outcome !== null) {
+                \App\Record\RecordService::syncValidationResult($processId, (int) $p['iteration'], $outcome, $actor->id);
+            }
             if ($p['approval_type'] && $p['approval_type'] !== 'npr') {
-                $this->recordApproval($p, $option, $comment, $actor, isset($input['decision_maker']) ? (string) $input['decision_maker'] : null);
+                $this->recordApproval($p, $option, $comment, $actor, isset($input['decision_maker']) ? (string) $input['decision_maker'] : null,
+                    !empty($input['evidence_document_id']) ? (int) $input['evidence_document_id'] : null);
             }
             $changeType = 'auto_shift';
             switch ($effect) {
@@ -462,7 +468,7 @@ final class WorkflowEngine
     }
 
     /** Catat approval (customer dicatat Sales/NPD/Admin; internal oleh NPD/Admin) — PRD §9.2. */
-    private function recordApproval(array $p, ?array $option, ?string $comment, User $actor, ?string $decisionMaker): void
+    private function recordApproval(array $p, ?array $option, ?string $comment, User $actor, ?string $decisionMaker, ?int $evidenceDocId = null): void
     {
         $status = (string) ($option['approval_status'] ?? 'approved');
         if ($p['approval_giver'] === 'customer') {
@@ -470,16 +476,24 @@ final class WorkflowEngine
         } else {
             Gate::authorize($actor, 'approval.decide_internal');
         }
+        if ($evidenceDocId !== null && !Db::value('SELECT id FROM documents WHERE id = ? AND process_id = ?', [$evidenceDocId, (int) $p['id']])) {
+            $evidenceDocId = null; // bukti harus dokumen proses ini
+        }
+        // revisi dokumen yang dinilai: dokumen terbaru proses selain bukti approval
         $docVersion = Db::value(
-            'SELECT d.current_version_id FROM documents d WHERE d.process_id = ? AND d.is_removed = 0 AND d.current_version_id IS NOT NULL ORDER BY d.updated_at DESC, d.id DESC LIMIT 1',
-            [(int) $p['id']]
+            "SELECT d.current_version_id FROM documents d WHERE d.process_id = ? AND d.is_removed = 0 AND d.current_version_id IS NOT NULL AND d.id <> ?
+             ORDER BY d.doc_type_code = 'approval', d.updated_at DESC, d.id DESC LIMIT 1",
+            [(int) $p['id'], $evidenceDocId ?? 0]
         );
+        if ($docVersion !== null) {
+            Db::update('document_versions', ['status' => $status === 'approved' ? 'approved' : 'rejected'], ['id' => (int) $docVersion]);
+        }
         $now = Clock::nowString();
         $pending = Db::fetch("SELECT id FROM approvals WHERE process_id = ? AND iteration = ? AND status = 'pending'", [(int) $p['id'], (int) $p['iteration']]);
         if ($pending) {
             $id = (int) $pending['id'];
             Db::update('approvals', ['status' => $status, 'decided_by' => $actor->id, 'decided_at' => $now, 'decision_maker_name' => $decisionMaker, 'comment' => $comment,
-                'document_version_id' => $docVersion !== null ? (int) $docVersion : null], ['id' => $id]);
+                'document_version_id' => $docVersion !== null ? (int) $docVersion : null, 'evidence_document_id' => $evidenceDocId], ['id' => $id]);
         } else {
             $id = Db::insert('approvals', [
                 'code' => NumberSequence::nextApprovalCode(Clock::now()),
@@ -487,6 +501,7 @@ final class WorkflowEngine
                 'approval_type' => (string) $p['approval_type'], 'giver' => (string) ($p['approval_giver'] ?? 'internal'), 'iteration' => (int) $p['iteration'],
                 'document_version_id' => $docVersion !== null ? (int) $docVersion : null, 'status' => $status, 'requested_by' => $actor->id,
                 'requested_at' => $now, 'decided_by' => $actor->id, 'decided_at' => $now, 'decision_maker_name' => $decisionMaker, 'comment' => $comment,
+                'evidence_document_id' => $evidenceDocId,
             ]);
         }
         Db::insert('approval_history', ['approval_id' => $id, 'action' => 'decide', 'status_from' => 'pending', 'status_to' => $status, 'comment' => $comment, 'user_id' => $actor->id, 'created_at' => $now]);
@@ -509,6 +524,7 @@ final class WorkflowEngine
                 continue;
             }
             ProcessRuns::close((int) $id, 'reset', null, null, 'reset', null, $actor->id);
+            ApprovalService::withdrawPending((int) $id, $actor, 'loop');
             Db::update('processes', [
                 'status' => 'not_started', 'actual_start' => null, 'actual_finish' => null, 'completed_at' => null, 'completed_by' => null,
             ], ['id' => (int) $id]);
@@ -574,6 +590,7 @@ final class WorkflowEngine
                 if (in_array($g['status'], self::ACTIVE, true)) {
                     // aktif otomatis tanpa pekerjaan tercatat (OQ-26): run ditutup "skipped" — tidak dihitung KPI
                     ProcessRuns::close((int) $g['id'], 'skipped', null, null, 'skipped', null, $actor->id);
+                    ApprovalService::withdrawPending((int) $g['id'], $actor, 'skipped');
                 }
                 Db::update('processes', [
                     'status' => 'skipped', 'skip_reason' => $reason, 'skipped_by' => $actor->id, 'skipped_at' => $now,

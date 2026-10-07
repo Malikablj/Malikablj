@@ -182,6 +182,94 @@ final class DocumentService
         );
     }
 
+    public const VERSION_STATUSES = ['current', 'superseded', 'rejected', 'approved'];
+
+    /**
+     * Pusat dokumen (PRD §9.1): pencarian & filter project, part, tipe, status, pengunggah, tanggal.
+     * Hanya dokumen yang sudah terkait project (lampiran NPR draft tidak tampil).
+     * @param array{q?:?string,project_id?:?int,part_id?:?int,doc_type?:?string,status?:?string,uploader_id?:?int,from?:?string,to?:?string,removed?:bool} $f
+     * @return array{rows:list<array<string,mixed>>,total:int}
+     */
+    public function search(User $user, array $f, int $page = 1, int $perPage = 30): array
+    {
+        if (!Gate::can($user, 'document.view')) {
+            throw new AuthorizationException(I18n::t('error.forbidden'));
+        }
+        $w = ['d.project_id IS NOT NULL', 'd.is_removed = ?'];
+        $p = [!empty($f['removed']) && $user->isAdmin() ? 1 : 0];
+        if (!empty($f['q'])) {
+            $like = '%' . addcslashes((string) $f['q'], '%_\\') . '%';
+            $w[] = '(d.title LIKE ? OR v.original_name LIKE ? OR pj.code LIKE ? OR pj.name LIKE ?)';
+            array_push($p, $like, $like, $like, $like);
+        }
+        foreach (['project_id' => 'd.project_id', 'part_id' => 'd.part_id', 'uploader_id' => 'v.uploaded_by'] as $k => $col) {
+            if (!empty($f[$k])) {
+                $w[] = "$col = ?";
+                $p[] = (int) $f[$k];
+            }
+        }
+        if (!empty($f['doc_type'])) {
+            $w[] = 'd.doc_type_code = ?';
+            $p[] = (string) $f['doc_type'];
+        }
+        if (!empty($f['status']) && in_array($f['status'], self::VERSION_STATUSES, true)) {
+            $w[] = 'v.status = ?';
+            $p[] = $f['status'];
+        }
+        foreach (['from' => '>=', 'to' => '<='] as $k => $op) {
+            if (!empty($f[$k]) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $f[$k])) {
+                $w[] = "DATE(v.uploaded_at) $op ?";
+                $p[] = $f[$k];
+            }
+        }
+        $where = implode(' AND ', $w);
+        $from = 'FROM documents d JOIN document_versions v ON v.id = d.current_version_id JOIN projects pj ON pj.id = d.project_id
+                 LEFT JOIN project_parts pp ON pp.id = d.part_id LEFT JOIN processes pr ON pr.id = d.process_id LEFT JOIN users u ON u.id = v.uploaded_by';
+        $total = (int) Db::value("SELECT COUNT(*) $from WHERE $where", $p);
+        $perPage = max(5, min(100, $perPage));
+        $offset = max(0, ($page - 1) * $perPage);
+        $rows = Db::fetchAll(
+            "SELECT d.*, v.id AS version_id, v.version_no, v.original_name, v.extension, v.size_bytes, v.status AS version_status, v.uploaded_at, v.notes,
+                    u.name AS uploader_name, pj.code AS project_code, pj.name AS project_name, pp.name AS part_name, pr.code AS process_code, pr.name AS process_name, pr.name_en AS process_name_en
+             $from WHERE $where ORDER BY v.uploaded_at DESC, d.id DESC LIMIT $perPage OFFSET $offset",
+            $p
+        );
+        return ['rows' => $rows, 'total' => $total];
+    }
+
+    /** Dokumen project per part › proses (tab Dokumen). @return list<array<string,mixed>> */
+    public function forProject(int $projectId): array
+    {
+        return Db::fetchAll(
+            'SELECT d.*, v.id AS version_id, v.version_no, v.original_name, v.extension, v.size_bytes, v.status AS version_status, v.uploaded_at, u.name AS uploader_name,
+                    pp.name AS part_name, pr.code AS process_code, pr.name AS process_name, pr.name_en AS process_name_en
+             FROM documents d JOIN document_versions v ON v.id = d.current_version_id LEFT JOIN users u ON u.id = v.uploaded_by
+             LEFT JOIN project_parts pp ON pp.id = d.part_id LEFT JOIN processes pr ON pr.id = d.process_id
+             WHERE d.project_id = ? AND d.is_removed = 0 ORDER BY d.part_id IS NOT NULL, pp.sort_order, pr.sort_order, d.doc_type_code, d.id',
+            [$projectId]
+        );
+    }
+
+    /** Lepas dokumen proses (Admin, alasan wajib). File & versi tetap tersimpan; tercatat di audit. */
+    public function removeDocument(User $actor, int $documentId, string $reason): void
+    {
+        if (!$actor->isAdmin()) {
+            throw new AuthorizationException(I18n::t('error.forbidden'));
+        }
+        if (trim($reason) === '') {
+            throw new ValidationException(['reason' => I18n::t('npr.v.reason_required')]);
+        }
+        Db::transaction(function () use ($actor, $documentId, $reason): void {
+            $doc = Db::fetch('SELECT * FROM documents WHERE id = ? AND is_removed = 0 FOR UPDATE', [$documentId]);
+            if (!$doc) {
+                throw new NotFoundException(I18n::t('error.not_found'));
+            }
+            Db::update('documents', ['is_removed' => 1, 'removed_by' => $actor->id, 'removed_at' => Clock::nowString()], ['id' => $documentId]);
+            AuditLogger::log('document.remove', 'document', $documentId, ['title' => $doc['title'], 'type' => $doc['doc_type_code']], null, $reason,
+                $doc['project_id'] !== null ? (int) $doc['project_id'] : null, $actor);
+        });
+    }
+
     /**
      * Versi dokumen untuk diunduh setelah cek hak akses (PRD §9.1: unduh hanya lewat sesi + cek akses).
      * @return array<string,mixed>

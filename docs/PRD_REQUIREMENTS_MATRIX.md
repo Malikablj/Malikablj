@@ -156,22 +156,22 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DOC-01 | 18 tipe dokumen (Lampiran B) per project › part › proses | 9.1 | Must | 7 | `master_options(document_type)` | Planned | `DocumentServiceTest` |
-| DOC-02 | Revisi tidak menimpa; status Current/Superseded/Rejected/Approved | 9.1 | Must | 7 | `DocumentService` | Planned | `DocumentServiceTest` |
+| DOC-01 | 18 tipe dokumen (Lampiran B) per project › part › proses | 9.1 | Must | 7 | `master_options(document_type)`, `DocumentService::addProcessDocument` | Done | `DocumentApprovalRecordTest` |
+| DOC-02 | Revisi tidak menimpa; status Current/Superseded/Rejected/Approved | 9.1 | Must | 7 | `DocumentService` (versi, superseded; approved/rejected dari keputusan approval) | Done | `DocumentApprovalRecordTest`::testDocumentVersioningSearchAndRemoval, ::testApprovalPendingOnActivationThenDecidedWithEvidence |
 | DOC-03 | Maks. 25 MB; ekstensi diatur Admin; validasi MIME/ekstensi/nama di server | 9.1, 13.2 | Must | 7 | `UploadValidator` | Done | `UploadValidatorTest` |
-| DOC-04 | Dokumen wajib mencegah penyelesaian proses; kategori Attention "Missing Mandatory Document" | 9.1, 5.4 | Must | 7 | `WorkflowEngine`, `AttentionService` | Planned | `WorkflowEngineTest` |
-| DOC-05 | Halaman Dokumen: pencarian & filter, pratinjau gambar/PDF | 9.1 | Must | 7 | `public/documents.php` | Planned | `DocumentHttpTest` |
+| DOC-04 | Dokumen wajib mencegah penyelesaian proses; kategori Attention "Missing Mandatory Document" | 9.1, 5.4 | Must | 7 | `WorkflowEngine`, `AttentionService` | Partial | `WorkflowEngineTest::testRequiredDocumentBlocksCompletion`; kategori Attention di dashboard fase 10 |
+| DOC-05 | Halaman Dokumen: pencarian & filter, pratinjau gambar/PDF | 9.1 | Must | 7 | `DocumentService::search`, `public/documents.php` | Done | `DocumentApprovalRecordTest`, `RecordHttpTest` |
 | DOC-06 | File di luar webroot, unduh hanya lewat sesi + cek hak akses | 9.1, 13.2 | Must | 7 | `public/download.php`, `storage/documents` | Done | `DocumentHttpTest` |
-| APR-01 | 10 tipe approval; pemberi customer/internal | 9.2 | Must | 7 | `ApprovalService` | Planned | `ApprovalServiceTest` |
-| APR-02 | Approval customer dicatat Sales/NPD/Admin dengan bukti & komentar | 9.2 | Must | 7 | `ApprovalService` | Planned | `ApprovalServiceTest` |
-| APR-03 | Status Pending/Approved/Rejected/Revision Required terhubung ke workflow (loop) | 9.2 | Must | 7 | `ApprovalService` + `WorkflowEngine` | Planned | `ApprovalServiceTest` (UAT-15) |
-| APR-04 | Approval menyimpan revisi dokumen, pemohon, tanggal, iterasi; halaman antrean & riwayat | 9.2 | Must | 7 | `public/approvals.php` | Planned | `ApprovalServiceTest` |
-| REC-01 | Record Trial/T0/Commissioning, Material, Validation per part; Purchasing update material | 9.3 | Must | 7 | `RecordService` | Planned | `RecordServiceTest` |
+| APR-01 | 10 tipe approval; pemberi customer/internal | 9.2 | Must | 7 | `ApprovalService::TYPES`, `WorkflowEngine::recordApproval` | Done | `DocumentApprovalRecordTest` |
+| APR-02 | Approval customer dicatat Sales/NPD/Admin dengan bukti & komentar | 9.2 | Must | 7 | `WorkflowEngine::recordApproval` (bukti `evidence_document_id`), `public/process.php` | Done | `DocumentApprovalRecordTest`::testApprovalPendingOnActivationThenDecidedWithEvidence |
+| APR-03 | Status Pending/Approved/Rejected/Revision Required terhubung ke workflow (loop) | 9.2 | Must | 7 | `ApprovalService::requestFor/withdrawPending` + `WorkflowEngine` | Done | `DocumentApprovalRecordTest`, `WorkflowEngineTest` (loop) |
+| APR-04 | Approval menyimpan revisi dokumen, pemohon, tanggal, iterasi; halaman antrean & riwayat | 9.2 | Must | 7 | `ApprovalService::search`, `public/approvals.php`, tab Approval project | Done | `DocumentApprovalRecordTest`, `RecordHttpTest` |
+| REC-01 | Record Trial/T0/Commissioning, Material, Validation per part; Purchasing update material | 9.3 | Must | 7 | `RecordService`, kartu catatan di `public/process.php`, tab Trial & Material | Done | `DocumentApprovalRecordTest`, `RecordHttpTest::testRecordPermissions` |
 | FR-AUD-01 | Audit log append-only: siapa, kapan, IP, aksi, entitas, sebelum/sesudah, alasan | 9.4 | Must | 1+ | `AuditLogger`, `database/hardening.sql` | Done | `AuditLoggerTest` |
 | FR-AUD-02 | Cakupan audit: NPR, feedback, jadwal, dependency, shift otomatis, skip, hold, target, approval, dokumen, pengaturan, arsip, export, login | 9.4 | Must | 1+ | semua service | Partial | per modul |
-| FR-AUD-03 | Tab Activity semua role; audit log penuh hanya Admin; Revision History | 9.4 | Must | 6/7 | `public/project.php`, `public/settings/audit.php` | Planned | `AuditHttpTest` |
-| NA-01 | Next Action, jatuh tempo, Waiting For per part; notifikasi pemilik | 9.5 | Must | 8 | `NextActionService` | Planned | `NextActionTest` |
-| PD-01 | Halaman detail project dengan 9 tab (Ringkasan … Activity) | 9.6 | Must | 6 | `public/project.php` | Planned | `ProjectPageHttpTest` |
+| FR-AUD-03 | Tab Activity semua role; audit log penuh hanya Admin; Revision History | 9.4 | Must | 6/7 | `public/project.php?tab=activity`, `public/settings/audit.php`, Revision History | Done | `RecordHttpTest::testPagesForAllRoles`, `AuditAndSettingsTest` |
+| NA-01 | Next Action, jatuh tempo, Waiting For per part; notifikasi pemilik | 9.5 | Must | 8 | `NextActionService`, `public/project.php` | Partial | `DocumentApprovalRecordTest`::testNextActionReplaceCompleteAndPermissions; notifikasi jatuh tempo/terlambat lewat cron fase 8 |
+| PD-01 | Halaman detail project dengan 9 tab (Ringkasan … Activity) | 9.6 | Must | 6 | `public/project.php` + `includes/project_header.php` (Ringkasan, Proses, Timeline, Approval, Dokumen, Trial & Material, Riwayat, Activity; NPR & Feedback lewat tombol Buka NPR) | Done | `ProjectHttpTest`, `RecordHttpTest` |
 
 ## 10. Dashboard, laporan, KPI (PRD §10)
 

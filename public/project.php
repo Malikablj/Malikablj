@@ -15,7 +15,12 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Core\ValidationException;
+use App\Approval\ApprovalService;
+use App\Document\DocumentService;
+use App\Master\MasterService;
+use App\Project\NextActionService;
 use App\Project\ProjectQuery;
+use App\Record\RecordService;
 use App\Project\ProjectService;
 use App\Project\RevisionHistory;
 use App\Scheduling\ScheduleService;
@@ -24,7 +29,7 @@ $user = require_permission('project.view');
 $query = new ProjectQuery();
 $id = (int) Request::int('id', 0);
 $project = $query->find($id);
-$tab = in_array(Request::query('tab'), ['overview', 'processes', 'history'], true) ? (string) Request::query('tab') : 'overview';
+$tab = in_array(Request::query('tab'), ['overview', 'processes', 'approvals', 'documents', 'records', 'history', 'activity'], true) ? (string) Request::query('tab') : 'overview';
 
 $errors = [];
 $failed = null;
@@ -56,6 +61,15 @@ if (Request::isPost()) {
             case 'change_target':
                 (new ScheduleService())->changeTarget($user, $id, (string) Request::post('target_finish'), (string) Request::post('reason'));
                 Session::flash('success', I18n::t('project.target_changed'));
+                break;
+            case 'next_action':
+                $partParam = Request::int('part_id');
+                (new NextActionService())->set($user, $id, $partParam, $_POST);
+                Session::flash('success', I18n::t('next.saved'));
+                break;
+            case 'next_action_done':
+                (new NextActionService())->complete($user, (int) Request::int('next_action_id'));
+                Session::flash('success', I18n::t('next.done_msg'));
                 break;
             case 'baseline':
                 $partId = Request::int('part_id');
@@ -92,6 +106,13 @@ foreach ($processes as $p) {
         $byPart[(int) $p['part_id']][] = $p;
     }
 }
+$nextSvc = new NextActionService();
+$nextActions = [];
+foreach ($nextSvc->open($id) as $na) {
+    $nextActions[$na['part_id'] === null ? 0 : (int) $na['part_id']] = $na;
+}
+$canNext = $nextSvc->canEdit($user, $project) && !in_array($project['status'], ['completed', 'cancelled'], true);
+$activeUsers = $canNext ? \App\Core\Db::fetchAll("SELECT u.id, u.name FROM users u JOIN roles r ON r.id = u.role_id WHERE u.is_active = 1 AND r.code <> 'management' ORDER BY u.name") : [];
 $canPlan = Gate::can($user, 'schedule.plan');
 $canTarget = Gate::can($user, 'target.change');
 $canBaseline = Gate::can($user, 'baseline.create');
@@ -107,6 +128,53 @@ $activeNav = 'projects';
 require APP_ROOT . '/includes/layout/header.php';
 ?>
 <?php require APP_ROOT . '/includes/project_header.php'; ?>
+<?php
+/** Blok Next Action & Waiting For (PRD §9.5) untuk part (atau level project bila $partKey = 0). */
+$renderNext = static function (int $partKey, string $scopeName) use ($nextActions, $canNext, $activeUsers, $failed, $errors): string {
+    $na = $nextActions[$partKey] ?? null;
+    $today = \App\Core\Clock::todayString();
+    ob_start(); ?>
+    <div class="next-action">
+      <p class="small"><strong><?= t('next.title') ?></strong></p>
+      <?php if ($na): ?>
+        <p class="small"><?= e($na['description']) ?></p>
+        <p class="small muted"><?= t('next.waiting_for') ?>: <?= t('next.waiting.' . $na['waiting_for']) ?><?= $na['waiting_for_note'] ? ' (' . e($na['waiting_for_note']) . ')' : '' ?>
+          · <?= e($na['owner_name'] ?? '–') ?> · <?= $na['due_date'] ? fmt_date($na['due_date']) : '–' ?>
+          <?php if ($na['due_date'] && $na['due_date'] < $today): ?><span class="badge badge-danger"><?= t('next.late') ?></span><?php elseif ($na['due_date'] === $today): ?><span class="badge badge-warning"><?= t('next.due_today') ?></span><?php endif; ?></p>
+      <?php else: ?>
+        <p class="small muted"><?= t('next.none') ?></p>
+      <?php endif; ?>
+      <?php if ($canNext): ?>
+        <div class="inline-edit">
+          <button type="button" class="btn btn-sm" data-open-dialog="dlg-next-<?= $partKey ?>"><?= icon('edit', 'icon icon-sm') ?> <?= $na ? t('next.update') : t('next.set') ?></button>
+          <?php if ($na): ?>
+            <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="next_action_done"><input type="hidden" name="next_action_id" value="<?= (int) $na['id'] ?>">
+              <button type="submit" class="btn btn-sm btn-ghost"><?= icon('check', 'icon icon-sm') ?> <?= t('next.mark_done') ?></button></form>
+          <?php endif; ?>
+        </div>
+        <dialog class="modal" id="dlg-next-<?= $partKey ?>" aria-labelledby="dlg-next-title-<?= $partKey ?>"<?= $failed === 'next_action' && (int) Request::post('part_id') === $partKey ? ' data-autoopen' : '' ?>>
+          <form method="post">
+            <?= csrf_field() ?><input type="hidden" name="action" value="next_action"><?php if ($partKey > 0): ?><input type="hidden" name="part_id" value="<?= $partKey ?>"><?php endif; ?>
+            <div class="modal-header"><h2 id="dlg-next-title-<?= $partKey ?>"><?= t('next.title') ?> — <?= e($scopeName) ?></h2><button type="button" class="icon-btn" data-close-dialog aria-label="<?= t('common.close') ?>"><?= icon('x') ?></button></div>
+            <div class="modal-body form-grid">
+              <div class="field span-2<?= isset($errors['description']) ? ' has-error' : '' ?>"><label for="na-desc-<?= $partKey ?>"><?= t('next.description') ?></label>
+                <textarea class="input" id="na-desc-<?= $partKey ?>" name="description" rows="2" maxlength="500" required><?= e($na['description'] ?? '') ?></textarea></div>
+              <div class="field"><label for="na-due-<?= $partKey ?>"><?= t('next.due') ?></label><input class="input" type="date" id="na-due-<?= $partKey ?>" name="due_date" value="<?= e((string) ($na['due_date'] ?? '')) ?>"></div>
+              <div class="field"><label for="na-owner-<?= $partKey ?>"><?= t('next.owner') ?></label>
+                <select class="input" id="na-owner-<?= $partKey ?>" name="owner_user_id"><option value="">–</option>
+                  <?php foreach ($activeUsers as $u): ?><option value="<?= (int) $u['id'] ?>"<?= (int) ($na['owner_user_id'] ?? 0) === (int) $u['id'] ? ' selected' : '' ?>><?= e($u['name']) ?></option><?php endforeach; ?></select></div>
+              <div class="field"><label for="na-wait-<?= $partKey ?>"><?= t('next.waiting_for') ?></label>
+                <select class="input" id="na-wait-<?= $partKey ?>" name="waiting_for"><?php foreach (NextActionService::WAITING as $w): ?><option value="<?= $w ?>"<?= ($na['waiting_for'] ?? 'internal') === $w ? ' selected' : '' ?>><?= t('next.waiting.' . $w) ?></option><?php endforeach; ?></select></div>
+              <div class="field"><label for="na-note-<?= $partKey ?>"><?= t('next.waiting_note') ?></label><input class="input" id="na-note-<?= $partKey ?>" name="waiting_for_note" maxlength="255" value="<?= e((string) ($na['waiting_for_note'] ?? '')) ?>"></div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn" data-close-dialog><?= t('common.cancel') ?></button><button type="submit" class="btn btn-primary"><?= t('common.save') ?></button></div>
+          </form>
+        </dialog>
+      <?php endif; ?>
+    </div>
+    <?php return (string) ob_get_clean();
+};
+?>
 
 <?php if ($tab === 'overview'): ?>
 <div class="grid grid-2">
@@ -126,6 +194,13 @@ require APP_ROOT . '/includes/layout/header.php';
         <?php if ($project['finished_at']): ?><dt><?= t('project.finished_at') ?></dt><dd><?= fmt_datetime($project['finished_at']) ?></dd><?php endif; ?>
         <?php if ($project['cancelled_at']): ?><dt><?= t('status.cancelled') ?></dt><dd><?= fmt_datetime($project['cancelled_at']) ?> — <?= e($project['cancel_reason']) ?></dd><?php endif; ?>
       </dl>
+      <hr>
+      <?= $renderNext(0, (string) $project['code']) ?>
+      <?php $partNext = array_filter($nextActions, static fn ($k) => $k > 0, ARRAY_FILTER_USE_KEY); ?>
+      <?php if ($partNext): ?>
+        <p class="small muted"><?= t('next.parts_summary') ?></p>
+        <ul class="plain-list small"><?php foreach ($partNext as $na): ?><li><strong><?= e($na['part_name']) ?>:</strong> <?= e($na['description']) ?> <span class="muted">· <?= t('next.waiting.' . $na['waiting_for']) ?> · <?= $na['due_date'] ? fmt_date($na['due_date']) : '–' ?></span></li><?php endforeach; ?></ul>
+      <?php endif; ?>
     </div>
     <?php if (!$closed && ($canEdit || $canPlan || $canTarget || $canBaseline)): ?>
       <div class="card-footer">
@@ -191,6 +266,7 @@ require APP_ROOT . '/includes/layout/header.php';
         <?php else: ?>
           <p class="small muted"><?= t('project.part_waiting_feedback') ?></p>
         <?php endif; ?>
+        <?php if ($pt['cancelled_at'] === null): ?><?= $renderNext((int) $pt['id'], (string) $pt['name']) ?><?php endif; ?>
         <dl class="kv small">
           <?php foreach (ProjectService::PART_ROLES as $role): ?>
             <dt><?= role_label($role) ?></dt><dd><?= e($pt[$role . '_name'] ?? '–') ?></dd>
@@ -275,6 +351,128 @@ require APP_ROOT . '/includes/layout/header.php';
   </section>
 <?php endforeach; ?>
 <p class="muted small"><?= t('process.dates_note') ?></p>
+
+<?php elseif ($tab === 'approvals'): ?>
+<?php $approvals = (new ApprovalService())->search($user, ['project_id' => $id], 1, 100)['rows']; ?>
+<section class="card" aria-labelledby="sec-appr">
+  <div class="card-header"><h2 id="sec-appr"><?= t('approval.title') ?></h2><a class="btn btn-sm" href="<?= e(url('approvals.php', ['view' => 'history', 'project_id' => $id])) ?>"><?= t('approval.open_page') ?></a></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th scope="col"><?= t('approval.code') ?></th><th scope="col"><?= t('approval.type') ?></th><th scope="col"><?= t('process.process') ?></th><th scope="col"><?= t('common.status') ?></th><th scope="col"><?= t('approval.decided') ?></th></tr></thead>
+      <tbody>
+        <?php if (!$approvals): ?><tr><td colspan="5" class="table-empty"><?= t('common.empty') ?></td></tr><?php endif; ?>
+        <?php foreach ($approvals as $a): ?>
+          <tr>
+            <td class="mono small"><?= e($a['code']) ?><div class="muted"><?= t('process.iteration_n', ['n' => (int) $a['iteration']]) ?></div></td>
+            <td class="small"><?= t('approval.type.' . $a['approval_type']) ?><div class="muted"><?= t('approval.giver.' . $a['giver']) ?></div></td>
+            <td class="small"><?php if ($a['process_id']): ?><a href="<?= e(url('process.php', ['id' => $a['process_id']])) ?>"><?= e(($a['part_name'] ? $a['part_name'] . ' › ' : '') . $a['process_code'] . ' ' . ProjectQuery::processName(['name' => $a['process_name'], 'name_en' => $a['process_name_en']])) ?></a><?php endif; ?></td>
+            <td><?= status_badge((string) $a['status'], 'approval') ?></td>
+            <td class="small"><?php if ($a['decided_at']): ?><?= fmt_datetime($a['decided_at']) ?> · <?= e($a['decided_by_name']) ?><?= $a['decision_maker_name'] ? ' · ' . e($a['decision_maker_name']) : '' ?><?= $a['comment'] ? '<div>' . e($a['comment']) . '</div>' : '' ?><?php else: ?>–<?php endif; ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<?php elseif ($tab === 'documents'): ?>
+<?php $docs = (new DocumentService())->forProject($id); ?>
+<section class="card" aria-labelledby="sec-docs">
+  <div class="card-header"><h2 id="sec-docs"><?= t('process.documents') ?></h2><a class="btn btn-sm" href="<?= e(url('documents.php', ['project_id' => $id])) ?>"><?= t('doc.open_center') ?></a></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th scope="col"><?= t('doc.location') ?></th><th scope="col"><?= t('process.doc_type') ?></th><th scope="col"><?= t('process.file') ?></th><th scope="col"><?= t('project.version') ?></th><th scope="col"><?= t('common.status') ?></th><th scope="col"><?= t('process.uploaded') ?></th></tr></thead>
+      <tbody>
+        <?php if (!$docs): ?><tr><td colspan="6" class="table-empty"><?= t('doc.empty') ?></td></tr><?php endif; ?>
+        <?php foreach ($docs as $d): ?>
+          <tr>
+            <td class="small"><?php if ($d['process_id']): ?><a href="<?= e(url('process.php', ['id' => $d['process_id']])) ?>"><?= e(($d['part_name'] ? $d['part_name'] . ' › ' : '') . $d['process_code'] . ' ' . ProjectQuery::processName(['name' => $d['process_name'], 'name_en' => $d['process_name_en']])) ?></a><?php elseif ($d['npr_id']): ?><a href="<?= e(url('npr-edit.php', ['id' => $d['npr_id']])) ?>">NPR</a><?php else: ?>–<?php endif; ?></td>
+            <td class="small"><?= e(MasterService::label('document_type', (string) $d['doc_type_code'])) ?></td>
+            <td class="small"><a href="<?= e(url('download.php', ['v' => $d['version_id']])) ?>"><?= icon('download', 'icon icon-sm') ?> <?= e($d['original_name']) ?></a></td>
+            <td class="small">v<?= (int) $d['version_no'] ?></td>
+            <td><?= status_badge((string) $d['version_status'], 'docstatus') ?></td>
+            <td class="small nowrap"><?= fmt_datetime($d['uploaded_at']) ?><div class="muted"><?= e($d['uploader_name']) ?></div></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<?php elseif ($tab === 'records'): ?>
+<?php $rec = (new RecordService())->forProject($id); ?>
+<?php foreach (['trial' => 'record.trial_title', 'material' => 'record.material_title', 'validation' => 'record.validation_title'] as $kind => $title): ?>
+  <section class="card section" aria-labelledby="sec-rec-<?= $kind ?>">
+    <div class="card-header"><h2 id="sec-rec-<?= $kind ?>"><?= t($title) ?></h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>
+          <th scope="col"><?= t('process.process') ?></th>
+          <?php if ($kind === 'material'): ?>
+            <th scope="col"><?= t('record.f.material') ?></th><th scope="col"><?= t('record.f.batch_no') ?></th><th scope="col" class="right"><?= t('record.f.quantity_kg') ?></th><th scope="col"><?= t('record.f.received_date') ?></th><th scope="col"><?= t('record.f.supplier') ?></th><th scope="col">PIC</th>
+          <?php elseif ($kind === 'trial'): ?>
+            <th scope="col"><?= t('common.date') ?></th><th scope="col"><?= t('record.f.machine') ?> / <?= t('record.f.mold') ?></th><th scope="col"><?= t('record.f.problems') ?></th><th scope="col"><?= t('record.f.evaluation') ?></th><th scope="col"><?= t('record.f.result') ?></th>
+          <?php else: ?>
+            <th scope="col"><?= t('common.date') ?></th><th scope="col"><?= t('record.f.machine') ?> / <?= t('record.f.mold') ?></th><th scope="col"><?= t('record.f.production_qty') ?></th><th scope="col"><?= t('record.f.problems') ?></th><th scope="col"><?= t('record.f.result') ?></th>
+          <?php endif; ?>
+        </tr></thead>
+        <tbody>
+          <?php if (!$rec[$kind]): ?><tr><td colspan="7" class="table-empty"><?= t('common.empty') ?></td></tr><?php endif; ?>
+          <?php foreach ($rec[$kind] as $r): ?>
+            <tr>
+              <td class="small"><a href="<?= e(url('process.php', ['id' => $r['process_id']])) ?>#sec-record"><?= e($r['part_name'] . ' › ' . $r['code'] . ' ' . $r['process_name']) ?></a><?= isset($r['iteration']) ? '<div class="muted">' . t('process.iteration_n', ['n' => (int) $r['iteration']]) . '</div>' : '' ?></td>
+              <?php if ($kind === 'material'): ?>
+                <td class="small"><?= e($r['material'] ?? '–') ?><?= $r['material_received'] ? '<div class="muted">' . e($r['material_received']) . '</div>' : '' ?></td><td class="small"><?= e($r['batch_no'] ?? '–') ?></td>
+                <td class="small right"><?= $r['quantity_kg'] !== null ? e(fmt_number($r['quantity_kg'], 3)) : '–' ?></td><td class="small nowrap"><?= fmt_date($r['received_date']) ?></td><td class="small"><?= e($r['supplier'] ?? '–') ?></td><td class="small"><?= e($r['pic_name'] ?? '–') ?></td>
+              <?php elseif ($kind === 'trial'): ?>
+                <td class="small nowrap"><?= fmt_date($r['trial_date']) ?><div class="muted"><?= t('record.type.' . $r['trial_type']) ?></div></td><td class="small"><?= e(trim(($r['machine'] ?? '') . ' / ' . ($r['mold'] ?? ''), ' /') ?: '–') ?></td>
+                <td class="small"><?= e($r['problems'] ?? '–') ?></td><td class="small"><?= e($r['evaluation'] ?? '–') ?></td><td class="small"><?= e($r['result'] ?? '–') ?></td>
+              <?php else: ?>
+                <td class="small nowrap"><?= fmt_date($r['validation_date']) ?></td><td class="small"><?= e(trim(($r['machine'] ?? '') . ' / ' . ($r['mold'] ?? ''), ' /') ?: '–') ?></td>
+                <td class="small"><?= e($r['production_qty'] ?? '–') ?></td><td class="small"><?= e($r['problems'] ?? '–') ?></td><td><?= $r['result'] ? status_badge((string) $r['result'], 'validation') : '–' ?></td>
+              <?php endif; ?>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<?php endforeach; ?>
+
+<?php elseif ($tab === 'activity'): ?>
+<?php
+$actPage = max(1, (int) Request::int('page', 1));
+$actTotal = (int) \App\Core\Db::value('SELECT COUNT(*) FROM audit_logs WHERE project_id = ?', [$id]);
+$activity = \App\Core\Db::fetchAll('SELECT action, entity_type, entity_id, user_name, reason, old_value, new_value, created_at FROM audit_logs WHERE project_id = ? ORDER BY id DESC LIMIT 50 OFFSET ' . (($actPage - 1) * 50), [$id]);
+$actPages = max(1, (int) ceil($actTotal / 50));
+?>
+<section class="card" aria-labelledby="sec-act">
+  <div class="card-header"><h2 id="sec-act"><?= t('project.tab.activity') ?></h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th scope="col"><?= t('common.time') ?></th><th scope="col"><?= t('audit.user') ?></th><th scope="col"><?= t('audit.action') ?></th><th scope="col"><?= t('audit.change') ?></th><th scope="col"><?= t('common.reason') ?></th></tr></thead>
+      <tbody>
+        <?php if (!$activity): ?><tr><td colspan="5" class="table-empty"><?= t('common.empty') ?></td></tr><?php endif; ?>
+        <?php foreach ($activity as $a): ?>
+          <?php $old = $a['old_value'] ? json_decode((string) $a['old_value'], true) : null; $new = $a['new_value'] ? json_decode((string) $a['new_value'], true) : null; ?>
+          <tr>
+            <td class="small nowrap"><?= fmt_datetime($a['created_at']) ?></td>
+            <td class="small"><?= e($a['user_name'] ?? 'Sistem') ?></td>
+            <td class="small"><?= I18n::has('audit.action.' . $a['action']) ? t('audit.action.' . $a['action']) : e($a['action']) ?><div class="muted mono"><?= e($a['entity_type'] . ' #' . $a['entity_id']) ?></div></td>
+            <td class="small"><?php if (is_array($new) || is_array($old)): ?><details><summary class="small"><?= t('audit.show_change') ?></summary><pre class="pre small"><?= e(json_encode(['old' => $old, 'new' => $new], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?></pre></details><?php else: ?>–<?php endif; ?></td>
+            <td class="small"><?= e($a['reason'] ?? '') ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <?php if ($actPages > 1): ?>
+    <div class="pagination"><span><?= t('common.page_of', ['page' => $actPage, 'pages' => $actPages]) ?></span><span class="pagination-links">
+      <?php if ($actPage > 1): ?><a class="btn btn-sm" href="<?= e(url('project.php', ['id' => $id, 'tab' => 'activity', 'page' => $actPage - 1])) ?>"><?= t('common.previous') ?></a><?php endif; ?>
+      <?php if ($actPage < $actPages): ?><a class="btn btn-sm" href="<?= e(url('project.php', ['id' => $id, 'tab' => 'activity', 'page' => $actPage + 1])) ?>"><?= t('common.next') ?></a><?php endif; ?>
+    </span></div>
+  <?php endif; ?>
+</section>
 
 <?php else: ?>
 <?php $history = RevisionHistory::forProject($id); $changes = $query->scheduleChanges($id); $baselines = $query->baselines($id); $gates = $query->gates($id); ?>

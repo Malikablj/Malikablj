@@ -34,7 +34,8 @@ declare(strict_types=1);
 </div>
 
 <nav class="tabs" aria-label="<?= t('project.tabs') ?>">
-  <?php foreach (['overview' => 'project.tab.overview', 'processes' => 'project.tab.processes', 'timeline' => 'project.tab.timeline', 'history' => 'project.tab.history'] as $k => $label): ?>
+  <?php foreach (['overview' => 'project.tab.overview', 'processes' => 'project.tab.processes', 'timeline' => 'project.tab.timeline', 'approvals' => 'project.tab.approvals',
+                  'documents' => 'project.tab.documents', 'records' => 'project.tab.records', 'history' => 'project.tab.history', 'activity' => 'project.tab.activity'] as $k => $label): ?>
     <?php $__href = $k === 'timeline' ? url('timeline.php', ['project' => $id]) : url('project.php', ['id' => $id, 'tab' => $k]); ?>
     <a href="<?= e($__href) ?>"<?= $tab === $k ? ' class="active" aria-current="page"' : '' ?>><?= t($label) ?></a>
   <?php endforeach; ?>

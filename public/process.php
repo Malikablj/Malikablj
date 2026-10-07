@@ -20,7 +20,9 @@ use App\Core\Session;
 use App\Core\ValidationException;
 use App\Document\DocumentService;
 use App\Master\MasterService;
+use App\Project\CommentService;
 use App\Project\ProjectQuery;
+use App\Record\RecordService;
 use App\Scheduling\Lateness;
 use App\Workflow\DependencyService;
 use App\Workflow\WorkflowEngine;
@@ -42,6 +44,12 @@ if (Request::isPost()) {
         switch ($action) {
             case 'complete':
                 $gateParts = array_filter(is_array($_POST['gate_parts'] ?? null) ? $_POST['gate_parts'] : [], static fn ($v) => is_string($v) && $v !== '');
+                // bukti approval customer (lampiran) — disimpan sebagai dokumen proses tipe "Approval" (PRD §9.2)
+                $evidenceId = null;
+                $ev = $_FILES['evidence'] ?? null;
+                if (is_array($ev) && (int) ($ev['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE && $p['approval_type'] && $p['approval_type'] !== 'npr') {
+                    $evidenceId = $docSvc->addProcessDocument($user, $id, 'approval', $ev, I18n::t('approval.evidence_note', [], 'id'));
+                }
                 $r = $engine->complete($user, $id, [
                     'actual_finish' => (string) Request::post('actual_finish', ''),
                     'outcome' => Request::post('outcome'),
@@ -50,6 +58,7 @@ if (Request::isPost()) {
                     'gate_parts' => $gateParts,
                     'decision_maker' => Request::post('decision_maker'),
                     'lock_version' => Request::int('lock_version'),
+                    'evidence_document_id' => $evidenceId,
                 ]);
                 Session::flash('success', I18n::t('process.completed_msg.' . $r['effect']) . ($r['activated'] ? ' ' . I18n::t('process.activated_n', ['count' => count($r['activated'])]) : ''));
                 break;
@@ -77,6 +86,21 @@ if (Request::isPost()) {
             case 'manual_move':
                 $engine->manualMove($user, $id, (string) Request::post('target'), (string) Request::post('reason'), Request::post('manual_start') ?: null);
                 Session::flash('success', I18n::t('process.moved_msg'));
+                break;
+            case 'record':
+                (new RecordService())->saveIteration($user, $id, is_array($_POST['rec'] ?? null) ? $_POST['rec'] : []);
+                Session::flash('success', I18n::t('record.saved'));
+                $back .= '#sec-record';
+                break;
+            case 'material':
+                (new RecordService())->saveMaterial($user, $id, is_array($_POST['rec'] ?? null) ? $_POST['rec'] : [], Request::int('record_id'));
+                Session::flash('success', I18n::t('record.saved'));
+                $back .= '#sec-record';
+                break;
+            case 'comment':
+                (new CommentService())->add($user, (int) $p['project_id'], $id, (string) Request::post('body'));
+                Session::flash('success', I18n::t('comment.added'));
+                $back .= '#sec-comments';
                 break;
             case 'upload':
                 $file = $_FILES['file'] ?? ['error' => UPLOAD_ERR_NO_FILE];
@@ -144,6 +168,12 @@ $suggested = $p['workflow_step_id'] ? (json_decode((string) (Db::value('SELECT s
 $runs = Db::fetchAll('SELECT r.*, u.name AS pic_name, c.name AS completed_by_name FROM process_runs r LEFT JOIN users u ON u.id = r.pic_user_id LEFT JOIN users c ON c.id = r.completed_by WHERE r.process_id = ? ORDER BY r.iteration DESC', [$id]);
 $approvals = Db::fetchAll('SELECT a.*, u.name AS decided_by_name FROM approvals a LEFT JOIN users u ON u.id = a.decided_by WHERE a.process_id = ? ORDER BY a.id DESC', [$id]);
 $activity = Db::fetchAll("SELECT action, user_name, reason, old_value, new_value, created_at FROM audit_logs WHERE entity_type = 'process' AND entity_id = ? ORDER BY id DESC LIMIT 30", [(string) $id]);
+$recSvc = new RecordService();
+$recKind = RecordService::kindFor($p);
+$records = $recKind ? $recSvc->forProcess($p) : [];
+$canRecord = $recKind !== null && $recSvc->canEdit($user, $p) && !$projectClosed;
+$comments = (new CommentService())->forProcess($id);
+$canComment = Gate::can($user, 'comment.create') && !$projectClosed;
 $picChoices = $canPlan ? Db::fetchAll("SELECT u.id, u.name, r.code FROM users u JOIN roles r ON r.id = u.role_id WHERE u.is_active = 1 AND (u.role_id = ? OR r.code = 'admin') ORDER BY r.code = 'admin', u.name", [(int) $p['pic_role_id']]) : [];
 $candidates = $canDeps ? $depSvc->candidates($p) : [];
 $skipGroup = $p['skip_group'] ? Db::fetchAll('SELECT code, name, name_en FROM processes WHERE project_id = ? AND part_id <=> ? AND skip_group = ? ORDER BY sort_order', [$projectId, $partId, $p['skip_group']]) : [];
@@ -223,7 +253,7 @@ require APP_ROOT . '/includes/layout/header.php';
           <p class="flash flash-info small"><?= t('process.loop_only_hint') ?></p>
         <?php elseif ($status === 'not_started'): ?>
           <?php if ($waitingFor): ?>
-            <p class="small"><strong><?= t('process.waiting_for') ?></strong></p>
+            <p class="small section-gap"><strong><?= t('process.waiting_for') ?></strong></p>
             <ul class="plain-list small"><?php foreach ($waitingFor as $w): ?><li><a href="<?= e(url('process.php', ['id' => $w['predecessor_id']])) ?>"><?= e($procLabel($w)) ?></a> · <?= status_badge((string) $w['status']) ?> <span class="muted"><?= e($w['dep_type']) ?></span></li><?php endforeach; ?></ul>
           <?php elseif ($p['planned_start'] && $p['planned_start'] > $today): ?>
             <p class="small muted"><?= t('process.scheduled_start', ['date' => I18n::date($p['planned_start'])]) ?></p>
@@ -236,7 +266,7 @@ require APP_ROOT . '/includes/layout/header.php';
     <?php if ($canComplete): ?>
       <section class="card" aria-labelledby="sec-complete">
         <div class="card-header"><h2 id="sec-complete"><?= $p['step_type'] === 'finish' && $partId === null ? t('process.finish_project') : t('process.complete') ?></h2></div>
-        <form method="post" class="card-body stack" data-complete-form>
+        <form method="post" class="card-body stack" data-complete-form enctype="multipart/form-data">
           <?= csrf_field() ?><input type="hidden" name="action" value="complete"><input type="hidden" name="lock_version" value="<?= (int) $p['lock_version'] ?>">
           <?php if ($ffBlockers): ?><p class="flash flash-warning small"><?= t('wf.ff_blocked', ['list' => implode(', ', array_map(static fn ($b) => $b['code'] . ' ' . $b['name'], $ffBlockers))]) ?></p><?php endif; ?>
           <?php if ($missingDocs): ?><p class="flash flash-warning small"><?= t('wf.missing_docs', ['list' => implode(', ', array_map(static fn ($t) => MasterService::label('document_type', $t), $missingDocs))]) ?></p><?php endif; ?>
@@ -281,6 +311,11 @@ require APP_ROOT . '/includes/layout/header.php';
               <?php endif; ?>
             <?php endforeach; ?>
           <?php endif; ?>
+          <?php if ($p['approval_type'] && $p['approval_type'] !== 'npr'): ?>
+            <div class="field<?= isset($errors['file']) ? ' has-error' : '' ?>"><label for="evidence"><?= t('approval.evidence') ?> <span class="muted">(<?= t('common.optional') ?>)</span></label>
+              <input class="input" type="file" id="evidence" name="evidence"><?= $err('file') ?>
+              <p class="field-hint"><?= t('approval.evidence_hint') ?></p></div>
+          <?php endif; ?>
           <?php if ($p['approval_giver'] === 'customer'): ?>
             <div class="field"><label for="decision-maker"><?= t('process.decision_maker') ?> <span class="muted">(<?= t('common.optional') ?>)</span></label>
               <input class="input" id="decision-maker" name="decision_maker" maxlength="190" value="<?= e($v('decision_maker')) ?>"></div>
@@ -298,6 +333,91 @@ require APP_ROOT . '/includes/layout/header.php';
           </div>
           <div class="form-actions"><button type="submit" class="btn btn-primary"><?= icon('check') ?> <?= $p['step_type'] === 'finish' && $partId === null ? t('process.finish_project') : t('process.complete') ?></button></div>
         </form>
+      </section>
+    <?php endif; ?>
+
+    <?php if ($recKind !== null): ?>
+      <section class="card" aria-labelledby="sec-record" id="sec-record">
+        <div class="card-header"><h2 id="sec-record-title"><?= t('record.kind.' . $recKind['kind']) ?></h2><span class="muted small"><?= t('process.iteration_n', ['n' => (int) $p['iteration']]) ?></span></div>
+        <div class="card-body stack">
+          <?php if ($recKind['table'] === 'material_requests'): ?>
+            <?php if ($records): ?>
+              <div class="table-wrap">
+                <table class="table">
+                  <thead><tr><th scope="col"><?= t('record.f.material') ?></th><th scope="col"><?= t('record.f.batch_no') ?></th><th scope="col" class="right"><?= t('record.f.quantity_kg') ?></th><th scope="col"><?= t('record.f.received_date') ?></th><th scope="col"><?= t('record.f.supplier') ?></th><th scope="col">PIC</th><?php if ($canRecord): ?><th scope="col"><span class="visually-hidden"><?= t('common.actions') ?></span></th><?php endif; ?></tr></thead>
+                  <tbody>
+                    <?php foreach ($records as $r): ?>
+                      <tr>
+                        <td class="small"><?= e($r['material'] ?? '–') ?><?= $r['material_received'] ? '<div class="muted">' . t('record.f.material_received') . ': ' . e($r['material_received']) . '</div>' : '' ?></td>
+                        <td class="small"><?= e($r['batch_no'] ?? '–') ?></td><td class="small right"><?= $r['quantity_kg'] !== null ? e(fmt_number($r['quantity_kg'], 3)) : '–' ?></td>
+                        <td class="small nowrap"><?= fmt_date($r['received_date']) ?></td><td class="small"><?= e($r['supplier'] ?? '–') ?></td><td class="small"><?= e($r['pic_name'] ?? '–') ?></td>
+                        <?php if ($canRecord): ?><td><button type="button" class="icon-btn icon-btn-sm" data-open-dialog="dlg-mat-<?= (int) $r['id'] ?>" aria-label="<?= t('common.edit') ?>"><?= icon('edit', 'icon icon-sm') ?></button></td><?php endif; ?>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php else: ?><p class="muted small"><?= t('common.empty') ?></p><?php endif; ?>
+            <?php if ($canRecord): ?>
+              <button type="button" class="btn btn-sm" data-open-dialog="dlg-mat-new"><?= icon('plus', 'icon icon-sm') ?> <?= t('record.add_material') ?></button>
+              <?php foreach (array_merge([['id' => 'new']], $records) as $r): ?>
+                <dialog class="modal" id="dlg-mat-<?= e((string) $r['id']) ?>" aria-labelledby="dlg-mat-title-<?= e((string) $r['id']) ?>"<?= $failed === 'material' && (string) (Request::post('record_id') ?: 'new') === (string) $r['id'] ? ' data-autoopen' : '' ?>>
+                  <form method="post">
+                    <?= csrf_field() ?><input type="hidden" name="action" value="material"><?php if ($r['id'] !== 'new'): ?><input type="hidden" name="record_id" value="<?= (int) $r['id'] ?>"><?php endif; ?>
+                    <div class="modal-header"><h2 id="dlg-mat-title-<?= e((string) $r['id']) ?>"><?= t('record.kind.' . $recKind['kind']) ?></h2><button type="button" class="icon-btn" data-close-dialog aria-label="<?= t('common.close') ?>"><?= icon('x') ?></button></div>
+                    <div class="modal-body form-grid">
+                      <?php foreach (RecordService::MATERIAL_FIELDS as $f => $rule): ?>
+                        <?php $val = $failed === 'material' ? (string) ($_POST['rec'][$f] ?? '') : (string) ($r[$f] ?? ''); $fid = 'mat-' . $r['id'] . '-' . $f; ?>
+                        <div class="field<?= $rule === 4000 ? ' span-2' : '' ?><?= isset($errors[$f]) ? ' has-error' : '' ?>"><label for="<?= e($fid) ?>"><?= t('record.f.' . $f) ?></label>
+                          <?php if ($rule === 'user'): ?>
+                            <select class="input" id="<?= e($fid) ?>" name="rec[<?= $f ?>]"><option value="">–</option><?php foreach (Db::fetchAll("SELECT u.id, u.name FROM users u JOIN roles r ON r.id = u.role_id WHERE u.is_active = 1 AND r.code IN ('purchasing', 'npd_staff', 'admin') ORDER BY u.name") as $u): ?><option value="<?= (int) $u['id'] ?>"<?= $val === (string) $u['id'] ? ' selected' : '' ?>><?= e($u['name']) ?></option><?php endforeach; ?></select>
+                          <?php elseif ($rule === 4000): ?><textarea class="input" id="<?= e($fid) ?>" name="rec[<?= $f ?>]" rows="2" maxlength="4000"><?= e($val) ?></textarea>
+                          <?php else: ?><input class="input" id="<?= e($fid) ?>" name="rec[<?= $f ?>]" value="<?= e($val) ?>"<?= $rule === 'date' ? ' type="date"' : ($rule === 'decimal' ? ' inputmode="decimal"' : ' maxlength="' . (int) $rule . '"') ?>><?php endif; ?>
+                          <?= $err($f) ?></div>
+                      <?php endforeach; ?>
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn" data-close-dialog><?= t('common.cancel') ?></button><button type="submit" class="btn btn-primary"><?= t('common.save') ?></button></div>
+                  </form>
+                </dialog>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          <?php else: ?>
+            <?php
+            $fields = $recKind['table'] === 'trial_records' ? RecordService::TRIAL_FIELDS : RecordService::VALIDATION_FIELDS;
+            $current = array_values(array_filter($records, static fn ($r) => (int) $r['iteration'] === (int) $p['iteration']))[0] ?? [];
+            $older = array_values(array_filter($records, static fn ($r) => (int) $r['iteration'] !== (int) $p['iteration']));
+            ?>
+            <?php if ($canRecord): ?>
+              <form method="post" class="form-grid">
+                <?= csrf_field() ?><input type="hidden" name="action" value="record">
+                <?php foreach ($fields as $f => $rule): ?>
+                  <?php $val = $failed === 'record' ? (string) ($_POST['rec'][$f] ?? '') : (string) ($current[$f] ?? ''); ?>
+                  <div class="field<?= $rule === 4000 ? ' span-2' : '' ?><?= isset($errors[$f]) ? ' has-error' : '' ?>"><label for="rec-<?= $f ?>"><?= t('record.f.' . $f) ?></label>
+                    <?php if ($rule === 4000): ?><textarea class="input" id="rec-<?= $f ?>" name="rec[<?= $f ?>]" rows="2" maxlength="4000"><?= e($val) ?></textarea>
+                    <?php else: ?><input class="input" id="rec-<?= $f ?>" name="rec[<?= $f ?>]" value="<?= e($val) ?>"<?= $rule === 'date' ? ' type="date"' : ' maxlength="' . (int) $rule . '"' ?>><?php endif; ?>
+                    <?= $err($f) ?></div>
+                <?php endforeach; ?>
+                <div class="field"><label for="rec-result"><?= t('record.f.result') ?></label>
+                  <?php if ($recKind['table'] === 'validation_records'): ?>
+                    <select class="input" id="rec-result" name="rec[result]"><option value="">–</option><?php foreach (['pass', 'pass_with_condition', 'fail'] as $rv): ?><option value="<?= $rv ?>"<?= ($current['result'] ?? '') === $rv ? ' selected' : '' ?>><?= t('validation.' . $rv) ?></option><?php endforeach; ?></select>
+                    <p class="field-hint"><?= t('record.result_hint') ?></p>
+                  <?php else: ?><input class="input" id="rec-result" name="rec[result]" maxlength="30" value="<?= e((string) ($current['result'] ?? '')) ?>"><?php endif; ?>
+                </div>
+                <div class="form-actions span-2"><button type="submit" class="btn btn-primary"><?= t('common.save') ?></button></div>
+              </form>
+            <?php elseif ($current): ?>
+              <dl class="kv small"><?php foreach ($fields + ['result' => 30] as $f => $rule): ?><?php if (($current[$f] ?? '') !== '' && $current[$f] !== null): ?><dt><?= t('record.f.' . $f) ?></dt><dd class="pre"><?= e($rule === 'date' ? I18n::date((string) $current[$f]) : (string) $current[$f]) ?></dd><?php endif; ?><?php endforeach; ?></dl>
+            <?php else: ?><p class="muted small"><?= t('common.empty') ?></p><?php endif; ?>
+            <?php if ($older): ?>
+              <details><summary class="btn btn-sm"><?= t('record.previous') ?> (<?= count($older) ?>)</summary>
+                <?php foreach ($older as $r): ?>
+                  <p class="small"><strong><?= t('process.iteration_n', ['n' => (int) $r['iteration']]) ?></strong> · <?= e($r['updated_by_name'] ?? '') ?></p>
+                  <dl class="kv small"><?php foreach ($fields + ['result' => 30] as $f => $rule): ?><?php if (($r[$f] ?? '') !== '' && $r[$f] !== null): ?><dt><?= t('record.f.' . $f) ?></dt><dd class="pre"><?= e($rule === 'date' ? I18n::date((string) $r[$f]) : (string) $r[$f]) ?></dd><?php endif; ?><?php endforeach; ?></dl>
+                <?php endforeach; ?>
+              </details>
+            <?php endif; ?>
+          <?php endif; ?>
+        </div>
       </section>
     <?php endif; ?>
 
@@ -497,6 +617,26 @@ require APP_ROOT . '/includes/layout/header.php';
         </div>
       </section>
     <?php endif; ?>
+
+    <section class="card" aria-labelledby="sec-comments-title" id="sec-comments">
+      <div class="card-header"><h2 id="sec-comments-title"><?= t('comment.title') ?></h2></div>
+      <div class="card-body stack">
+        <?php if (!$comments): ?><p class="muted small"><?= t('comment.empty') ?></p><?php endif; ?>
+        <ol class="timeline-list">
+          <?php foreach ($comments as $c): ?>
+            <li><div class="small pre"><?= e($c['body']) ?></div><div class="timeline-meta"><?= fmt_datetime($c['created_at']) ?> · <?= e($c['user_name'] ?? '') ?></div></li>
+          <?php endforeach; ?>
+        </ol>
+        <?php if ($canComment): ?>
+          <form method="post" class="stack">
+            <?= csrf_field() ?><input type="hidden" name="action" value="comment">
+            <div class="field<?= isset($errors['body']) ? ' has-error' : '' ?>"><label for="comment-body" class="visually-hidden"><?= t('comment.title') ?></label>
+              <textarea class="input" id="comment-body" name="body" rows="2" maxlength="4000" required placeholder="<?= t('comment.placeholder') ?>"></textarea><?= $err('body') ?></div>
+            <div class="form-actions"><button type="submit" class="btn btn-sm"><?= t('comment.send') ?></button></div>
+          </form>
+        <?php endif; ?>
+      </div>
+    </section>
 
     <section class="card" aria-labelledby="sec-activity">
       <div class="card-header"><h2 id="sec-activity"><?= t('process.activity') ?></h2></div>

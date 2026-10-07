@@ -46,6 +46,8 @@ final class ProjectService
         foreach ($parts as $p) {
             $this->insertPart($projectId, $p);
         }
+        // lampiran NPR yang diunggah saat draft ikut menjadi dokumen project
+        Db::execute('UPDATE documents SET project_id = ? WHERE npr_id = ? AND project_id IS NULL', [$projectId, (int) $npr['id']]);
         AuditLogger::log('project.create', 'project', $projectId, null, ['code' => $code, 'npr_id' => (int) $npr['id'], 'parts' => count($parts)], null, $projectId);
         return ['id' => $projectId, 'code' => $code];
     }
