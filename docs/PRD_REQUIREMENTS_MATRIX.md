@@ -129,16 +129,16 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-OVD-01 | Overdue per proses (hari kerja), merah di dashboard, detail, timeline, tracker, daftar, export | 7.1, 7.2 | Must | 8 | `OverdueService` + view | Planned | `OverdueServiceTest` (UAT-09) |
+| FR-OVD-01 | Overdue per proses (hari kerja), merah di dashboard, detail, timeline, tracker, daftar, export | 7.1, 7.2 | Must | 8 | `Lateness`, `OverdueService`, project banner, daftar (filter Overdue), timeline, tracker, export | Partial | `NotificationFlowTest`, `TimelineTest`; panel dashboard fase 10 |
 | FR-OVD-02 | Panel Overdue: project, part, proses, PIC, hari terlambat, menunggu siapa | 7.2 | Must | 8/10 | `public/dashboard.php` | Planned | `DashboardServiceTest` |
-| FR-OVD-03 | Notifikasi web + email ke PIC hari pertama overdue; ringkasan harian | 7.3 | Must | 8 | `cron/overdue.php`, `cron/daily-report.php` | Planned | `NotificationTest` |
-| FR-OVD-04 | Notifikasi web semua kejadian §7.3; email hanya yang bertanda Ya | 7.3 | Must | 8 | `Notifier` | Planned | `NotificationTest` |
-| FR-OVD-05 | Masa Hold dikecualikan dari overdue & aging | 7.1, 8.1 | Must | 8/9 | `OverdueService` | Planned | `HoldServiceTest` |
-| FR-OVD-06 | Pengaturan ambang & email oleh Admin; antrean email dengan retry | 7.3 | Should | 8 | `MailQueue`, `cron/notifications.php` | Planned | `MailQueueTest` |
-| NTF-07 | Bell, daftar, tandai dibaca, tautan ke proses | 7.3 | Must | 8 | `public/notifications.php`, `public/api/notifications.php` | Planned | `NotificationHttpTest` |
-| NTF-08 | Email memakai bahasa penerima; deduplikasi; pemindaian terjadwal tiap jam di hari kerja | 7.3 | Must | 8 | `Notifier`, cron | Planned | `NotificationTest` |
-| NTF-09 | Kegagalan email tidak menggagalkan proses bisnis dan terlihat Admin | 7.3 | Must | 8 | `MailQueue`, `public/settings/email-queue.php` | Planned | `MailQueueTest` |
-| NTF-10 | Overdue selalu merah + ikon + teks "Overdue" (tidak hanya warna) | 7.1, 11.8 | Must | 8/11 | CSS/view | Planned | `UiContractTest` |
+| FR-OVD-03 | Notifikasi web + email ke PIC hari pertama overdue; ringkasan harian | 7.3 | Must | 8 | `OverdueService::scan` (`cron/overdue.php`), `DailyDigest` (`cron/daily-report.php`) | Done | `NotificationFlowTest`::testScanSendsFirstDayOverdueOnceWithEmail, ::testDailyDigestOnePerRecipientWorkingDaysOnly |
+| FR-OVD-04 | Notifikasi web semua kejadian §7.3; email hanya yang bertanda Ya | 7.3 | Must | 8 | `Notifier::EMAIL_TYPES`, `OverdueService`, services | Done | `NotificationFlowTest`, `WorkflowEngineTest`, `ScheduleServiceTest` |
+| FR-OVD-05 | Masa Hold dikecualikan dari overdue & aging | 7.1, 8.1 | Must | 8/9 | `OverdueService`, `ProjectQuery`, `PortfolioQuery` | Partial | `NotificationFlowTest`::testOverdueCountsWorkingDaysAndExcludesHold; aging & hari Hold KPI di fase 9/10 |
+| FR-OVD-06 | Pengaturan ambang & email oleh Admin; antrean email dengan retry | 7.3 | Should | 8 | `NotificationSettings`, `MailQueue`, `SmtpTransport` (PHPMailer), `cron/notifications.php`, `public/settings/notifications.php`, `public/settings/email-queue.php` | Done | `NotificationFlowTest`::testMailQueueSendsRetriesWithBackoffAndFails, ::testNotificationSettingsValidationAndSecret, `NotificationHttpTest` |
+| NTF-07 | Bell, daftar, tandai dibaca, tautan ke proses | 7.3 | Must | 8 | `NotificationCenter`, `public/notifications.php`, lonceng di header | Done | `NotificationFlowTest`, `NotificationHttpTest::testBellListOpenAndOwnership` |
+| NTF-08 | Email memakai bahasa penerima; deduplikasi; pemindaian terjadwal tiap jam di hari kerja | 7.3 | Must | 8 | `Notifier` (bahasa penerima, `dedupe_key`), cron jam kerja | Done | `NotificationFlowTest` |
+| NTF-09 | Kegagalan email tidak menggagalkan proses bisnis dan terlihat Admin | 7.3 | Must | 8 | `MailQueue` (antrean terpisah dari transaksi), halaman Antrean Email | Done | `NotificationFlowTest`, `NotificationHttpTest` |
+| NTF-10 | Overdue selalu merah + ikon + teks "Overdue" (tidak hanya warna) | 7.1, 11.8 | Must | 8/11 | lencana Overdue + ikon peringatan + teks | Partial | Halaman project/proses/tracker/timeline; audit kontras di fase 11 |
 
 ## 8. Hold, Resume, Cancel, Arsip (PRD §8)
 

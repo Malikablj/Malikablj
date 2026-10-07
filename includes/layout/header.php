@@ -62,8 +62,9 @@ require __DIR__ . '/head.php';
           <span class="theme-icon theme-icon-dark"><?= icon('moon') ?></span>
         </button>
         <?php if (is_file(APP_ROOT . '/public/notifications.php')): ?>
-          <a class="icon-btn notif-bell" href="<?= e(url('notifications.php')) ?>" aria-label="<?= t('nav.notifications') ?>" data-notif-bell>
-            <?= icon('bell') ?><span class="notif-count" data-notif-count hidden></span>
+          <?php $__unread = $__user ? \App\Notification\Notifier::unreadCount($__user->id) : 0; ?>
+          <a class="icon-btn notif-bell" href="<?= e(url('notifications.php')) ?>" aria-label="<?= e(t('nav.notifications') . ($__unread ? ' (' . $__unread . ')' : '')) ?>" data-notif-bell>
+            <?= icon('bell') ?><span class="notif-count" data-notif-count<?= $__unread ? '' : ' hidden' ?>><?= $__unread > 99 ? '99+' : ($__unread ?: '') ?></span>
           </a>
         <?php endif; ?>
         <details class="menu user-menu">

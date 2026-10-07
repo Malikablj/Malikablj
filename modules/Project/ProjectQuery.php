@@ -29,7 +29,7 @@ final class ProjectQuery
     }
 
     /**
-     * @param array{q?:?string,status?:?string,customer_id?:?int,npd_pic_id?:?int,mine?:bool,archived?:bool} $f
+     * @param array{q?:?string,status?:?string,customer_id?:?int,npd_pic_id?:?int,mine?:bool,archived?:bool,overdue?:bool} $f
      * @return array{rows:list<array<string,mixed>>,total:int}
      */
     public function list(User $user, array $f, int $page = 1, int $perPage = 25): array
@@ -52,6 +52,14 @@ final class ProjectQuery
         if (!empty($f['npd_pic_id'])) {
             $where[] = 'p.npd_pic_id = ?';
             $params[] = (int) $f['npd_pic_id'];
+        }
+        if (!empty($f['overdue'])) {
+            // overdue (hari kerja): ada proses aktif dengan Planned Finish sebelum hari kerja terakhir s/d hari ini, tidak Hold
+            $lastWd = $this->calendar()->prevWorkingDay(Clock::todayString());
+            $where[] = "(p.is_on_hold = 0 AND EXISTS (SELECT 1 FROM processes ox LEFT JOIN project_parts op ON op.id = ox.part_id
+                        WHERE ox.project_id = p.id AND ox.status IN ('current', 'revision', 'problem') AND ox.planned_finish < ?
+                          AND (op.id IS NULL OR (op.is_on_hold = 0 AND op.cancelled_at IS NULL))))";
+            $params[] = $lastWd;
         }
         if (!empty($f['mine'])) {
             $where[] = '(p.sales_pic_id = ? OR p.npd_pic_id = ? OR EXISTS (SELECT 1 FROM processes x WHERE x.project_id = p.id AND x.pic_user_id = ?))';

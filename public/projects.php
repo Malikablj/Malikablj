@@ -20,6 +20,7 @@ $filters = [
     'npd_pic_id' => Request::int('npd_pic_id'),
     'mine' => Request::query('mine') === '1',
     'archived' => Request::query('archived') === '1',
+    'overdue' => Request::query('overdue') === '1',
 ];
 $page = max(1, (int) Request::int('page', 1));
 $perPage = 25;
@@ -29,7 +30,7 @@ $pages = max(1, (int) ceil($result['total'] / $perPage));
 $customers = Db::fetchAll('SELECT id, name FROM customers ORDER BY name');
 $npdUsers = Db::fetchAll("SELECT u.id, u.name FROM users u JOIN roles r ON r.id = u.role_id WHERE r.code IN ('npd_staff', 'admin') ORDER BY u.name");
 $qs = array_filter(['q' => $filters['q'], 'status' => $filters['status'], 'customer_id' => $filters['customer_id'], 'npd_pic_id' => $filters['npd_pic_id'],
-    'mine' => $filters['mine'] ? '1' : null, 'archived' => $filters['archived'] ? '1' : null], static fn ($v) => $v !== null && $v !== '');
+    'mine' => $filters['mine'] ? '1' : null, 'archived' => $filters['archived'] ? '1' : null, 'overdue' => $filters['overdue'] ? '1' : null], static fn ($v) => $v !== null && $v !== '');
 
 $pageTitle = I18n::t('project.list_title');
 $activeNav = 'projects';
@@ -75,6 +76,7 @@ require APP_ROOT . '/includes/layout/header.php';
     </select>
   </div>
   <label class="check"><input type="checkbox" name="mine" value="1"<?= $filters['mine'] ? ' checked' : '' ?>> <span><?= t('project.mine') ?></span></label>
+  <label class="check"><input type="checkbox" name="overdue" value="1"<?= $filters['overdue'] ? ' checked' : '' ?>> <span><?= t('status.overdue') ?></span></label>
   <label class="check"><input type="checkbox" name="archived" value="1"<?= $filters['archived'] ? ' checked' : '' ?>> <span><?= t('project.archived') ?></span></label>
   <div class="field"><button type="submit" class="btn"><?= icon('filter') ?> <?= t('common.filter') ?></button></div>
 </form>
@@ -109,7 +111,9 @@ require APP_ROOT . '/includes/layout/header.php';
             <td>
               <?= status_badge((string) $r['status']) ?>
               <?php if ($r['overdue_count'] > 0): ?>
-                <span class="badge badge-danger"><?= t('project.overdue_n', ['days' => $r['max_overdue']]) ?></span>
+                <?php $worst = array_reduce($r['active_processes'], static fn ($c, $a) => $c === null || $a['overdue_days'] > $c['overdue_days'] ? $a : $c); ?>
+                <span class="badge badge-danger"><?= icon('alert', 'icon icon-sm') ?> <?= t('project.overdue_n', ['days' => $r['max_overdue']]) ?></span>
+                <div class="small muted"><?= e(($worst['part_name'] ? $worst['part_name'] . ' › ' : '') . ProjectQuery::processName($worst)) ?> · <?= e($worst['pic_name'] ?? I18n::t('project.no_pic')) ?><?= $r['overdue_count'] > 1 ? ' · +' . ($r['overdue_count'] - 1) : '' ?></div>
               <?php endif; ?>
               <?php if ($r['at_risk']): ?>
                 <span class="badge badge-warning"><?= icon('flag', 'icon icon-sm') ?> <?= t('project.at_risk') ?></span>

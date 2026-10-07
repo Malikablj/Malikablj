@@ -147,7 +147,7 @@ domain lama (daftar proses, field record trial/material/validasi) dipakai sebaga
 | `cron/notifications.php` | tiap 5 menit | kirim antrean email (PHPMailer SMTP), retry backoff 5m/15m/1j/4j, maks. 5 percobaan |
 | `cron/daily-report.php` | hari kerja 07:00 | ringkasan overdue harian satu email per PIC / NPD PIC |
 
-Setiap cron memakai lock file (`flock`) agar tidak berjalan ganda dan mencatat `job_runs`.
+Setiap cron memakai kunci MySQL `GET_LOCK` (aman untuk lebih dari satu server aplikasi) agar tidak berjalan ganda, dan mencatat hasil di `job_runs` (`App\Cron\JobRunner`).
 
 ## 8. Internasionalisasi & tema
 

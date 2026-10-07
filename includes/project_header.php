@@ -33,6 +33,23 @@ declare(strict_types=1);
   </div>
 </div>
 
+<?php $__overdue = (int) $project['is_on_hold'] === 1 ? [] : (new \App\Notification\OverdueService())->overdueProcesses(['project_id' => $id]); ?>
+<?php if ($__overdue): ?>
+  <div class="flash flash-error overdue-banner" role="alert">
+    <?= icon('alert') ?>
+    <div>
+      <?php foreach (array_slice($__overdue, 0, 5) as $__o): ?>
+        <div><strong><?= t('status.overdue') ?>:</strong> <a href="<?= e(url('process.php', ['id' => $__o['id']])) ?>"><?= e(($__o['part_name'] ? $__o['part_name'] . ' › ' : '') . \App\Project\ProjectQuery::processName($__o)) ?></a>
+          · PIC: <?= e($__o['pic_name'] ?? t('project.no_pic')) ?> · <?= t('notif.days_late', ['days' => $__o['overdue_days']]) ?></div>
+      <?php endforeach; ?>
+      <?php if (count($__overdue) > 5): ?><div class="small"><?= t('project.more_n', ['count' => count($__overdue) - 5]) ?></div><?php endif; ?>
+    </div>
+  </div>
+<?php endif; ?>
+<?php if ($project['at_risk'] && !$__overdue): ?>
+  <div class="flash flash-warning" role="status"><?= icon('flag') ?><span><?= t('project.risk_banner', ['forecast' => \App\Core\I18n::date($project['forecast_finish']), 'target' => \App\Core\I18n::date($project['target_finish'])]) ?></span></div>
+<?php endif; ?>
+
 <nav class="tabs" aria-label="<?= t('project.tabs') ?>">
   <?php foreach (['overview' => 'project.tab.overview', 'processes' => 'project.tab.processes', 'timeline' => 'project.tab.timeline', 'approvals' => 'project.tab.approvals',
                   'documents' => 'project.tab.documents', 'records' => 'project.tab.records', 'history' => 'project.tab.history', 'activity' => 'project.tab.activity'] as $k => $label): ?>
