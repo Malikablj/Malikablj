@@ -1,0 +1,31 @@
+# Konfigurasi & secret lokal — JANGAN di-commit
+.env
+.env.*
+!.env.example
+
+# Data runtime
+storage/logs/*
+storage/cache/*
+storage/imports/*
+storage/exports/*
+storage/uploads/*
+!storage/*/.gitkeep
+
+# Data bisnis tidak boleh masuk repository (repo public)
+*.xlsx
+*.xls
+*.csv
+database/*.local.sql
+database/generated/
+# Dump/backup database berisi data bisnis; hanya schema & seed yang boleh masuk
+*.sql
+*.sql.gz
+!database/schema.sql
+!database/seed.sql
+
+# Test / tooling
+tests/output/
+.phpunit.cache/
+/vendor/
+/node_modules/
+.DS_Store

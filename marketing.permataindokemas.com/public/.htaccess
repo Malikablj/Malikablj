@@ -1,0 +1,27 @@
+# =============================================================================
+# PIK Marketing Control — Apache (DocumentRoot = folder public/)
+# =============================================================================
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Bila aplikasi berada di subfolder dan URL tidak jalan, aktifkan RewriteBase:
+    # RewriteBase /pik/
+
+    # File/folder yang benar-benar ada (css, js, assets) dilayani langsung
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+# Tolak akses ke file tersembunyi (.htaccess, .env, .git, ...)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|woff2?|svg|png|jpg|jpeg|ico)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+</IfModule>
