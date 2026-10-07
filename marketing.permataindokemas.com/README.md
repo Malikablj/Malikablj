@@ -439,7 +439,23 @@ Gunakan tombol **Kirim email percobaan** setelah menyimpan. Bila email gagal, co
 
 ## 18. Pembagian tugas per divisi, Stock & Inbound Supplier (update Oktober 2026 — 2)
 
-### Cara update server
+### Cara update server — cukup 1 perintah (cPanel › Terminal)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Malikablj/Malikablj/claude/magical-cori-1m350e/marketing.permataindokemas.com/database/update-cpanel.sh | bash
+```
+
+Skrip `database/update-cpanel.sh` otomatis: mencari folder aplikasi, **backup file + database** ke `~/pik-backup/`, mengunduh versi baru, memeriksa syntax PHP, memasang file (tanpa menyentuh `.env`, `.htaccess` utama, dan `storage/`), menghapus file menu Finance, lalu menjalankan migrasi database. Bila satu langkah gagal, skrip berhenti; bila backup gagal, tidak ada file yang diubah.
+
+Mengembalikan file ke versi sebelum update:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Malikablj/Malikablj/claude/magical-cori-1m350e/marketing.permataindokemas.com/database/update-cpanel.sh | bash -s -- --rollback
+```
+
+Bila folder aplikasi atau PHP tidak terdeteksi otomatis, tambahkan misalnya `APP_DIR=/home/USER/marketing.permataindokemas.com` atau `PHP_BIN=/opt/cpanel/ea-php83/root/usr/bin/php` sebelum `bash` (contoh: `… | APP_DIR=/home/USER/folder bash`).
+
+### Cara update server — manual (tanpa Terminal)
 
 1. **Backup database** (lihat bagian 10) dan simpan `.env` yang sudah ada.
 2. Unggah/timpa file aplikasi (folder `app/`, `config/`, `cron/`, `database/`, `public/`, `tests/`, `README.md`). **Jangan menimpa `.env`** dan isi folder `storage/`.
