@@ -18,6 +18,8 @@ use App\Core\ValidationException;
 use App\Master\MasterService;
 use App\Notification\Notifier;
 use App\Project\ProjectService;
+use App\Workflow\WorkflowEngine;
+use App\Workflow\WorkflowInstantiator;
 use App\Project\RevisionHistory;
 
 /**
@@ -404,6 +406,10 @@ final class NprService
         $part = $this->partRow($partId);
         Db::update('npr_parts', ['status' => 'cancelled', 'cancel_reason' => $reason, 'cancelled_by' => $actor->id, 'cancelled_at' => Clock::nowString()], ['id' => $partId]);
         $this->projects->cancelPartForNprPart($partId, $reason, $actor->id);
+        $pp = Db::fetch('SELECT id FROM project_parts WHERE npr_part_id = ?', [$partId]);
+        if ($pp && (int) Db::value('SELECT COUNT(*) FROM processes WHERE part_id = ?', [(int) $pp['id']]) > 0) {
+            (new WorkflowEngine())->onPartCancelled((int) $pp['id'], $actor); // part sudah berjalan: lepas dari gate/PF, jadwal ulang
+        }
         RevisionHistory::record('cancel', I18n::t('npr.rev.part_cancelled', ['part' => $part['part_name']], 'id'), ['reason' => $reason], (int) $part['npr_id'], $this->projectIdOf((int) $part['npr_id']), null, null, $actor->id);
     }
 
@@ -445,6 +451,8 @@ final class NprService
                 $data += ['npr_number' => $num['number'], 'seq_year' => $num['year'], 'seq_no' => $num['seq'], 'first_submitted_at' => $now->format('Y-m-d H:i:s')];
                 Db::update('npr', $data, ['id' => $id]);
                 $project = $this->projects->createFromNpr($this->find($id), $parts, $now);
+                // Proses level project: P1 Request NPR (selesai), P2 Feedback NPR (aktif), G1, PF
+                (new WorkflowInstantiator())->createProjectProcesses((int) $project['id'], (string) $npr['created_at'], $actor);
                 RevisionHistory::record('npr_submit', I18n::t('npr.rev.submitted', ['number' => $num['number']], 'id'), ['snapshot' => $snapshot], $id, $project['id'], null, null, $actor->id);
                 $number = $num['number'];
                 $projectCode = $project['code'];
@@ -467,6 +475,7 @@ final class NprService
                     }
                 }
                 $this->projects->syncFromNpr($projectId, $id);
+                (new WorkflowEngine())->onNprResubmitted($projectId, $actor);
                 RevisionHistory::record('npr_resubmit', I18n::t('npr.rev.resubmitted', ['count' => $this->changeCount($diff)], 'id'), ['snapshot' => $snapshot, 'diff' => $diff], $id, $projectId, null, null, $actor->id);
             }
             $this->bumpLock($id);

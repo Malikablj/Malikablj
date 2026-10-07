@@ -119,7 +119,7 @@ require APP_ROOT . '/includes/layout/header.php';
             <td data-label="<?= t('npr.parts_count') ?>" class="right"><?= e((string) $r['part_count']) ?></td>
             <td data-label="<?= t('common.status') ?>"><?= status_badge($r['status'], 'npr_status') ?></td>
             <td data-label="<?= t('npr.submitted_at') ?>" class="nowrap"><?= $r['requested_at'] ? fmt_date($r['requested_at']) : '—' ?></td>
-            <td data-label="<?= t('npr.project_code') ?>" class="nowrap"><?= e($r['project_code'] ?? '—') ?></td>
+            <td data-label="<?= t('npr.project_code') ?>" class="nowrap"><?php if (!empty($r['project_id'])): ?><a href="<?= e(url('project.php', ['id' => $r['project_id']])) ?>"><?= e($r['project_code']) ?></a><?php else: ?>—<?php endif; ?></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

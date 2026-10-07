@@ -69,13 +69,20 @@ abstract class HttpTestCase extends TestCase
     }
 
     /** @param array<string,string> $env */
-    private static function runCommand(string $cmd, array $env): void
+    private static function runCommand(string $cmd, array $env): string
     {
         $p = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, dirname(__DIR__, 2), $env);
         $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
         if (proc_close($p) !== 0) {
             throw new \RuntimeException("Perintah gagal: {$cmd}\n{$out}");
         }
+        return $out;
+    }
+
+    /** Jalankan skrip seed tambahan pada database test HTTP; mengembalikan output-nya. */
+    protected static function seedWith(string $script): string
+    {
+        return trim(self::runCommand(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($script), self::env('npd_test_http')));
     }
 
     private static function freePort(): int

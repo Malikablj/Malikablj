@@ -46,11 +46,11 @@ return [
                  ['code' => 'pass', 'label_id' => 'Pass', 'label_en' => 'Pass', 'effect' => 'continue'],
                  ['code' => 'fail', 'label_id' => 'Fail', 'label_en' => 'Fail', 'effect' => 'gate_fail', 'comment_required' => true],
              ],
-             'deps' => []], // predecessor dinamis: milestone tiap part yang tidak dibatalkan
+             'deps' => [['P2', 'FS', 0]]], // + predecessor dinamis: milestone tiap part yang tidak dibatalkan
             ['code' => 'PF', 'name' => 'Project Finish', 'name_en' => 'Project Finish', 'short_name' => 'Finish',
              'step_type' => 'finish', 'pic_role' => 'npd_staff', 'duration' => 1,
              'description' => 'Tersedia bila semua part Completed atau Cancelled.',
-             'deps' => []], // predecessor dinamis: Finish tiap part + gate
+             'deps' => [['P2', 'FS', 0], ['G1', 'FS', 0]]], // + predecessor dinamis: Finish tiap part
         ],
     ],
 

@@ -55,6 +55,9 @@ final class Scheduler
             if (!isset($this->nodes[$p], $this->nodes[$q])) {
                 continue;
             }
+            if (($this->nodes[$p]['activation'] ?? 'auto') === 'loop_only') {
+                continue; // pemicu loop (mis. Mold Correction "loop dari T0"), bukan syarat jadwal: dijadwalkan sejak dipicu
+            }
             $this->preds[$p][] = ['pred' => $q, 'type' => strtoupper((string) $d['type']), 'lag' => (int) $d['lag']];
             $this->succs[$q][] = $p;
         }

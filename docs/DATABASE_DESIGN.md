@@ -99,7 +99,12 @@ working_calendar (7 baris), holidays, master_options, application_settings, numb
 
 **Proses** (`processes.status`): `not_started`, `current`, `completed`, `revision`, `problem`, `skipped`.
 `revision` = aktif kembali karena loop approval; `problem` = aktif mengulang karena NG/FAIL.
-`activation = 'loop_only'` (mis. Mold Correction) tidak dijadwalkan sampai dipicu loop.
+`activation = 'loop_only'` (mis. Mold Correction) tidak dijadwalkan sampai dipicu loop; dependency yang masuk ke
+proses loop_only hanya mencatat pemicu (bukan syarat jadwal). `processes.loop_after_process_id` = proses yang dibuka
+kembali menunggu proses loop selesai (Mold Machining menunggu Mold Correction) — diperlakukan sebagai FS oleh Scheduler.
+Riwayat per aktivasi disimpan di `process_runs` (Planned Finish saat aktivasi, PIC saat selesai, status
+`open/completed/reset/skipped`) sebagai dasar KPI per iterasi (OQ-15). Hasil gate disimpan per iterasi
+(`project_gates`, unik `process_id + iteration`).
 
 **Part** (`project_parts.status`, turunan): `not_started`, `on_progress`, `waiting_approval`,
 `waiting_external`, `hold`, `completed`, `cancelled`. Aturan (PRD §3.3): proses aktif approval

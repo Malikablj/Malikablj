@@ -243,7 +243,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.92em; }
 }
 .icon-btn.topbar-menu { display: none; }
 .topbar-title { flex: 1; min-width: 0; }
-.topbar-heading { font-weight: 600; font-size: 15px; }
+.topbar-heading { display: block; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .breadcrumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .breadcrumbs a { color: var(--text-2); }
 .breadcrumbs [aria-current] { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
@@ -306,7 +306,7 @@ code, kbd { font-family: var(--font-mono); font-size: 0.92em; }
 .page-header p { margin: 0; color: var(--text-2); }
 .page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .section { margin-top: 28px; }
-.section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 28px 0 12px; }
 .grid { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -519,7 +519,7 @@ body.guest { min-height: 100vh; min-height: 100dvh; background: var(--bg); }
   .kv { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .kv dd { margin-bottom: 10px; }
   .lang-switch { display: none; }
-  .breadcrumbs a:not(:last-of-type) { display: none; }
+  .breadcrumbs a:not(:last-of-type), .breadcrumbs a:not(:last-of-type) + .breadcrumbs-sep { display: none; }
   /* tabel menjadi kartu */
   .table-cards thead { display: none; }
   .table-cards, .table-cards tbody, .table-cards tr, .table-cards td { display: block; width: 100%; }
@@ -655,3 +655,23 @@ details.diff .table td { padding: 6px 10px; font-size: 12.5px; }
 .inline-edit { flex-wrap: nowrap; gap: 6px; }
 .inline-edit .input-sm { min-width: 120px; flex: 1; }
 @media (max-width: 640px) { .inline-edit { flex-wrap: wrap; } }
+
+/* ---------- Project & proses (fase 3–5) ---------- */
+.progress { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.progress > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--dur) var(--ease); }
+.table tr.row-skipped td { color: var(--text-muted); }
+.table tr.row-skipped td a { text-decoration: line-through; text-decoration-color: var(--text-muted); }
+.process-layout { align-items: start; }
+.dep-rows { display: grid; gap: 8px; }
+.dep-row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.4fr) 84px var(--touch); gap: 8px; align-items: center; }
+.dep-row .field { margin: 0; }
+.dep-row .field-error { grid-column: 1 / -1; margin: 0; }
+.preview-result { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 12px; background: var(--surface-2); }
+.preview-result .table-wrap { margin-top: 8px; }
+details > summary { list-style: none; cursor: pointer; display: inline-flex; }
+details > summary::-webkit-details-marker { display: none; }
+details[open] > summary { margin-bottom: 12px; }
+@media (max-width: 640px) {
+  .dep-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .dep-row .field:first-child { grid-column: 1 / -1; }
+}

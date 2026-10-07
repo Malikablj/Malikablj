@@ -182,7 +182,7 @@ require APP_ROOT . '/includes/layout/header.php';
     <p class="row">
       <?= status_badge($status, 'npr_status') ?>
       <span class="mono"><?= $npr['npr_number'] ? e($npr['npr_number']) : t('npr.number_auto') ?></span>
-      <?php if ($npr['project_code']): ?><span class="muted">· <?= t('npr.project_code') ?>: <strong><?= e($npr['project_code']) ?></strong></span><?php endif; ?>
+      <?php if ($npr['project_code']): ?><span class="muted">· <?= t('npr.project_code') ?>: <a href="<?= e(url('project.php', ['id' => $npr['project_id']])) ?>"><strong><?= e($npr['project_code']) ?></strong></a></span><?php endif; ?>
       <span class="muted">· <?= t('npr.sales_pic') ?>: <?= e($npr['sales_pic_name']) ?></span>
     </p>
   </div>

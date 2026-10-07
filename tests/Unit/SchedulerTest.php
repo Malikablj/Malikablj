@@ -310,4 +310,25 @@ final class SchedulerTest extends TestCase
         $this->assertCount(201, $res['processes']);
         $this->assertLessThan(1.0, $elapsed, 'hitung ulang ≤ 1 detik (PRD §13.3)');
     }
+
+    /** Edge pemicu ke proses loop_only (mis. N8 → N9) bukan syarat jadwal; tunggu loop tidak membentuk siklus. */
+    public function testLoopOnlyTriggerEdgeDoesNotCreateCycle(): void
+    {
+        // 7 = Mold Machining (menunggu 9), 8 = T0 (FS 7), 9 = Mold Correction (loop_only, "FS" 8) aktif sejak 05-10
+        $nodes = [
+            7 => self::node(7, 10, 'not_started', 30, ['loop_after_id' => 9]),
+            8 => self::node(8, 10, 'not_started', 3),
+            9 => self::node(9, 10, 'current', 10, ['activation' => 'loop_only', 'planned_start' => '2026-10-05', 'planned_finish' => '2026-10-16', 'actual_start' => '2026-10-05']),
+        ];
+        $deps = [self::dep(8, 7), self::dep(9, 8)];
+        $r = (new Scheduler($this->cal, $nodes, $deps, [10 => '2026-09-01'], '2026-09-01', '2026-10-05'))->run()['processes'];
+        $this->assertSame('2026-10-05', $r[9]['planned_start']);
+        $this->assertSame('2026-10-19', $r[7]['planned_start'], 'Mold Machining dibuka kembali setelah Mold Correction');
+        $this->assertSame($this->cal->addWorkingDays('2026-10-19', 30), $r[8]['planned_start']);
+        // dormant (belum dipicu) → tidak dijadwalkan
+        $nodes[9] = self::node(9, 10, 'not_started', 10, ['activation' => 'loop_only']);
+        $nodes[7]['loop_after_id'] = null;
+        $r = (new Scheduler($this->cal, $nodes, $deps, [10 => '2026-09-01'], '2026-09-01', '2026-10-05'))->run()['processes'];
+        $this->assertNull($r[9]['planned_start']);
+    }
 }

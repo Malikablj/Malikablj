@@ -12,11 +12,12 @@ use App\Core\I18n;
 use App\Core\NotFoundException;
 use App\Core\User;
 use App\Core\ValidationException;
+use App\Master\MasterService;
 use App\Npr\NprService;
 
 /**
- * Dokumen berversi (PRD §9.1). Fase 2: lampiran NPR (Contoh Bentuk Produk, Referensi Spek)
- * dan unduhan aman. Dokumen project › part › proses ditambahkan di fase 7.
+ * Dokumen berversi (PRD §9.1): lampiran NPR (Contoh Bentuk Produk, Referensi Spek), dokumen proses
+ * (project › part › proses; jenis sama = versi baru, versi lama tetap tersimpan) dan unduhan aman.
  */
 final class DocumentService
 {
@@ -88,6 +89,97 @@ final class DocumentService
             Db::update('documents', ['is_removed' => 1, 'removed_by' => $actor->id, 'removed_at' => Clock::nowString()], ['id' => $documentId]);
             AuditLogger::log('document.remove', 'document', $documentId, ['title' => $doc['title']], null, null, $doc['project_id'] !== null ? (int) $doc['project_id'] : null, $actor);
         });
+    }
+
+    /** Boleh mengunggah ke proses: Admin/NPD, atau PIC proses (Sales PIC untuk proses Sales). */
+    public function canUploadToProcess(User $user, array $process): bool
+    {
+        $owners = [$process['pic_user_id']];
+        if (($process['pic_role_code'] ?? null) === 'admin_sales') {
+            $owners[] = $process['sales_pic_id'] ?? null;
+        }
+        return Gate::can($user, 'document.upload', ['owner_ids' => $owners]);
+    }
+
+    /**
+     * Unggah dokumen proses. Jenis yang sama pada proses yang sama menjadi versi baru (versi lama "superseded").
+     * @param array<string,mixed> $file entri $_FILES
+     */
+    public function addProcessDocument(User $actor, int $processId, string $docType, array $file, ?string $notes = null, bool $isUploaded = true): int
+    {
+        $process = Db::fetch(
+            'SELECT pr.*, r.code AS pic_role_code, pj.sales_pic_id, pj.is_archived, pj.cancelled_at AS project_cancelled_at, pp.cancelled_at AS part_cancelled_at
+             FROM processes pr JOIN roles r ON r.id = pr.pic_role_id JOIN projects pj ON pj.id = pr.project_id LEFT JOIN project_parts pp ON pp.id = pr.part_id
+             WHERE pr.id = ?',
+            [$processId]
+        );
+        if (!$process) {
+            throw new NotFoundException(I18n::t('error.not_found'));
+        }
+        if (!$this->canUploadToProcess($actor, $process)) {
+            throw new AuthorizationException(I18n::t('error.forbidden'));
+        }
+        if ((int) $process['is_archived'] === 1 || $process['project_cancelled_at'] !== null || $process['part_cancelled_at'] !== null) {
+            throw new \App\Core\BusinessRuleException(I18n::t('doc.closed'));
+        }
+        if (!MasterService::isValid('document_type', $docType)) {
+            throw new ValidationException(['doc_type' => I18n::t('validation.invalid')]);
+        }
+        $notes = $notes !== null ? mb_substr(trim($notes), 0, 500) : null;
+        $valid = UploadValidator::validate($file, 'file', null, $isUploaded);
+        $path = DocumentStorage::store($valid, $isUploaded);
+        try {
+            return Db::transaction(function () use ($actor, $process, $docType, $valid, $path, $notes): int {
+                $now = Clock::nowString();
+                $doc = Db::fetch('SELECT * FROM documents WHERE process_id = ? AND doc_type_code = ? AND is_removed = 0 ORDER BY id LIMIT 1 FOR UPDATE', [(int) $process['id'], $docType]);
+                if ($doc) {
+                    $docId = (int) $doc['id'];
+                    $versionNo = (int) Db::value('SELECT COALESCE(MAX(version_no), 0) FROM document_versions WHERE document_id = ?', [$docId]) + 1;
+                    Db::execute("UPDATE document_versions SET status = 'superseded' WHERE document_id = ? AND status = 'current'", [$docId]);
+                } else {
+                    $versionNo = 1;
+                    $docId = Db::insert('documents', [
+                        'project_id' => (int) $process['project_id'], 'part_id' => $process['part_id'], 'process_id' => (int) $process['id'],
+                        'doc_type_code' => $docType, 'title' => mb_substr(MasterService::label('document_type', $docType, 'id'), 0, 190),
+                        'version_count' => 0, 'created_by' => $actor->id, 'created_at' => $now,
+                    ]);
+                }
+                $verId = Db::insert('document_versions', [
+                    'document_id' => $docId, 'version_no' => $versionNo, 'original_name' => $valid['original'], 'stored_path' => $path,
+                    'mime_type' => $valid['mime'], 'extension' => $valid['ext'], 'size_bytes' => $valid['size'], 'sha256' => $valid['sha256'],
+                    'status' => 'current', 'notes' => $notes, 'uploaded_by' => $actor->id, 'uploaded_at' => $now,
+                ]);
+                Db::update('documents', ['current_version_id' => $verId, 'version_count' => $versionNo], ['id' => $docId]);
+                Db::update('projects', ['last_activity_at' => $now], ['id' => (int) $process['project_id']]);
+                AuditLogger::log($versionNo > 1 ? 'document.new_version' : 'document.upload', 'document', $docId, null,
+                    ['process_id' => (int) $process['id'], 'type' => $docType, 'version' => $versionNo, 'name' => $valid['original'], 'size' => $valid['size']],
+                    $notes, (int) $process['project_id'], $actor);
+                return $docId;
+            });
+        } catch (\Throwable $e) {
+            @unlink(DocumentStorage::absolute($path));
+            throw $e;
+        }
+    }
+
+    /** Dokumen proses beserta versi terkini. @return list<array<string,mixed>> */
+    public function forProcess(int $processId): array
+    {
+        return Db::fetchAll(
+            'SELECT d.*, v.id AS version_id, v.version_no, v.original_name, v.extension, v.size_bytes, v.uploaded_at, v.notes, u.name AS uploader_name
+             FROM documents d JOIN document_versions v ON v.id = d.current_version_id LEFT JOIN users u ON u.id = v.uploaded_by
+             WHERE d.process_id = ? AND d.is_removed = 0 ORDER BY d.doc_type_code, d.id',
+            [$processId]
+        );
+    }
+
+    /** Semua versi sebuah dokumen (riwayat). @return list<array<string,mixed>> */
+    public function versions(int $documentId): array
+    {
+        return Db::fetchAll(
+            'SELECT v.*, u.name AS uploader_name FROM document_versions v LEFT JOIN users u ON u.id = v.uploaded_by WHERE v.document_id = ? ORDER BY v.version_no DESC',
+            [$documentId]
+        );
     }
 
     /**

@@ -13,6 +13,7 @@ use App\Core\I18n;
 use App\Core\User;
 use App\Core\ValidationException;
 use App\Notification\Notifier;
+use App\Workflow\WorkflowEngine;
 use App\Project\RevisionHistory;
 
 /**
@@ -24,17 +25,8 @@ use App\Project\RevisionHistory;
  */
 final class NprFeedbackService
 {
-    /** @var callable(int,User):void|null hook memulai part yang diterima (fase 3/4) */
-    private static $partStarter = null;
-
     public function __construct(private NprService $npr = new NprService())
     {
-    }
-
-    /** Daftarkan hook yang dipanggil untuk setiap part yang diterima saat Selesaikan Feedback. */
-    public static function onPartAccepted(?callable $fn): void
-    {
-        self::$partStarter = $fn;
     }
 
     /**
@@ -197,10 +189,12 @@ final class NprFeedbackService
             RevisionHistory::record('feedback_completed', I18n::t('npr.rev.feedback_completed', ['count' => count($pending)], 'id'), ['parts' => $summary], $nprId, $projectId, null, null, $actor->id);
             AuditLogger::log('npr.feedback_complete', 'npr', $nprId, ['status' => $npr['status']], ['status' => 'feedback_completed', 'accepted' => $accepted, 'cancelled' => $cancelled], null, $projectId, $actor);
 
-            if (self::$partStarter !== null && !$projectCancelled) {
-                foreach ($accepted as $pid) {
-                    (self::$partStarter)($pid, $actor);
-                }
+            if ($projectId !== null) {
+                // P2 selesai; part yang diterima mulai: proses template, jadwal, Baseline v1 (PRD §5.4 #1)
+                $acceptedPartIds = $accepted && !$projectCancelled
+                    ? array_map('intval', Db::column('SELECT id FROM project_parts WHERE npr_part_id IN (' . implode(',', array_fill(0, count($accepted), '?')) . ')', $accepted))
+                    : [];
+                (new WorkflowEngine())->onFeedbackCompleted($projectId, $acceptedPartIds, $actor);
             }
             $projectCode = $projectId ? (string) Db::value('SELECT code FROM projects WHERE id = ?', [$projectId]) : '';
             Notifier::send(
@@ -229,6 +223,9 @@ final class NprFeedbackService
         $projectId = $this->npr->projectIdOf($nprId);
         RevisionHistory::record('npr_return', I18n::t('npr.rev.returned', [], 'id'), ['reason' => $reason], $nprId, $projectId, null, null, $actor->id);
         AuditLogger::log('npr.return', 'npr', $nprId, ['status' => $npr['status']], ['status' => 'returned'], $reason, $projectId, $actor);
+        if ($projectId !== null) {
+            (new WorkflowEngine())->onNprReturned($projectId, $actor); // P1 aktif kembali (Revision), P2 menunggu
+        }
         Notifier::send(
             [(int) $npr['sales_pic_id']],
             'npr_returned',

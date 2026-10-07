@@ -45,12 +45,12 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| DATA-01 | Hierarki Project → Part → Proses; part beda jenis dalam satu project | 3.1 | Must | 3 | `projects`, `project_parts`, `processes` | Planned | `ProjectStructureTest` |
-| DATA-02 | Part ditolak/dibatalkan tidak membatalkan project; project Cancelled bila semua part Cancelled | 3.1 | Must | 3 | `StatusService` | Partial | `StatusServiceTest` |
-| DATA-03 | Project satu part tampil sederhana | 3.1 | Must | 6 | `public/project.php` | Planned | manual + `ProjectPageHttpTest` |
-| DATA-04 | Status proses: Not Started, Current, Completed, Revision, Problem, Skipped; >1 proses aktif per part | 3.3 | Must | 4 | `WorkflowEngine` | Planned | `WorkflowEngineTest` |
-| DATA-05 | Status turunan part/project sesuai tabel §3.3 (Waiting Approval > Waiting External > On Progress, Hold, Siap Finish, Cancelled) | 3.3 | Must | 4 | `StatusService` | Planned | `StatusServiceTest` |
-| DATA-06 | Overdue = tanda tambahan terhitung (bukan status dasar) | 3.3, 7.1 | Must | 8 | `OverdueService` | Planned | `OverdueServiceTest` |
+| DATA-01 | Hierarki Project → Part → Proses; part beda jenis dalam satu project | 3.1 | Must | 3 | `projects`, `project_parts`, `processes`, `ProjectService`, `ProjectQuery`, `public/project.php` | Done | `WorkflowEngineTest`, `ProjectHttpTest` |
+| DATA-02 | Part ditolak/dibatalkan tidak membatalkan project; project Cancelled bila semua part Cancelled | 3.1 | Must | 3 | `StatusService`, `ProjectService::cancelPartForNprPart`, `WorkflowEngine::onPartCancelled` | Done | `StatusServiceTest`, `WorkflowEngineTest::testPartCancelledAfterStartDetachesFromGate`, `NprServiceTest` |
+| DATA-03 | Project satu part tampil sederhana | 3.1 | Must | 6 | `public/project.php` | Partial | `ProjectHttpTest` (timeline sederhana menyusul fase 6) |
+| DATA-04 | Status proses: Not Started, Current, Completed, Revision, Problem, Skipped; >1 proses aktif per part | 3.3 | Must | 4 | `WorkflowEngine` | Done | `WorkflowEngineTest` (N1 & N3 aktif bersamaan) |
+| DATA-05 | Status turunan part/project sesuai tabel §3.3 (Waiting Approval > Waiting External > On Progress, Hold, Siap Finish, Cancelled) | 3.3 | Must | 4 | `App\Project\StatusService` | Done | `StatusServiceTest`, `WorkflowEngineTest` |
+| DATA-06 | Overdue = tanda tambahan terhitung (bukan status dasar) | 3.3, 7.1 | Must | 8 | `App\Scheduling\Lateness`, `ProjectQuery` | Partial | `ProjectQuery` menampilkan Overdue (hari kerja); notifikasi & panel fase 8 |
 | DATA-07 | Kode project NPD-YYYY-XXX urut per tahun | 3.4 | Must | 2 | `NumberSequence` | Done | `NumberSequenceTest` (konkurensi) |
 | DATA-08 | Nomor NPR NO/PIK/NPR/Bulan Romawi/Tahun, reset tiap tahun, dibuat saat pertama dikirim | 3.4 | Must | 2 | `NumberSequence`, `NprService::submit` | Done | `NumberSequenceTest`, `NprServiceTest` |
 | DATA-09 | No. dokumen export: NPR = PIK-FORM-NPD-01 rev 00; timeline = PIK-FORM-NPD-07 tanpa revisi | 3.4 | Must | 2/6 | `NprPdf`, `TimelineExport` | Done | `PdfExportTest`, `ExcelExportTest` |
@@ -75,7 +75,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | NPR-14 | Simpan draft & autosave; stepper di HP | 4.1, 11.6 | Must | 2/11 | `public/assets/js/npr-form.js`, `public/api/npr-autosave.php` | Done | `NprHttpTest` |
 | NPR-15 | Daftar master NPR dikelola Admin (nonaktif, bukan hapus; data lama tetap terbaca) | 4.4 | Must | 2 | `MasterService`, `public/settings/masters.php` | Done | `MasterServiceTest` |
 | NPR-16 | Perlu Revisi → NPR kembali ke Sales; part lain tetap; part yang diubah ditandai "Perlu ditinjau ulang" | 4.5 | Must | 2 | `NprFeedbackService` | Done | `NprServiceTest` |
-| NPR-17 | "Perlu Masterbatch Baru" per part menentukan Masterbatch dijalankan / Tidak dijalankan | 4.5 | Must | 2/4 | `WorkflowInstantiator` | Partial | `WorkflowEngineTest` |
+| NPR-17 | "Perlu Masterbatch Baru" per part menentukan Masterbatch dijalankan / Tidak dijalankan | 4.5 | Must | 2/4 | `WorkflowInstantiator` | Done | `WorkflowEngineTest::testNoMasterbatchSkipsGroupAndPlanFollows` |
 | NPR-18 | Hapus part yang sudah punya feedback/proses tidak diizinkan → Cancel dengan alasan | 4.3 | Must | 2 | `NprService` | Done | `NprServiceTest` |
 | NPR-19 | Jenis part (New Mold/Subcont) per part; Mould & Feedback per part | 4.2 | Must | 2 | `npr_parts`, `npr_feedback` | Done | `NprServiceTest` |
 | NPR-20 | Nama file PDF `NPR_<nomor>_<produk>.pdf`; export dicatat di aktivitas | 4.6 | Must | 2 | `public/export.php` | Done | `PdfExportTest` |
@@ -84,20 +84,20 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-WF-01 | Banyak proses aktif bersamaan per part; Tracker & detail part menampilkan semuanya | 5 | Must | 4/6 | `WorkflowEngine`, `public/tracker.php` | Planned | `WorkflowEngineTest` (UAT-06) |
-| FR-WF-02 | Dependency FS, SS, FF, Paralel; lag ±; banyak predecessor | 5.3 | Must | 4/5 | `DependencyService`, `Scheduler` | Planned | `SchedulerTest`, `DependencyServiceTest` |
-| FR-WF-03 | Aktivasi otomatis saat syarat terpenuhi; FF memblokir penyelesaian dini | 5.4 | Must | 4 | `WorkflowEngine::activateReady/complete` | Planned | `WorkflowEngineTest` (UAT-14) |
-| FR-WF-04 | Tolak dependency melingkar (template & override) | 5.3 | Must | 4 | `DependencyValidator` | Planned | `DependencyServiceTest` (UAT-13) |
-| FR-WF-05 | Override dependency per project oleh NPD dengan pratinjau + audit sebelum/sesudah | 5.5 | Must | 4/5 | `DependencyService::preview/save` | Planned | `DependencyServiceTest` (UAT-12) |
-| FR-WF-06 | "Tidak dijalankan": hanya proses yang diizinkan, alasan wajib, Admin/NPD, pasangan, pembatalan | 5.6 | Must | 4 | `WorkflowEngine::skip/unskip` | Planned | `WorkflowEngineTest` (UAT-11) |
-| FR-WF-07 | Loop approval/trial/T0/validasi dengan iterasi | 5.2 | Must | 4 | `WorkflowEngine::applyOutcome` | Planned | `WorkflowEngineTest` (UAT-15) |
-| FR-WF-08 | Gate Assembly/Fit Test opsional, predecessor milestone part aktif | 5.7 | Should | 4 | `GateService` | Planned | `GateServiceTest` |
-| FR-WF-09 | Template workflow berversi; project menyimpan versi | 5.8 | Must | 4 | `WorkflowTemplateService` | Planned | `WorkflowTemplateTest` |
-| FR-WF-10 | Koreksi manual proses aktif oleh Admin dengan alasan | 5.4 | Should | 4 | `WorkflowEngine::manualMove` | Planned | `WorkflowEngineTest` |
-| WF-11 | Workflow bawaan level project (P1, P2, G1, PF), New Mold (N1–N14), Subcont (S1–S11) | 5.1 | Must | 4 | `database/seeds/workflows.php` | Planned | `WorkflowTemplateTest` |
-| WF-12 | Aturan aktivasi §5.4 (dokumen wajib, approval, mandatory sebelum Finish) | 5.4 | Must | 4/7 | `WorkflowEngine` | Planned | `WorkflowEngineTest` |
-| WF-13 | Validasi cross-part: dependency antar part hanya lewat gate level project | 5.3 | Must | 4 | `DependencyValidator` | Planned | `DependencyServiceTest` |
-| WF-14 | Lag negatif tidak membuat mulai sebelum part/predecessor mulai | 5.3 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
+| FR-WF-01 | Banyak proses aktif bersamaan per part; Tracker & detail part menampilkan semuanya | 5 | Must | 4/6 | `WorkflowEngine`, `public/project.php`, `public/process.php` | Partial | `WorkflowEngineTest` (UAT-06); Tracker fase 6 |
+| FR-WF-02 | Dependency FS, SS, FF, Paralel; lag ±; banyak predecessor | 5.3 | Must | 4/5 | `DependencyService`, `Scheduler` | Done | `SchedulerTest`, `DependencyServiceTest` |
+| FR-WF-03 | Aktivasi otomatis saat syarat terpenuhi; FF memblokir penyelesaian dini | 5.4 | Must | 4 | `WorkflowEngine::activateReady/complete/ffBlockers`, `cron/overdue.php` | Done | `WorkflowEngineTest`, `DailyActivationTest`, `SchedulerTest` (FF) |
+| FR-WF-04 | Tolak dependency melingkar (template & override) | 5.3 | Must | 4 | `DependencyService`, `Scheduler::topologicalOrder` (CycleException) | Partial | `DependencyServiceTest::testCycleIsRejected` (UAT-13); validasi template fase 4/Pengaturan Workflow |
+| FR-WF-05 | Override dependency per project oleh NPD dengan pratinjau + audit sebelum/sesudah | 5.5 | Must | 4/5 | `DependencyService::preview/save`, `public/api/schedule-preview.php` | Done | `DependencyServiceTest` (UAT-12), `ProjectHttpTest`, `tests/browser/project_flow.py` |
+| FR-WF-06 | "Tidak dijalankan": hanya proses yang diizinkan, alasan wajib, Admin/NPD, pasangan, pembatalan | 5.6 | Must | 4 | `WorkflowEngine::skip/unskip/canSkipNow` | Done | `WorkflowEngineTest` (UAT-11, OQ-26) |
+| FR-WF-07 | Loop approval/trial/T0/validasi dengan iterasi | 5.2 | Must | 4 | `WorkflowEngine::complete` (repeat/loop/activate/gate_fail) | Done | `WorkflowEngineTest` (UAT-15 setara N4, T0 Not OK, Commissioning NG) |
+| FR-WF-08 | Gate Assembly/Fit Test opsional, predecessor milestone part aktif | 5.7 | Should | 4 | `WorkflowEngine::applyGateFail/recordGate`, `project_gates` | Done | `WorkflowEngineTest::testGateFailReopensChosenPartsAndPassContinues` |
+| FR-WF-09 | Template workflow berversi; project menyimpan versi | 5.8 | Must | 4 | `WorkflowInstantiator` (snapshot versi template) | Partial | `WorkflowEngineTest`; UI Pengaturan Workflow fase 4b/11 |
+| FR-WF-10 | Koreksi manual proses aktif oleh Admin dengan alasan | 5.4 | Should | 4 | `WorkflowEngine::manualMove` | Done | `WorkflowEngineTest`, `ProjectHttpTest` (403 non-Admin) |
+| WF-11 | Workflow bawaan level project (P1, P2, G1, PF), New Mold (N1–N14), Subcont (S1–S11) | 5.1 | Must | 4 | `database/seeds/workflows.php` | Done | `WorkflowEngineTest` |
+| WF-12 | Aturan aktivasi §5.4 (dokumen wajib, approval, mandatory sebelum Finish) | 5.4 | Must | 4/7 | `WorkflowEngine` | Partial | `WorkflowEngineTest::testRequiredDocumentBlocksCompletion`, `testFinishPartAndProjectLifecycle`; approval terhubung fase 7 |
+| WF-13 | Validasi cross-part: dependency antar part hanya lewat gate level project | 5.3 | Must | 4 | `DependencyService::scopeAllowed` | Done | `DependencyServiceTest::testCrossPartAndInvalidInputRejected` |
+| WF-14 | Lag negatif tidak membuat mulai sebelum part/predecessor mulai | 5.3 | Must | 5 | `Scheduler` | Done | `SchedulerTest` |
 | WF-15 | Pengaturan Workflow Admin: atribut proses §5.8; proses bawaan hanya dinonaktifkan | 5.8 | Must | 4 | `public/settings/workflow.php` | Planned | `WorkflowTemplateTest` |
 | WF-16 | Perubahan template tidak mengubah project berjalan kecuali Admin menerapkan ke proses belum mulai (dengan pratinjau) | 5.5 | Must | 4 | `WorkflowTemplateService::applyToRunning` | Planned | `WorkflowTemplateTest` |
 
@@ -105,25 +105,25 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-SCH-01 | Input planning opsional (durasi, Planned Start, Planned Finish); yang kosong otomatis | 6.1 | Must | 5 | `Scheduler`, `PlanningService` | Planned | `SchedulerTest` (5 kombinasi tabel §6.1) |
-| FR-SCH-02 | Hari kerja Senin–Jumat + hari libur Admin | 6.2 | Must | 5 | `WorkingCalendar` | Planned | `WorkingCalendarTest` |
-| FR-SCH-03 | Tanggal manual = "tidak mulai sebelum"; peringatan bila bertentangan dependency | 6.1 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` (UAT-08) |
-| FR-SCH-04 | Aktual ≠ rencana → proses bergantung bergeser; proses tak terkait tidak; semua tercatat | 6.4 | Must | 5 | `Scheduler`, `schedule_changes` | Planned | `SchedulerTest` (contoh §6.4, UAT-07) |
-| FR-SCH-05 | Forecast Finish proses & perkiraan selesai part/project; Target Finish tetap; tanda Berisiko | 6.3, 6.4 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` (UAT-10) |
+| FR-SCH-01 | Input planning opsional (durasi, Planned Start, Planned Finish); yang kosong otomatis | 6.1 | Must | 5 | `Scheduler`, `WorkflowEngine::plan/previewPlan`, `public/process.php` | Done | `SchedulerTest` (tabel §6.1), `WorkflowEngineTest::testPlanChangesDurationAndShiftsSuccessorsWithPreview` |
+| FR-SCH-02 | Hari kerja Senin–Jumat + hari libur Admin | 6.2 | Must | 5 | `WorkingCalendar` | Done | `WorkingCalendarTest` |
+| FR-SCH-03 | Tanggal manual = "tidak mulai sebelum"; peringatan bila bertentangan dependency | 6.1 | Must | 5 | `Scheduler` | Done | `SchedulerTest` (UAT-08) |
+| FR-SCH-04 | Aktual ≠ rencana → proses bergantung bergeser; proses tak terkait tidak; semua tercatat | 6.4 | Must | 5 | `Scheduler`, `ScheduleService::recalculate`, `schedule_changes` | Done | `SchedulerTest` (contoh §6.4), `WorkflowEngineTest::testCompleteActivatesSuccessorAndShiftsLateSchedule` (UAT-07) |
+| FR-SCH-05 | Forecast Finish proses & perkiraan selesai part/project; Target Finish tetap; tanda Berisiko | 6.3, 6.4 | Must | 5 | `Scheduler`, `ScheduleService::checkTargetRisk`, `ProjectQuery::atRisk` | Done | `SchedulerTest`, `ScheduleServiceTest` (UAT-10) |
 | FR-SCH-06 | Timeline dua level (Project & Part) dengan klik part | 6.6 | Must | 6 | `public/project.php?tab=timeline` | Planned | `TimelineHttpTest` (UAT-18) |
 | FR-SCH-07 | Export timeline PDF & Excel dengan No. Dokumen PIK-FORM-NPD-07 pojok kanan atas | 6.7 | Must | 6 | `TimelinePdf`, `TimelineExcel` | Planned | `PdfExportTest`, `ExcelExportTest` (UAT-19) |
-| FR-SCH-08 | Baseline berversi + batang baseline di Gantt | 6.5 | Should | 5/6 | `BaselineService`, Gantt | Planned | `BaselineServiceTest` |
-| FR-SCH-09 | Penyorotan jalur kritis pada Gantt | 6 | Could | 6 | `Scheduler::criticalPath` | Planned | `SchedulerTest` |
-| FR-SCH-10 | Pengaturan "tarik maju jadwal bila selesai lebih awal" | 6.4 | Should | 5 | `Scheduler` + setting | Planned | `SchedulerTest` |
-| SCH-11 | Planned Start/Finish selalu hari kerja; tanggal aktual boleh hari apa pun | 6.2 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
-| SCH-12 | Urutan topologis; FF memperpanjang durasi; Skipped durasi nol meneruskan tanggal | 6.3 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
-| SCH-13 | Proses berjalan mempertahankan Planned; Forecast = max(Planned Finish, hari ini) | 6.3 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
+| FR-SCH-08 | Baseline berversi + batang baseline di Gantt | 6.5 | Should | 5/6 | `ScheduleService::createBaseline/setBaseline` | Partial | `ScheduleServiceTest`; batang baseline Gantt fase 6 |
+| FR-SCH-09 | Penyorotan jalur kritis pada Gantt | 6 | Could | 6 | `Scheduler::criticalPath` | Partial | `Scheduler::criticalPath` + `SchedulerTest`; penyorotan Gantt fase 6 |
+| FR-SCH-10 | Pengaturan "tarik maju jadwal bila selesai lebih awal" | 6.4 | Should | 5 | `Scheduler` + setting `schedule.pull_forward_on_early_finish` | Done | `SchedulerTest` |
+| SCH-11 | Planned Start/Finish selalu hari kerja; tanggal aktual boleh hari apa pun | 6.2 | Must | 5 | `Scheduler` | Done | `SchedulerTest`, `WorkflowEngineTest` |
+| SCH-12 | Urutan topologis; FF memperpanjang durasi; Skipped durasi nol meneruskan tanggal | 6.3 | Must | 5 | `Scheduler` | Done | `SchedulerTest` |
+| SCH-13 | Proses berjalan mempertahankan Planned; Forecast = max(Planned Finish, hari ini) | 6.3 | Must | 5 | `Scheduler` | Done | `SchedulerTest` |
 | SCH-14 | Ikon kunci tanggal manual; proses Overdue merah; Skipped bergaris | 6.6 | Must | 6 | Gantt/timeline | Planned | `TimelineHttpTest` |
 | SCH-15 | Gantt lintas project (Project/Part), filter customer/PIC/status/jenis, baseline opsional | 6.8 | Must | 6 | `public/gantt.php`, `public/assets/js/gantt.js` | Planned | `GanttApiTest` |
 | SCH-16 | Process Tracker: kartu per part-proses aktif | 6.8 | Must | 6 | `public/tracker.php` | Planned | `TrackerHttpTest` |
 | SCH-17 | Kalender: deadline, approval, trial, commissioning, material, validasi, agenda manual, libur | 6.8 | Must | 6 | `public/calendar.php`, `CalendarService` | Planned | `CalendarServiceTest` |
-| SCH-18 | Hitung ulang jadwal satu project ≤ 1 detik (10 part × 20 proses), dalam satu transaksi | 13.1, 13.3 | Must | 5/12 | `Scheduler` | Planned | `SchedulerPerformanceTest` |
-| SCH-19 | Persetujuan Target Finish baru oleh NPD/Admin dengan alasan; tidak mengubah baseline | 6.4 | Must | 5 | `ProjectService::changeTarget` | Planned | `SchedulerTest` (UAT-10) |
+| SCH-18 | Hitung ulang jadwal satu project ≤ 1 detik (10 part × 20 proses), dalam satu transaksi | 13.1, 13.3 | Must | 5/12 | `Scheduler` | Done | `SchedulerTest` (201 node < 1 dtk), recalc dalam transaksi + `FOR UPDATE` |
+| SCH-19 | Persetujuan Target Finish baru oleh NPD/Admin dengan alasan; tidak mengubah baseline | 6.4 | Must | 5 | `ScheduleService::changeTarget` | Done | `ScheduleServiceTest` |
 
 ## 7. Overdue & notifikasi (PRD §7, Lampiran C)
 
@@ -228,16 +228,16 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | UAT-03 | Feedback Body Feasible, Cap Feasible+catatan, Plug Tidak Feasible → Plug batal, lainnya jalan | 2/4 | `NprServiceTest::testUat03…` | Partial (feedback, publikasi, pembatalan part selesai; workflow part mulai berjalan di fase 4) |
 | UAT-04 | Export PDF NPR setelah Selesai Feedback | 2 | `NprPdfTest::testUat04…` | Done |
 | UAT-05 | NPD kembalikan NPR; Sales ubah & kirim ulang → riwayat tanpa nomor revisi | 2 | `NprServiceTest::testUat05…` | Done |
-| UAT-06 | Part New Mold mulai: Masterbatch & 3D aktif bersamaan; 2D menunggu keduanya | 4 | `WorkflowEngineTest::testUat06` | Planned |
-| UAT-07 | Develop MB terlambat 2 hari kerja → turunan bergeser +2, 3D tidak, tercatat, notifikasi | 5 | `SchedulerTest::testUat07` | Planned |
-| UAT-08 | Planned Start manual lebih awal dari dependency → peringatan & tanggal dependency | 5 | `SchedulerTest::testUat08` | Planned |
+| UAT-06 | Part New Mold mulai: Masterbatch & 3D aktif bersamaan; 2D menunggu keduanya | 4 | `WorkflowEngineTest::testFeedbackCompletedStartsAcceptedPartsWithBaseline` | Done |
+| UAT-07 | Develop MB terlambat 2 hari kerja → turunan bergeser +2, 3D tidak, tercatat, notifikasi | 5 | `SchedulerTest` (contoh §6.4), `WorkflowEngineTest::testCompleteActivatesSuccessorAndShiftsLateSchedule` | Done |
+| UAT-08 | Planned Start manual lebih awal dari dependency → peringatan & tanggal dependency | 5 | `SchedulerTest` (manual_before_dependency) | Done |
 | UAT-09 | Proses lewat Planned Finish → merah, panel overdue, email hari pertama | 8 | `OverdueServiceTest::testUat09` | Planned |
-| UAT-10 | Perkiraan selesai > Target Finish → target tetap, ditandai, target baru lewat persetujuan | 5 | `SchedulerTest::testUat10` | Planned |
-| UAT-11 | "Tidak dijalankan" 3D Prototype (pasangan Customer 3D Approval) | 4 | `WorkflowEngineTest::testUat11` | Planned |
-| UAT-12 | Ubah dependency 2D Drawing jadi paralel dengan approval 3D → pratinjau + audit | 4/5 | `DependencyServiceTest::testUat12` | Planned |
-| UAT-13 | Dependency melingkar ditolak | 4 | `DependencyServiceTest::testUat13` | Planned |
-| UAT-14 | Selesaikan proses FF sebelum predecessor selesai → ditolak | 4 | `WorkflowEngineTest::testUat14` | Planned |
-| UAT-15 | Customer Artwork Approval Not Approved → kembali ke Artwork, iterasi +1, jadwal dihitung ulang | 4 | `WorkflowEngineTest::testUat15` | Planned |
+| UAT-10 | Perkiraan selesai > Target Finish → target tetap, ditandai, target baru lewat persetujuan | 5 | `ScheduleServiceTest` | Done |
+| UAT-11 | "Tidak dijalankan" 3D Prototype (pasangan Customer 3D Approval) | 4 | `WorkflowEngineTest::testSkipGroupPassesThroughAuditsAndUnskipRules` | Done |
+| UAT-12 | Ubah dependency 2D Drawing jadi paralel dengan approval 3D → pratinjau + audit | 4/5 | `DependencyServiceTest::testParallelOverrideWithPreviewThenSaveAndAudit` | Done |
+| UAT-13 | Dependency melingkar ditolak | 4 | `DependencyServiceTest::testCycleIsRejected`, `ProjectHttpTest` | Done |
+| UAT-14 | Selesaikan proses FF sebelum predecessor selesai → ditolak | 4 | `WorkflowEngineTest::testFinishToFinishBlocksEarlyCompletion` | Done |
+| UAT-15 | Customer Artwork Approval Not Approved → kembali ke Artwork, iterasi +1, jadwal dihitung ulang | 4 | `WorkflowEngineTest::testArtworkNotApprovedReturnsToArtwork` | Done |
 | UAT-16 | Hold part lalu project 30 hari → beku, tidak overdue, pengingat 30 hari | 9 | `HoldServiceTest::testUat16` | Planned |
 | UAT-17 | Resume project → target baru wajib, baseline baru, jadwal lama tersimpan | 9 | `HoldServiceTest::testUat17` | Planned |
 | UAT-18 | Management buka timeline, klik part BODY → Level 2, tidak dapat mengubah | 6 | `TimelineHttpTest::testUat18` | Planned |

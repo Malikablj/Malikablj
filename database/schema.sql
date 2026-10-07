@@ -592,6 +592,8 @@ CREATE TABLE IF NOT EXISTS processes (
   record_type              VARCHAR(30)  NULL,
   calendar_category        VARCHAR(30)  NULL,
   is_gate_milestone        TINYINT(1)   NOT NULL DEFAULT 0,
+  -- loop: proses yang dibuka kembali menunggu proses ini selesai (mis. Mold Machining menunggu Mold Correction)
+  loop_after_process_id    INT UNSIGNED NULL,
   -- planning
   duration                 SMALLINT UNSIGNED NOT NULL DEFAULT 1,
   duration_is_manual       TINYINT(1)   NOT NULL DEFAULT 0,
@@ -630,7 +632,8 @@ CREATE TABLE IF NOT EXISTS processes (
   CONSTRAINT fk_proc_pic_role FOREIGN KEY (pic_role_id) REFERENCES roles(id),
   CONSTRAINT fk_proc_pic_user FOREIGN KEY (pic_user_id) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_proc_completed_by FOREIGN KEY (completed_by) REFERENCES users(id) ON DELETE SET NULL,
-  CONSTRAINT fk_proc_skipped_by FOREIGN KEY (skipped_by) REFERENCES users(id) ON DELETE SET NULL
+  CONSTRAINT fk_proc_skipped_by FOREIGN KEY (skipped_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_proc_loop_after FOREIGN KEY (loop_after_process_id) REFERENCES processes(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS process_dependencies (
@@ -687,6 +690,7 @@ CREATE TABLE IF NOT EXISTS project_gates (
   project_id       INT UNSIGNED NOT NULL,
   process_id       INT UNSIGNED NOT NULL,
   name             VARCHAR(160) NOT NULL,
+  iteration        SMALLINT UNSIGNED NOT NULL DEFAULT 1,
   result           ENUM('pass','fail') NULL,
   result_note      TEXT         NULL,
   failed_part_ids_json JSON     NULL,
@@ -695,7 +699,7 @@ CREATE TABLE IF NOT EXISTS project_gates (
   created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_pg_process (process_id),
+  UNIQUE KEY uq_pg_process_iter (process_id, iteration),
   KEY idx_pg_project (project_id),
   CONSTRAINT fk_pg_project FOREIGN KEY (project_id) REFERENCES projects(id),
   CONSTRAINT fk_pg_process FOREIGN KEY (process_id) REFERENCES processes(id),

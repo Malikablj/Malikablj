@@ -6,13 +6,19 @@ namespace App\Project;
 use App\Core\AuditLogger;
 use App\Core\Clock;
 use App\Core\Db;
+use App\Core\Gate;
+use App\Core\I18n;
+use App\Core\NotFoundException;
 use App\Core\NumberSequence;
+use App\Core\User;
+use App\Core\ValidationException;
+use App\Notification\Notifier;
 use App\Npr\NprFields;
 
 /**
- * Project → Part. Fase 2: pembuatan project & part dari NPR saat pertama kali dikirim,
- * sinkronisasi part saat NPR dikirim ulang, pembatalan part.
- * (Instansiasi proses & penjadwalan ditambahkan di fase 3–5.)
+ * Project → Part: pembuatan dari NPR, sinkronisasi saat NPR dikirim ulang, pembatalan part,
+ * penetapan PIC (part per peran, NPD PIC) dan prioritas.
+ * Instansiasi proses & penjadwalan: App\Workflow\WorkflowInstantiator / App\Scheduling\ScheduleService.
  */
 final class ProjectService
 {
@@ -117,6 +123,130 @@ final class ProjectService
             }
         }
         return false;
+    }
+
+    public const PART_ROLES = ['drafter', 'purchasing', 'production', 'quality'];
+    public const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
+
+    /**
+     * Tetapkan PIC per peran pada part (PRD §6.1). Proses aktif/belum mulai dengan peran tsb yang belum
+     * punya PIC atau masih memakai PIC part lama ikut diperbarui; PIC proses aktif diberi notifikasi.
+     * @param array<string,mixed> $input role => user_id|''
+     */
+    public function assignPartPics(User $actor, int $partId, array $input): void
+    {
+        Gate::authorize($actor, 'schedule.plan');
+        Db::transaction(function () use ($actor, $partId, $input): void {
+            $part = Db::fetch('SELECT pp.*, pj.code AS project_code FROM project_parts pp JOIN projects pj ON pj.id = pp.project_id WHERE pp.id = ? FOR UPDATE', [$partId]);
+            if (!$part) {
+                throw new NotFoundException(I18n::t('error.not_found'));
+            }
+            $errors = [];
+            $data = [];
+            foreach (self::PART_ROLES as $role) {
+                if (!array_key_exists($role, $input)) {
+                    continue;
+                }
+                $v = trim((string) $input[$role]);
+                if ($v === '') {
+                    $data[$role . '_pic_id'] = null;
+                    continue;
+                }
+                $ok = Db::value('SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ? AND u.is_active = 1 AND r.code = ?', [(int) $v, $role]);
+                if (!$ok) {
+                    $errors['pic.' . $role] = I18n::t('wf.pic_role_mismatch');
+                } else {
+                    $data[$role . '_pic_id'] = (int) $v;
+                }
+            }
+            if ($errors) {
+                throw new ValidationException($errors);
+            }
+            [$old, $new] = AuditLogger::diff(array_intersect_key($part, $data), $data);
+            if (!$new) {
+                return;
+            }
+            Db::update('project_parts', $data, ['id' => $partId]);
+            foreach (self::PART_ROLES as $role) {
+                $k = $role . '_pic_id';
+                if (!array_key_exists($k, $new)) {
+                    continue;
+                }
+                $oldPic = $part[$k] !== null ? (int) $part[$k] : null;
+                $newPic = $new[$k];
+                $affected = Db::fetchAll(
+                    "SELECT pr.id, pr.name, pr.status, pr.iteration FROM processes pr JOIN roles r ON r.id = pr.pic_role_id
+                     WHERE pr.part_id = ? AND r.code = ? AND pr.status NOT IN ('completed', 'skipped') AND (pr.pic_user_id IS NULL OR pr.pic_user_id <=> ?)",
+                    [$partId, $role, $oldPic]
+                );
+                foreach ($affected as $a) {
+                    Db::update('processes', ['pic_user_id' => $newPic], ['id' => (int) $a['id']]);
+                    Db::execute('UPDATE process_runs SET pic_user_id = ? WHERE process_id = ? AND status = \'open\'', [$newPic, (int) $a['id']]);
+                    if ($newPic !== null && in_array($a['status'], ['current', 'revision', 'problem'], true)) {
+                        Notifier::send([$newPic], 'project_assigned', 'notif.process_active.title', 'notif.process_active.body',
+                            ['project' => (string) $part['project_code'], 'process' => $part['name'] . ' › ' . $a['name'], 'finish' => (string) Db::value('SELECT planned_finish FROM processes WHERE id = ?', [(int) $a['id']])],
+                            'process.php?id=' . $a['id'], (int) $part['project_id'], (int) $a['id'], 'assigned:' . $a['id'] . ':' . $a['iteration'] . ':' . $newPic, $actor->id);
+                    }
+                }
+            }
+            AuditLogger::log('part.assign_pic', 'project_part', $partId, $old, $new, null, (int) $part['project_id'], $actor);
+        });
+    }
+
+    /**
+     * Ubah NPD PIC (Admin/NPD) dan/atau prioritas (project.edit; Sales hanya project miliknya).
+     * @param array<string,mixed> $input npd_pic_id, priority
+     */
+    public function updateProject(User $actor, int $projectId, array $input): void
+    {
+        Db::transaction(function () use ($actor, $projectId, $input): void {
+            $p = Db::fetch('SELECT * FROM projects WHERE id = ? FOR UPDATE', [$projectId]);
+            if (!$p) {
+                throw new NotFoundException(I18n::t('error.not_found'));
+            }
+            $data = [];
+            $errors = [];
+            if (array_key_exists('priority', $input)) {
+                Gate::authorize($actor, 'project.edit', ['owner_ids' => [$p['sales_pic_id'], $p['npd_pic_id']]]);
+                $v = (string) $input['priority'];
+                if (!in_array($v, self::PRIORITIES, true)) {
+                    $errors['priority'] = I18n::t('validation.invalid');
+                } else {
+                    $data['priority'] = $v;
+                }
+            }
+            if (array_key_exists('npd_pic_id', $input)) {
+                Gate::authorize($actor, 'schedule.plan');
+                $v = (int) $input['npd_pic_id'];
+                $ok = Db::value("SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ? AND u.is_active = 1 AND r.code IN ('npd_staff', 'admin')", [$v]);
+                if (!$ok) {
+                    $errors['npd_pic_id'] = I18n::t('wf.pic_role_mismatch');
+                } else {
+                    $data['npd_pic_id'] = $v;
+                }
+            }
+            if ($errors) {
+                throw new ValidationException($errors);
+            }
+            [$old, $new] = AuditLogger::diff(array_intersect_key($p, $data), $data);
+            if (!$new) {
+                return;
+            }
+            Db::update('projects', $new, ['id' => $projectId]);
+            if (isset($new['npd_pic_id'])) {
+                // proses NPD yang masih memakai NPD PIC lama (atau belum ber-PIC) mengikuti
+                Db::execute(
+                    "UPDATE processes pr JOIN roles r ON r.id = pr.pic_role_id SET pr.pic_user_id = ?
+                     WHERE pr.project_id = ? AND r.code = 'npd_staff' AND pr.status NOT IN ('completed', 'skipped') AND (pr.pic_user_id IS NULL OR pr.pic_user_id <=> ?)",
+                    [$new['npd_pic_id'], $projectId, $p['npd_pic_id']]
+                );
+                Db::execute(
+                    "UPDATE process_runs pr JOIN processes x ON x.id = pr.process_id SET pr.pic_user_id = x.pic_user_id WHERE x.project_id = ? AND pr.status = 'open'",
+                    [$projectId]
+                );
+            }
+            AuditLogger::log('project.update', 'project', $projectId, $old, $new, null, $projectId, $actor);
+        });
     }
 
     /** @param array<string,mixed> $p */
