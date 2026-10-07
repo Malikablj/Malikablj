@@ -869,4 +869,5 @@ details[open] > summary { margin-bottom: 12px; }
 @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .kpi-card { padding: 14px; } .kpi-value { font-size: 26px; } .bars li { grid-template-columns: minmax(0, 46%) minmax(0, 1fr) auto; } .trend-bars li { grid-template-columns: 80px minmax(0, 1fr) 72px; } }
 @media (prefers-reduced-motion: reduce) { .kpi-card, .bar-fill { transition: none; } }
-
+.inline-form { display: inline; margin: 0; }
+.flip-y { transform: rotate(180deg); }

@@ -16,7 +16,7 @@ use App\Core\User;
  */
 final class ApprovalService
 {
-    public const TYPES = ['npr', 'artwork', 'masterbatch', '3d', 'layout_decoration', 'mold_drawing', 't0', 'trial', 'commissioning', 'validation'];
+    public const TYPES = ['npr', 'artwork', 'masterbatch', '3d', 'layout_decoration', 'mold_drawing', 't0', 'trial', 'commissioning', 'validation', 'other'];
     public const STATUSES = ['pending', 'approved', 'rejected', 'revision_required'];
 
     /** Buat permintaan approval Pending untuk iterasi proses yang baru aktif (idempoten). @param array<string,mixed> $p */

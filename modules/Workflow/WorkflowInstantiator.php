@@ -148,15 +148,18 @@ final class WorkflowInstantiator
             $projectLevel[(string) $r['code']] = (int) $r['id'];
         }
         $gateOn = (int) $project['gate_enabled'] === 1 && isset($projectLevel['G1']);
-        foreach ($steps as $step) {
-            foreach ($step['deps'] as $d) {
-                $code = (string) $d['predecessor_code'];
+        // dependency efektif: predecessor yang dinonaktifkan Admin dijembatani ke predecessor-nya (PRD §5.8)
+        foreach (WorkflowTemplateService::resolvedDeps($this->allSteps((int) $tpl['version_id'])) as $code => $list) {
+            if (!isset($ids[$code])) {
+                continue;
+            }
+            foreach ($list as $d) {
                 if ((int) $d['only_when_gate'] === 1 && !$gateOn) {
                     continue;
                 }
-                $predId = $ids[$code] ?? $projectLevel[$code] ?? null;
+                $predId = $ids[$d['code']] ?? $projectLevel[$d['code']] ?? null;
                 if ($predId !== null) {
-                    $this->addDep($ids[$step['code']], $predId, (string) $d['dep_type'], (int) $d['lag_days']);
+                    $this->addDep($ids[$code], $predId, (string) $d['dep_type'], (int) $d['lag_days']);
                 }
             }
         }
@@ -245,6 +248,26 @@ final class WorkflowInstantiator
     }
 
     /** @param array<string,mixed> $step @param array<string,mixed> $data */
+    /** Semua step versi (termasuk nonaktif) dengan dependency, berkunci kode. @return array<string,array<string,mixed>> */
+    private function allSteps(int $versionId): array
+    {
+        $all = [];
+        foreach (Db::fetchAll('SELECT * FROM workflow_steps WHERE template_version_id = ?', [$versionId]) as $s) {
+            $s['deps'] = [];
+            $all[(int) $s['id']] = $s;
+        }
+        foreach (Db::fetchAll('SELECT d.* FROM workflow_step_dependencies d JOIN workflow_steps s ON s.id = d.step_id WHERE s.template_version_id = ? ORDER BY d.id', [$versionId]) as $d) {
+            $all[(int) $d['step_id']]['deps'][] = $d;
+        }
+        return array_column($all, null, 'code');
+    }
+
+    /** Sisipkan proses dari step template (dipakai saat menerapkan versi baru ke part berjalan). @param array<string,mixed> $step */
+    public function insertStepProcess(array $step, int $projectId, ?int $partId, ?int $pic): int
+    {
+        return $this->insertProcess($step, $projectId, $partId, $pic, []);
+    }
+
     private function insertProcess(array $step, int $projectId, ?int $partId, ?int $pic, array $data): int
     {
         return Db::insert('processes', array_merge([
