@@ -76,7 +76,7 @@ final class PurchaseOrder extends Model
         return [implode(' AND ', $where), $params];
     }
 
-    public static function paginate(array $f, string $sort, string $dir, int $page): Paginator
+    public static function paginate(array $f, string $sort, string $dir, int $page, ?int $perPage = null): Paginator
     {
         [$where, $params] = self::filters($f);
         $order = (self::SORTS[$sort] ?? 'p.po_date') . ($dir === 'asc' ? ' ASC' : ' DESC') . ', p.id DESC';
@@ -94,7 +94,8 @@ final class PurchaseOrder extends Model
              WHERE ' . $where,
             $params,
             $order,
-            $page
+            $page,
+            $perPage
         );
     }
 

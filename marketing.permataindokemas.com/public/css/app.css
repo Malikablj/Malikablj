@@ -388,6 +388,16 @@ textarea.form-control { min-height: 96px; }
   .filter-bar .btn { flex: 1 1 auto; }
 }
 
+/* Aksi massal untuk baris yang dicentang (mis. konfirmasi PPIC di daftar OEF) */
+.bulk-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 18px; border-bottom: 1px solid var(--pik-border); background: var(--pik-surface-2); font-size: .8438rem; }
+.bulk-bar-info { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+.bulk-bar-note { flex: 0 1 300px; min-width: 200px; }
+form.has-selection .bulk-bar { background: var(--pik-accent-soft); }
+@media (max-width: 575.98px) {
+  .bulk-bar { padding: 10px 12px; }
+  .bulk-bar-note, .bulk-bar .btn { flex: 1 1 100%; }
+}
+
 .table-pik { width: 100%; margin: 0; border-collapse: separate; border-spacing: 0; font-size: .875rem; }
 .table-pik thead th {
   position: sticky; top: 0; z-index: 1;
@@ -402,6 +412,7 @@ textarea.form-control { min-height: 96px; }
 .table-pik .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table-pik .nowrap { white-space: nowrap; }
 .table-pik .col-actions { width: 1%; white-space: nowrap; text-align: right; }
+.table-pik .col-check { width: 1%; padding-right: 0; }
 .table-pik tfoot td { padding: 12px 16px; border-top: 1px solid var(--pik-border); font-weight: 650; background: var(--pik-surface-2); }
 .table-pik .cell-title { font-weight: 600; color: var(--pik-text); }
 .table-pik a.cell-title:hover { color: var(--pik-accent); }

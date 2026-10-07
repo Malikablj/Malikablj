@@ -6,6 +6,7 @@ $icon = static fn (string $type): string => match (true) {
     str_starts_with($type, 'delivery') => 'bi-truck',
     str_starts_with($type, 'invoice') => 'bi-cash-coin',
     str_starts_with($type, 'po') => 'bi-receipt',
+    str_starts_with($type, 'user') => 'bi-shield-lock',
     default => 'bi-bell',
 };
 ?>

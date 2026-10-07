@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Helpers\Audit;
 use App\Helpers\Auth;
 use App\Helpers\Database;
 use App\Helpers\Permission;
 use App\Helpers\Request;
 use App\Helpers\Validator;
 use App\Models\User;
+use DomainException;
 
-/** Manajemen user (khusus Admin). User tidak dihapus, hanya dinonaktifkan. */
+/**
+ * Manajemen user (khusus Admin): tambah, edit, reset password, buka blokir login, dan hapus.
+ * User yang hanya sementara tidak dipakai sebaiknya dinonaktifkan; hapus bila memang tidak dipakai lagi.
+ */
 final class UserController extends Controller
 {
     public function index(): void
@@ -22,13 +27,16 @@ final class UserController extends Controller
         if (!in_array($role, Permission::ROLES, true)) {
             $role = '';
         }
-        $users = User::paginate($search, $role, $status, $this->page());
+        $blocked = Auth::blockedAccounts();
+        $users = User::paginate($search, $role, $status, $this->page(), array_keys($blocked));
         $this->view('users/index', [
-            'title'  => 'Users',
-            'users'  => $users,
-            'search' => $search,
-            'role'   => $role,
-            'status' => $status,
+            'title'      => 'Users',
+            'users'      => $users,
+            'search'     => $search,
+            'role'       => $role,
+            'status'     => $status,
+            'blocked'    => $blocked,
+            'returnPath' => Request::fullPath(),
         ]);
     }
 
@@ -66,7 +74,7 @@ final class UserController extends Controller
     public function edit(int $id): void
     {
         $user = $this->found(User::find($id));
-        $this->view('users/form', ['title' => 'Edit User', 'user' => $user, 'errors' => []]);
+        $this->view('users/form', ['title' => 'Edit User', 'user' => $user, 'errors' => []] + $this->editData($user));
     }
 
     public function update(int $id): void
@@ -85,7 +93,7 @@ final class UserController extends Controller
             }
         }
         if ($v->fails()) {
-            $this->invalid('users/form', ['title' => 'Edit User', 'user' => $user], $v->errors(), $this->oldInput());
+            $this->invalid('users/form', ['title' => 'Edit User', 'user' => $user] + $this->editData($user), $v->errors(), $this->oldInput());
             return;
         }
         User::update($id, [
@@ -110,6 +118,54 @@ final class UserController extends Controller
         // buka kunci login (bila user sempat terkunci karena salah password berulang kali)
         Database::delete('login_attempts', 'email = :email', ['email' => $user['email']]);
         $this->success('Password sementara untuk ' . $user['email'] . ' berhasil diset. User wajib menggantinya saat login.', '/users');
+    }
+
+    /** Buka blokir login user yang terkunci karena salah password berulang kali. */
+    public function unblock(int $id): void
+    {
+        $user = $this->found(User::find($id));
+        $back = $this->returnTo('/users');
+        if (Auth::blockedUntil((string) $user['email']) === null) {
+            $this->failure($user['name'] . ' tidak sedang terblokir (blokir sementara sudah berakhir otomatis).', $back);
+        }
+        Auth::unblock((string) $user['email']);
+        // notifikasi "user terblokir" untuk user ini dianggap selesai bagi semua Admin
+        Database::update('notifications', ['is_read' => 1, 'read_at' => date('Y-m-d H:i:s')],
+            "type = 'user_blocked' AND entity_id = :id AND is_read = 0", ['id' => $id]);
+        Audit::log('user_unblock', User::ENTITY, $id, (string) $user['email']);
+        $this->success('Blokir login ' . $user['name'] . ' sudah dibuka. User dapat login kembali sekarang.', $back);
+    }
+
+    /** Hapus user permanen (tidak bisa menghapus akun sendiri atau Admin aktif terakhir). */
+    public function destroy(int $id): void
+    {
+        $user = $this->found(User::find($id));
+        if ($id === Auth::id()) {
+            $this->failure('Anda tidak dapat menghapus akun Anda sendiri.', '/users/' . $id . '/edit');
+        }
+        if ($user['role'] === 'Admin' && (int) $user['is_active'] === 1 && User::activeAdminCount() <= 1) {
+            $this->failure('Harus ada minimal satu Admin aktif. User ini tidak dapat dihapus.', '/users/' . $id . '/edit');
+        }
+        try {
+            User::deleteUser($id);
+        } catch (DomainException $e) {
+            $this->failure($e->getMessage(), '/users/' . $id . '/edit');
+        }
+        $this->success('User ' . $user['name'] . ' (' . $user['email'] . ') sudah dihapus.', '/users');
+    }
+
+    /**
+     * Data tambahan halaman edit: status blokir login & data yang ditangani user (info sebelum menghapus).
+     * @param array<string,mixed> $user
+     * @return array<string,mixed>
+     */
+    private function editData(array $user): array
+    {
+        return [
+            'blockedUntil' => Auth::blockedUntil((string) $user['email']),
+            'assignments'  => User::assignments((int) $user['id']),
+            'isSelf'       => (int) $user['id'] === Auth::id(),
+        ];
     }
 
     private function validate(?int $ignoreId): Validator

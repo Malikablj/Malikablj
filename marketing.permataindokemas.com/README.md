@@ -30,6 +30,7 @@ Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (l
 16. [Troubleshooting](#16-troubleshooting)
 17. [Order Entry Form & Complaint (update Oktober 2026)](#17-order-entry-form--complaint-update-oktober-2026)
 18. [Pembagian tugas per divisi, Stock & Inbound Supplier (update Oktober 2026 — 2)](#18-pembagian-tugas-per-divisi-stock--inbound-supplier-update-oktober-2026--2)
+19. [Konfirmasi PPIC massal, hapus user & buka blokir (update Oktober 2026 — 3)](#19-konfirmasi-ppic-massal-hapus-user--buka-blokir-update-oktober-2026--3)
 
 ---
 
@@ -224,6 +225,7 @@ Otomasi menandai follow up yang lewat jatuh tempo (Overdue) dan mengirim notifik
 | Delivery terjadwal dalam N hari (Settings) | Semua user **PPIC** (pengisi surat jalan) + PIC marketing customer / pembuat delivery (atau semua user Marketing) |
 | OEF baru / revisi menunggu konfirmasi | User PPIC (atau Admin bila belum ada PPIC) |
 | Hasil konfirmasi PPIC | Pembuat OEF & sales |
+| User terblokir (salah password 5x) | Semua user **Admin** aktif (langsung saat terjadi) |
 | Target closing lead ≤ 3 hari / terlewat | PIC lead |
 
 Otomasi berjalan sendiri saat aplikasi dipakai (maksimal sekali per interval, default 60 menit) dan bisa dijalankan manual di Settings › Pengaturan. Untuk server yang tidak selalu dibuka, tambahkan cron:
@@ -261,7 +263,7 @@ Otorisasi dicek di **backend** pada setiap route (lihat `app/routes.php` + `conf
 | Customers & Contacts | ✔ | ✔ | ✔ | — | — | — | ✔ | lihat |
 | Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | — | — | — | lihat |
 | Order Entry Form (buat / edit) | ✔ | ✔ | buat & edit | lihat | — | — | ✔ | lihat |
-| Konfirmasi PPIC (Bisa / Tidak bisa diproses) | ✔ | — | — | ✔ | — | — | — | — |
+| Konfirmasi PPIC (Bisa / Tidak bisa diproses, satu per satu atau massal) | ✔ | — | — | ✔ | — | — | — | — |
 | Deliveries / Surat Jalan (catat, edit, ubah jadwal) | ✔ | lihat | lihat | ✔ | — | — | lihat | lihat |
 | Complaint & Return | ✔ | ✔ | lihat & catat | — | — | — | ✔ | lihat |
 | Tombol Selesai / Tidak selesai complaint | ✔ | ✔ | — | — | — | — | ✔ | — |
@@ -271,7 +273,7 @@ Otorisasi dicek di **backend** pada setiap route (lihat `app/routes.php` + `conf
 | Inbound Supplier | ✔ | — | — | — | — | ✔ | lihat | lihat |
 | Lead Time | ✔ | ✔ | — | — | — | — | ✔ | lihat |
 | Reports | ✔ | — | — | — | — | — | semua + export | tanpa export |
-| Users, Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — | — | — | — |
+| Users (termasuk hapus user & buka blokir login), Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — | — | — | — |
 
 Catatan (bisa diubah di `config/permissions.php`):
 - **Surat Jalan hanya diisi PPIC** (Admin tetap bisa untuk koreksi data). Jadwal delivery otomatis dari OEF tetap dibuat sistem saat Sales/Marketing menyimpan OEF.
@@ -342,7 +344,7 @@ pik-marketing-control/
 ## 15. Keamanan
 
 - Password disimpan dengan `password_hash` (bcrypt) dan diverifikasi `password_verify`; kebijakan minimal 8 karakter berisi huruf & angka; password sementara wajib diganti.
-- Login dibatasi (5 percobaan gagal per email / 20 per IP dalam 15 menit); sesi diganti saat login (anti session fixation); cookie `HttpOnly`, `SameSite=Lax`, `Secure` di HTTPS; timeout idle & absolut.
+- Login dibatasi (5 percobaan gagal per email / 20 per IP dalam 15 menit); Admin mendapat notifikasi saat user terblokir dan bisa membuka blokir di Settings › Users; sesi diganti saat login (anti session fixation); cookie `HttpOnly`, `SameSite=Lax`, `Secure` di HTTPS; timeout idle & absolut.
 - Semua form POST memakai token **CSRF**; semua query memakai **PDO prepared statements**; kolom sort memakai whitelist.
 - Semua output di-escape; link eksternal hanya `http/https`; Content-Security-Policy tanpa inline script, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`.
 - Export CSV dilindungi dari formula injection; setiap export, import, perubahan data, dan login tercatat di **Audit Log**.
@@ -518,3 +520,25 @@ Menu **Inventory › Inbound Supplier** (`/inbound-supplier`) untuk penerimaan b
 
 Tersedia tab **Rekap per barang** (total diterima, reject, dan masuk per nama barang + satuan), filter supplier/jenis/periode/ada reject, pencarian global, kartu di dashboard Gudang, dan riwayat perubahan (audit log).
 
+## 19. Konfirmasi PPIC massal, hapus user & buka blokir (update Oktober 2026 — 3)
+
+Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-setiap-update) (upload `pik-update.zip` + satu perintah Terminal). Tidak ada perubahan struktur database.
+
+### Konfirmasi PPIC massal di daftar Order Entry Form (Admin & PPIC)
+
+- Daftar **Order Entry Form** menampilkan kotak centang di setiap OEF (PO lama tanpa konfirmasi PPIC tidak bisa dicentang). Kotak di judul kolom = **pilih semua order yang tampil di halaman itu**; pilihan *25 / 50 / 100 per halaman* ada di bar filter, sehingga filter (mis. *Menunggu PPIC*) + 100 per halaman + pilih semua bisa memproses hingga 100 order sekaligus.
+- Bar di atas tabel menampilkan jumlah order yang dicentang, kolom **Catatan / alasan**, dan tombol **Bisa diproses** (hijau) / **Tidak bisa diproses** (merah, **alasan wajib** — dipakai untuk semua order yang dicentang).
+- Aturannya sama dengan konfirmasi satu per satu: *Bisa diproses* → status order *On Process*; *Tidak bisa diproses* → status *Cancelled* dan jadwal delivery dibatalkan; pembuat OEF & sales mendapat notifikasi; tercatat di Audit Log. Order yang sudah berstatus sama dilewati dan disebutkan di pesan hasil. Setelah diproses, halaman kembali ke filter & halaman yang sama.
+- Role lain tidak melihat kotak centang dan ditolak di backend.
+
+### Hapus user (Admin)
+
+- **Settings › Users**: tombol tempat sampah di setiap baris, atau bagian **Hapus user** di halaman Edit. Admin tidak bisa menghapus akunnya sendiri, dan minimal satu Admin aktif tetap ada.
+- Halaman Edit menampilkan data yang masih ditangani user (customer sebagai PIC marketing, lead, follow up terjadwal, order sebagai sales) sebelum dihapus.
+- Setelah dihapus: user langsung tidak bisa login (sesi aktif ikut berakhir); data yang pernah dibuatnya **tetap ada** (kolom pembuat / PIC / sales menjadi kosong); **Audit Log tetap menyimpan nama user**; notifikasi milik user ikut terhapus. Bila user hanya sementara tidak dipakai, cukup hilangkan centang *User aktif*.
+
+### Blokir login, notifikasi Admin & buka blokir
+
+- Salah password **5x dalam 15 menit** → login email tersebut diblokir sementara 15 menit (aturan lama). Kini user langsung diberi tahu di percobaan ke-5, dan **semua Admin aktif mendapat notifikasi** *"User terblokir: …"* (lonceng notifikasi) yang mengarah ke daftar user terblokir.
+- **Settings › Users** menampilkan peringatan *"N user sedang terblokir"*, label **Terblokir s/d jam …** di baris user, dan filter status **Terblokir**.
+- Tombol **Buka blokir** (di daftar maupun di halaman Edit) membuka blokir saat itu juga; notifikasi terkait ditandai selesai untuk semua Admin dan tercatat di Audit Log (`user_unblock`). Bila tidak dibuka, blokir tetap berakhir otomatis setelah 15 menit. Reset password juga membuka blokir.

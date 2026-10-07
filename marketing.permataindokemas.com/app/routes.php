@@ -102,6 +102,7 @@ return static function (Router $r): void {
     $r->get('/purchase-orders', [PurchaseOrderController::class, 'index'], 'purchase_orders.view');
     $r->get('/purchase-orders/create', [PurchaseOrderController::class, 'create'], 'purchase_orders.create');
     $r->post('/purchase-orders', [PurchaseOrderController::class, 'store'], 'purchase_orders.create');
+    $r->post('/purchase-orders/ppic-bulk', [PurchaseOrderController::class, 'ppicBulk'], 'ppic.approve');
     $r->get('/purchase-orders/{id}', [PurchaseOrderController::class, 'show'], 'purchase_orders.view');
     $r->get('/purchase-orders/{id}/edit', [PurchaseOrderController::class, 'edit'], 'purchase_orders.edit');
     $r->post('/purchase-orders/{id}', [PurchaseOrderController::class, 'update'], 'purchase_orders.edit');
@@ -179,6 +180,8 @@ return static function (Router $r): void {
     $r->get('/users/{id}/edit', [UserController::class, 'edit'], 'users.edit');
     $r->post('/users/{id}', [UserController::class, 'update'], 'users.edit');
     $r->post('/users/{id}/password', [UserController::class, 'resetPassword'], 'users.edit');
+    $r->post('/users/{id}/unblock', [UserController::class, 'unblock'], 'users.edit');
+    $r->post('/users/{id}/delete', [UserController::class, 'destroy'], 'users.delete');
     $r->get('/settings', [SettingsController::class, 'show'], 'settings.view');
     $r->post('/settings', [SettingsController::class, 'update'], 'settings.edit');
     $r->post('/settings/automation/run', [SettingsController::class, 'runAutomation'], 'settings.edit');

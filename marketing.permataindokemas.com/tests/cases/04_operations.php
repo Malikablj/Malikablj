@@ -191,6 +191,96 @@ test('ubah jadwal delivery OEF dari halaman order & menu Delivery', function () 
     assert_status(403, client_as('Marketing')->post('/purchase-orders/' . $id . '/schedule', ['delivery_date' => today()]));
 });
 
+test('PPIC massal: centang beberapa / semua OEF di halaman → Bisa / Tidak bisa diproses (Admin & PPIC)', function () {
+    $mkt = client_as('Marketing');
+    $ids = [];
+    foreach (['OEF-BLK-001', 'OEF-BLK-002', 'OEF-BLK-003'] as $i => $no) {
+        assert_redirect($mkt->post('/purchase-orders', ['order_number' => $no, 'customer_name' => 'PT Massal Uji', 'sales_name' => 'Sales Uji', 'po_date' => today(),
+            'product_name' => 'Botol Massal ' . $i, 'product_spec' => 'PET', 'order_qty' => '100', 'requested_date' => date('Y-m-d', strtotime('+7 days'))]), '/purchase-orders/');
+        $ids[] = (int) Database::fetchValue('SELECT id FROM purchase_orders WHERE order_number = :n', ['n' => $no]);
+    }
+    $legacy = Database::insert('purchase_orders', ['code' => 'PO-BLK0000001', 'po_number' => 'PO/BLK/LAMA', 'customer_id' => Database::fetchValue('SELECT customer_id FROM purchase_orders WHERE id = :id', ['id' => $ids[0]]),
+        'po_date' => today(), 'status' => 'Open']);
+    $ppicOf = static fn (int $id): array => Database::fetch('SELECT ppic_status, status, ppic_note, schedule_delivery_id FROM purchase_orders WHERE id = :id', ['id' => $id]);
+
+    // hanya Admin & PPIC: role lain tidak melihat checkbox dan ditolak backend
+    $list = $mkt->get('/purchase-orders', ['q' => 'Massal']);
+    assert_not_contains('ppic-bulk', $list->body);
+    assert_not_contains('name="ids[]"', $list->body);
+    foreach (['Marketing', 'Sales', 'Management', 'Viewer'] as $role) {
+        assert_status(403, client_as($role)->post('/purchase-orders/ppic-bulk', ['ids' => [$ids[0]], 'decision' => 'approve']), $role);
+    }
+    $ppic = client_as('PPIC');
+    $page = $ppic->get('/purchase-orders', ['q' => 'BLK', 'per_page' => '100']);
+    assert_status(200, $page);
+    assert_contains('action="/purchase-orders/ppic-bulk"', $page->body);
+    assert_contains('data-check-all="ids[]"', $page->body, 'pilih semua di halaman ini');
+    foreach ($ids as $id) {
+        assert_contains('name="ids[]" value="' . $id . '"', $page->body);
+    }
+    assert_not_contains('name="ids[]" value="' . $legacy . '"', $page->body, 'PO lama tanpa PPIC tidak bisa dicentang');
+    assert_contains('<option value="100" selected', $page->body, 'pilihan jumlah per halaman');
+    assert_contains('name="return" value="/purchase-orders?q=BLK&amp;per_page=100"', $page->body);
+
+    // validasi: tanpa centang, tanpa keputusan, tolak tanpa alasan → tidak ada yang berubah
+    assert_redirect($ppic->post('/purchase-orders/ppic-bulk', ['decision' => 'approve']), '/purchase-orders');
+    assert_redirect($ppic->post('/purchase-orders/ppic-bulk', ['ids' => $ids, 'decision' => 'hapus']), '/purchase-orders');
+    $noReason = $ppic->post('/purchase-orders/ppic-bulk', ['ids' => $ids, 'decision' => 'reject', 'ppic_note' => '  ', 'return' => '/purchase-orders?q=PT+Massal&ppic=Pending']);
+    assert_redirect($noReason, '/purchase-orders?q=PT+Massal&ppic=Pending', 'pencarian berspasi tetap dipertahankan');
+    assert_contains('Isi alasan', $ppic->get('/purchase-orders', ['q' => 'BLK'])->body);
+    assert_redirect($ppic->post('/purchase-orders/ppic-bulk', ['ids' => range(1, 101), 'decision' => 'approve']), '/purchase-orders');
+    assert_redirect($ppic->post('/purchase-orders/ppic-bulk', ['ids' => [(string) $ids[0]], 'decision' => 'approve', 'return' => 'https://evil.test/x']), '/purchase-orders', 'return eksternal diabaikan');
+    assert_same('Approved', $ppicOf($ids[0])['ppic_status']);
+    foreach ([$ids[1], $ids[2]] as $id) {
+        assert_same('Pending', $ppicOf($id)['ppic_status']);
+    }
+
+    // PPIC: Bisa diproses untuk semua yang dicentang (yang sudah Approved & PO lama dilewati)
+    $res = $ppic->post('/purchase-orders/ppic-bulk', ['ids' => [$ids[0], $ids[1], $ids[2], $legacy], 'decision' => 'approve', 'ppic_note' => '', 'return' => '/purchase-orders?q=BLK&per_page=100']);
+    assert_redirect($res, '/purchase-orders?q=BLK&per_page=100', 'kembali ke halaman & filter yang sama');
+    $flash = $ppic->get('/purchase-orders', ['q' => 'BLK', 'per_page' => '100'])->body;
+    assert_contains('2 order ditandai BISA diproses', $flash);
+    assert_contains('1 order dilewati karena sudah berstatus', $flash);
+    assert_contains('1 PO lama dilewati', $flash);
+    foreach ($ids as $id) {
+        $row = $ppicOf($id);
+        assert_same('Approved', $row['ppic_status']);
+        assert_same('On Process', $row['status']);
+    }
+    assert_same(null, Database::fetchValue('SELECT ppic_status FROM purchase_orders WHERE id = :id', ['id' => $legacy]));
+    assert_same(3, (int) Database::fetchValue("SELECT COUNT(*) FROM audit_logs WHERE action = 'ppic_approve' AND entity_id IN (" . implode(',', $ids) . ')'));
+
+    // Admin: Tidak bisa diproses (alasan wajib) → order batal & jadwal delivery dibatalkan, pembuat dapat notifikasi
+    $admin = client_as('Admin');
+    $adminPage = $admin->get('/purchase-orders', ['q' => 'BLK']);
+    assert_contains('action="/purchase-orders/ppic-bulk"', $adminPage->body, 'Admin juga bisa');
+    assert_redirect($admin->post('/purchase-orders/ppic-bulk', ['ids' => [$ids[1], $ids[2]], 'decision' => 'reject', 'ppic_note' => 'Mesin blow molding penuh']), '/purchase-orders');
+    foreach ([$ids[1], $ids[2]] as $id) {
+        $row = $ppicOf($id);
+        assert_same('Rejected', $row['ppic_status']);
+        assert_same('Cancelled', $row['status']);
+        assert_same('Mesin blow molding penuh', $row['ppic_note']);
+        assert_same('Cancelled', Database::fetchValue('SELECT status FROM deliveries WHERE id = :id', ['id' => $row['schedule_delivery_id']]));
+        assert_true((bool) Database::fetchValue("SELECT 1 FROM notifications WHERE type = 'oef_ppic_result' AND entity_id = :id", ['id' => $id]));
+    }
+    assert_same('Approved', $ppicOf($ids[0])['ppic_status'], 'yang tidak dicentang tidak berubah');
+    // semua sudah berstatus sama → tidak ada yang diubah
+    $none = $admin->post('/purchase-orders/ppic-bulk', ['ids' => [$ids[1], $ids[2]], 'decision' => 'reject', 'ppic_note' => 'Ulang']);
+    assert_redirect($none, '/purchase-orders');
+    assert_contains('Tidak ada order yang diubah', $admin->get('/purchase-orders')->body);
+    assert_same('Mesin blow molding penuh', $ppicOf($ids[1])['ppic_note']);
+
+    // bersihkan agar test lain (laporan, dashboard) tidak terpengaruh
+    $in = implode(',', array_merge($ids, [$legacy]));
+    Database::query("UPDATE purchase_orders SET schedule_delivery_id = NULL WHERE id IN ({$in})");
+    Database::query("DELETE FROM deliveries WHERE po_id IN ({$in})");
+    Database::query("DELETE FROM po_lines WHERE po_id IN ({$in})");
+    Database::query("DELETE FROM notifications WHERE entity_type = 'purchase_order' AND entity_id IN ({$in})");
+    Database::query("DELETE FROM purchase_orders WHERE id IN ({$in})");
+    Database::query("DELETE FROM products WHERE name LIKE 'Botol Massal %'");
+    Database::query("DELETE FROM customers WHERE name = 'PT Massal Uji'");
+});
+
 group('Phase 4 · Delivery, Return & Outstanding');
 
 test('delivery Delivered mengurangi outstanding, Scheduled tidak; status PO → Partial', function () {

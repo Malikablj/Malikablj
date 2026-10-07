@@ -28,6 +28,9 @@ final class PurchaseOrderController extends Controller
         'is_subcont', 'supplier', 'requested_date', 'ship_to', 'remark', 'payment_term', 'status',
     ];
 
+    /** Pilihan jumlah order per halaman di daftar OEF (nilai terbesar = batas konfirmasi PPIC massal). */
+    private const PER_PAGE = [25, 50, 100];
+
     /** @return array<string,mixed> */
     private function filters(): array
     {
@@ -47,14 +50,18 @@ final class PurchaseOrderController extends Controller
         $filters = $this->filters();
         $sort = Request::queryString('sort', 'date');
         $dir = Request::queryString('dir', 'desc') === 'asc' ? 'asc' : 'desc';
+        $perPage = in_array(Request::queryInt('per_page'), self::PER_PAGE, true) ? Request::queryInt('per_page') : self::PER_PAGE[0];
         $this->view('purchase_orders/index', [
             'title'        => 'Order Entry Form',
-            'orders'       => PurchaseOrder::paginate($filters, $sort, $dir, $this->page()),
+            'orders'       => PurchaseOrder::paginate($filters, $sort, $dir, $this->page(), $perPage),
             'summary'      => PurchaseOrder::summary($filters),
             'ppicPending'  => PurchaseOrder::ppicPendingCount(),
             'filters'      => $filters,
             'sort'         => $sort,
             'dir'          => $dir,
+            'perPage'      => $perPage,
+            'pageSizes'    => self::PER_PAGE,
+            'returnPath'   => Request::fullPath(),
             'customers'    => Customer::selectOptions(),
         ]);
     }
@@ -167,6 +174,74 @@ final class PurchaseOrderController extends Controller
             $this->failure($e->getMessage(), '/purchase-orders/' . $id);
         }
         $this->success('Order ' . PurchaseOrder::displayNumber($po) . ($decision === 'approve' ? ' dikonfirmasi BISA diproses.' : ' ditandai TIDAK bisa diproses. Jadwal delivery dibatalkan.'), '/purchase-orders/' . $id);
+    }
+
+    /**
+     * Konfirmasi PPIC untuk beberapa order sekaligus (dicentang di daftar OEF, bisa "pilih semua" di halaman).
+     * Order yang sudah berstatus sama dan PO lama (tanpa konfirmasi PPIC) dilewati.
+     */
+    public function ppicBulk(): void
+    {
+        $back = $this->returnTo('/purchase-orders');
+        $raw = is_array($_POST['ids'] ?? null) ? $_POST['ids'] : [];
+        $ids = array_values(array_unique(array_filter(array_map(static fn ($v) => is_string($v) && ctype_digit($v) ? (int) $v : 0, $raw))));
+        $decision = is_string($_POST['decision'] ?? null) ? $_POST['decision'] : '';
+        $note = is_string($_POST['ppic_note'] ?? null) ? mb_substr(trim($_POST['ppic_note']), 0, 2000) : '';
+        $limit = self::PER_PAGE[count(self::PER_PAGE) - 1];
+        if ($ids === []) {
+            $this->failure('Centang minimal satu order terlebih dahulu.', $back);
+        }
+        if (!in_array($decision, ['approve', 'reject'], true)) {
+            $this->failure('Pilih keputusan PPIC: Bisa diproses atau Tidak bisa diproses.', $back);
+        }
+        if (count($ids) > $limit) {
+            $this->failure('Maksimal ' . $limit . ' order sekali proses.', $back);
+        }
+        if ($decision === 'reject' && $note === '') {
+            $this->failure('Isi alasan mengapa order yang dicentang tidak bisa diproses.', $back);
+        }
+        $target = $decision === 'approve' ? 'Approved' : 'Rejected';
+        $done = 0;
+        $same = 0;
+        $legacy = 0;
+        $missing = 0;
+        $errors = [];
+        foreach ($ids as $id) {
+            $po = PurchaseOrder::find($id);
+            if ($po === null) {
+                $missing++;
+            } elseif ($po['ppic_status'] === null) {
+                $legacy++;
+            } elseif ($po['ppic_status'] === $target) {
+                $same++;
+            } else {
+                try {
+                    OrderEntry::decide($id, $decision, $note !== '' ? $note : null);
+                    $done++;
+                } catch (DomainException $e) {
+                    $errors[] = PurchaseOrder::displayNumber($po) . ' (' . $e->getMessage() . ')';
+                }
+            }
+        }
+        $label = PurchaseOrder::PPIC_LABELS[$target];
+        $notes = [];
+        if ($same > 0) {
+            $notes[] = $same . ' order dilewati karena sudah berstatus "' . $label . '".';
+        }
+        if ($legacy > 0) {
+            $notes[] = $legacy . ' PO lama dilewati (tidak memerlukan konfirmasi PPIC).';
+        }
+        if ($missing > 0) {
+            $notes[] = $missing . ' order tidak ditemukan.';
+        }
+        if ($errors !== []) {
+            $notes[] = 'Gagal: ' . implode('; ', array_slice($errors, 0, 5)) . (count($errors) > 5 ? ' dan ' . (count($errors) - 5) . ' lainnya.' : '.');
+        }
+        if ($done === 0) {
+            $this->failure(trim('Tidak ada order yang diubah. ' . implode(' ', $notes)), $back);
+        }
+        $message = $done . ' order ditandai ' . ($decision === 'approve' ? 'BISA diproses.' : 'TIDAK bisa diproses. Jadwal delivery-nya dibatalkan.');
+        $this->success(trim($message . ' ' . implode(' ', $notes)), $back);
     }
 
     /** Ubah jadwal delivery otomatis dari halaman order. */

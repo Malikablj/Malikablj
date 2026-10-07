@@ -3,10 +3,13 @@
 use App\Helpers\Form;
 use App\Models\PurchaseOrder;
 
-/** @var App\Helpers\Paginator $orders @var array<string,mixed> $summary @var array<string,mixed> $filters @var int $ppicPending */
+/** @var App\Helpers\Paginator $orders @var array<string,mixed> $summary @var array<string,mixed> $filters @var int $ppicPending @var int $perPage @var list<int> $pageSizes @var string $returnPath */
 $hasFilter = $filters['q'] !== '' || $filters['status'] !== '' || $filters['ppic'] !== '' || $filters['customer_id'] > 0 || $filters['from'] !== '' || $filters['to'] !== '' || $filters['issue'] !== '';
 $ppicOptions = PurchaseOrder::PPIC_LABELS + ['legacy' => 'PO lama (tanpa PPIC)'];
 $canCustomer = can('customers.view');
+// Admin & PPIC: centang beberapa order (atau semua di halaman ini) lalu ubah konfirmasi PPIC sekaligus
+$canPpic = can('ppic.approve');
+$selectable = $canPpic ? count(array_filter($orders->items, static fn ($po) => $po['ppic_status'] !== null)) : 0;
 ?>
 <div class="page-header">
     <div>
@@ -49,6 +52,9 @@ $canCustomer = can('customers.view');
         <select class="form-select" name="customer_id" aria-label="Customer" data-autosubmit><option value="">Semua customer</option><?= Form::options($customers, (string) $filters['customer_id']) ?></select>
         <input type="date" class="form-control filter-date" name="from" value="<?= e($filters['from']) ?>" aria-label="Tanggal order dari">
         <input type="date" class="form-control filter-date" name="to" value="<?= e($filters['to']) ?>" aria-label="Tanggal order sampai">
+        <select class="form-select filter-item" name="per_page" aria-label="Jumlah per halaman" data-autosubmit>
+            <?php foreach ($pageSizes as $size): ?><option value="<?= $size ?>"<?= selected($size, $perPage) ?>><?= $size ?> per halaman</option><?php endforeach; ?>
+        </select>
         <input type="hidden" name="sort" value="<?= e($sort) ?>"><input type="hidden" name="dir" value="<?= e($dir) ?>">
         <button class="btn btn-light" type="submit">Terapkan</button>
         <?php if ($hasFilter): ?><a class="btn btn-link-plain small" href="<?= e(url('/purchase-orders')) ?>">Reset</a><?php endif; ?>
@@ -56,9 +62,24 @@ $canCustomer = can('customers.view');
     <?php if ($orders->isEmpty()): ?>
         <div class="empty-state"><i class="bi bi-receipt"></i><div class="empty-title"><?= $hasFilter ? 'Tidak ada order yang cocok' : 'Belum ada order' ?></div><p>Order Entry Form dari customer akan tampil di sini.</p></div>
     <?php else: ?>
+        <?php if ($selectable > 0): ?>
+        <form method="post" action="<?= e(url('/purchase-orders/ppic-bulk')) ?>" data-bulk="ids[]" id="ppic-bulk">
+            <?= csrf_field() ?>
+            <input type="hidden" name="return" value="<?= e($returnPath) ?>">
+            <div class="bulk-bar">
+                <div class="bulk-bar-info" title="Centang kotak di judul kolom untuk memilih semua order di halaman ini"><i class="bi bi-ui-checks"></i>
+                    <span><strong data-bulk-count>0</strong> order dipilih</span>
+                    <span class="text-secondary d-none d-xxl-inline">· kotak di judul kolom = pilih semua di halaman ini</span></div>
+                <input type="text" class="form-control form-control-sm bulk-bar-note" name="ppic_note" id="bulk-ppic-note" maxlength="2000" placeholder="Catatan / alasan (wajib bila tidak bisa diproses)" aria-label="Catatan atau alasan PPIC">
+                <button class="btn btn-success btn-sm" type="submit" name="decision" value="approve" data-bulk-action data-confirm="Tandai semua order yang dicentang BISA diproses?"><i class="bi bi-check2-circle"></i> Bisa diproses</button>
+                <button class="btn btn-danger btn-sm" type="submit" name="decision" value="reject" data-bulk-action data-bulk-require="#bulk-ppic-note" data-confirm="Tandai semua order yang dicentang TIDAK bisa diproses? Jadwal delivery-nya akan dibatalkan."><i class="bi bi-x-circle"></i> Tidak bisa diproses</button>
+                <div class="invalid-feedback w-100" data-bulk-feedback>Isi alasan mengapa order yang dicentang tidak bisa diproses.</div>
+            </div>
+        <?php endif; ?>
         <div class="table-wrap">
             <table class="table-pik">
                 <thead><tr>
+                    <?php if ($selectable > 0): ?><th class="col-check"><input class="form-check-input" type="checkbox" data-check-all="ids[]" aria-label="Pilih semua order di halaman ini" title="Pilih semua order di halaman ini"></th><?php endif; ?>
                     <th><?= sort_link('number', 'No. order', $sort, $dir) ?></th>
                     <th class="d-none d-md-table-cell"><?= sort_link('customer', 'Customer · Produk', $sort, $dir) ?></th>
                     <th class="d-none d-lg-table-cell"><?= sort_link('requested', 'Permintaan kirim', $sort, $dir) ?></th>
@@ -71,6 +92,7 @@ $canCustomer = can('customers.view');
                 <tbody>
                 <?php foreach ($orders->items as $po): $progress = pct((int) $po['delivered_qty'], (int) $po['total_qty']); $out = (int) $po['outstanding_qty']; ?>
                     <tr>
+                        <?php if ($selectable > 0): ?><td class="col-check"><?php if ($po['ppic_status'] !== null): ?><input class="form-check-input" type="checkbox" name="ids[]" value="<?= (int) $po['id'] ?>" aria-label="Pilih order <?= e(PurchaseOrder::displayNumber($po)) ?>"><?php endif; ?></td><?php endif; ?>
                         <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e(PurchaseOrder::displayNumber($po)) ?></a>
                             <div class="cell-sub">
                                 <?php if ($po['order_number'] && $po['po_number']): ?>PO <?= e($po['po_number']) ?> · <?php endif; ?>
@@ -91,6 +113,7 @@ $canCustomer = can('customers.view');
                 </tbody>
             </table>
         </div>
+        <?php if ($selectable > 0): ?></form><?php endif; ?>
         <?= $orders->footer('order') ?>
     <?php endif; ?>
 </div>

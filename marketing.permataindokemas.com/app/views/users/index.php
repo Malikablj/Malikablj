@@ -3,18 +3,26 @@
 use App\Helpers\Form;
 use App\Helpers\Permission;
 
-/** @var App\Helpers\Paginator $users */
+/** @var App\Helpers\Paginator $users @var array<string,string> $blocked email => blokir berakhir @var string $returnPath */
+$selfId = App\Helpers\Auth::id();
 ?>
 <div class="page-header">
     <div>
         <div class="page-eyebrow">Settings</div>
         <h1 class="page-title">Users</h1>
-        <p class="page-subtitle">Kelola akun dan role akses. User yang tidak dipakai cukup dinonaktifkan agar riwayat audit tetap utuh.</p>
+        <p class="page-subtitle">Kelola akun, role akses, blokir login, dan hapus user.</p>
     </div>
     <div class="page-actions">
         <a href="<?= e(url('/users/create')) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Tambah User</a>
     </div>
 </div>
+
+<?php if ($blocked !== [] && $status !== 'blocked'): ?>
+    <a class="callout callout-warning section-gap d-flex align-items-center gap-2 text-decoration-none" href="<?= e(url('/users', ['status' => 'blocked'])) ?>">
+        <i class="bi bi-shield-lock"></i>
+        <span><strong><?= count($blocked) ?> user</strong> sedang terblokir karena salah password berulang kali — klik untuk melihat dan membuka blokir.</span>
+    </a>
+<?php endif; ?>
 
 <div class="surface">
     <form class="filter-bar" method="get" action="<?= e(url('/users')) ?>">
@@ -30,12 +38,17 @@ use App\Helpers\Permission;
             <option value="">Semua status</option>
             <option value="active"<?= selected('active', $status) ?>>Aktif</option>
             <option value="inactive"<?= selected('inactive', $status) ?>>Nonaktif</option>
+            <option value="blocked"<?= selected('blocked', $status) ?>>Terblokir<?= $blocked !== [] ? ' (' . count($blocked) . ')' : '' ?></option>
         </select>
         <button class="btn btn-light" type="submit">Terapkan</button>
     </form>
 
     <?php if ($users->isEmpty()): ?>
-        <div class="empty-state"><i class="bi bi-people"></i><div class="empty-title">Tidak ada user</div><p>Coba ubah filter pencarian.</p></div>
+        <?php if ($status === 'blocked'): ?>
+            <div class="empty-state"><i class="bi bi-shield-check"></i><div class="empty-title">Tidak ada user yang terblokir</div><p>Blokir login terjadi otomatis bila password salah berulang kali, dan berakhir sendiri setelah beberapa menit.</p></div>
+        <?php else: ?>
+            <div class="empty-state"><i class="bi bi-people"></i><div class="empty-title">Tidak ada user</div><p>Coba ubah filter pencarian.</p></div>
+        <?php endif; ?>
     <?php else: ?>
         <div class="table-wrap">
             <table class="table-pik">
@@ -49,7 +62,7 @@ use App\Helpers\Permission;
                 </tr>
                 </thead>
                 <tbody>
-                <?php foreach ($users->items as $u): ?>
+                <?php foreach ($users->items as $u): $blockedUntil = $blocked[$u['email']] ?? null; ?>
                     <tr class="<?= (int) $u['is_active'] === 1 ? '' : 'row-muted' ?>">
                         <td>
                             <div class="d-flex align-items-center gap-3">
@@ -64,11 +77,26 @@ use App\Helpers\Permission;
                         <td class="d-none d-sm-table-cell"><span class="chip"><?= e($u['role']) ?></span></td>
                         <td>
                             <?= (int) $u['is_active'] === 1 ? status_badge('Active', 'Aktif') : status_badge('Inactive', 'Nonaktif') ?>
+                            <?php if ($blockedUntil !== null): ?><span class="badge-soft badge-soft-danger no-dot ms-1" title="Terbuka otomatis pukul <?= e(date('H:i', (int) strtotime($blockedUntil))) ?>"><i class="bi bi-shield-lock"></i> Terblokir s/d <?= e(date('H:i', (int) strtotime($blockedUntil))) ?></span><?php endif; ?>
                             <?php if ((int) $u['must_change_password'] === 1): ?><span class="badge-soft badge-soft-warning no-dot ms-1">Wajib ganti password</span><?php endif; ?>
                         </td>
                         <td class="d-none d-md-table-cell text-secondary"><?= e(fmt_datetime($u['last_login_at'], 'Belum pernah')) ?></td>
                         <td class="col-actions">
-                            <a class="btn btn-light btn-sm" href="<?= e(url('/users/' . $u['id'] . '/edit')) ?>">Edit</a>
+                            <div class="d-inline-flex gap-1">
+                                <?php if ($blockedUntil !== null): ?>
+                                    <form method="post" action="<?= e(url('/users/' . $u['id'] . '/unblock')) ?>" data-confirm="Buka blokir login <?= e($u['name']) ?> sekarang?">
+                                        <?= csrf_field() ?><input type="hidden" name="return" value="<?= e($returnPath) ?>">
+                                        <button class="btn btn-warning btn-sm" type="submit"><i class="bi bi-unlock"></i> Buka blokir</button>
+                                    </form>
+                                <?php endif; ?>
+                                <a class="btn btn-light btn-sm" href="<?= e(url('/users/' . $u['id'] . '/edit')) ?>">Edit</a>
+                                <?php if ((int) $u['id'] !== $selfId): ?>
+                                    <form method="post" action="<?= e(url('/users/' . $u['id'] . '/delete')) ?>" data-confirm="Hapus user <?= e($u['name']) ?> (<?= e($u['email']) ?>) secara permanen? Data yang pernah dibuatnya tetap ada, tetapi user ini tidak bisa login lagi dan dilepas dari customer/lead/order yang ditanganinya.">
+                                        <?= csrf_field() ?>
+                                        <button class="btn btn-light btn-sm text-danger" type="submit" aria-label="Hapus user <?= e($u['name']) ?>" title="Hapus user"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>

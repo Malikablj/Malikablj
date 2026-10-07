@@ -87,7 +87,7 @@ abstract class Controller
     protected function returnTo(string $fallback): string
     {
         $return = Request::input('return');
-        if (is_string($return) && preg_match('#^/[A-Za-z0-9_\-/]*(\?[A-Za-z0-9_\-=&%.\[\]]*)?$#', $return) && !str_starts_with($return, '//')) {
+        if (is_string($return) && preg_match('#^/[A-Za-z0-9_\-/]*(\?[A-Za-z0-9_\-=&%.+\[\]]*)?$#', $return) && !str_starts_with($return, '//')) {
             return $return;
         }
         return $fallback;

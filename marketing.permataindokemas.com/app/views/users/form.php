@@ -3,7 +3,7 @@
 use App\Helpers\Form;
 use App\Helpers\Permission;
 
-/** @var array<string,mixed>|null $user @var array<string,string> $errors */
+/** @var array<string,mixed>|null $user @var array<string,string> $errors @var string|null $blockedUntil @var array<string,int> $assignments @var bool $isSelf */
 $isEdit = $user !== null;
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/users')) ?>">Users</a><i class="bi bi-chevron-right"></i><span><?= $isEdit ? e($user['name']) : 'Tambah' ?></span></div>
@@ -43,6 +43,17 @@ $isEdit = $user !== null;
 
     <?php if ($isEdit): ?>
         <div class="col-lg-5">
+            <?php if ($blockedUntil !== null): ?>
+                <form class="callout callout-warning mb-3" method="post" action="<?= e(url('/users/' . $user['id'] . '/unblock')) ?>" data-confirm="Buka blokir login <?= e($user['name']) ?> sekarang?">
+                    <?= csrf_field() ?><input type="hidden" name="return" value="/users/<?= (int) $user['id'] ?>/edit">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-shield-lock"></i>
+                        <div class="flex-grow-1"><strong>Login user ini sedang terblokir</strong> karena salah password berulang kali.
+                            Blokir terbuka otomatis pukul <?= e(date('H:i', (int) strtotime($blockedUntil))) ?>.</div>
+                    </div>
+                    <button class="btn btn-warning btn-sm mt-2" type="submit"><i class="bi bi-unlock"></i> Buka blokir sekarang</button>
+                </form>
+            <?php endif; ?>
             <form class="surface" method="post" action="<?= e(url('/users/' . $user['id'] . '/password')) ?>" data-confirm="Set password sementara baru untuk user ini?">
                 <?= csrf_field() ?>
                 <div class="surface-header">
@@ -62,8 +73,30 @@ $isEdit = $user !== null;
             </form>
             <div class="callout mt-3 small text-secondary">
                 <i class="bi bi-info-circle me-1"></i> Login terakhir: <strong><?= e(fmt_datetime($user['last_login_at'], 'belum pernah')) ?></strong>.
-                User tidak dapat dihapus agar jejak audit tetap lengkap — gunakan status nonaktif.
             </div>
+            <?php if (!$isSelf): ?>
+                <form class="surface mt-3" method="post" action="<?= e(url('/users/' . $user['id'] . '/delete')) ?>" data-confirm="Hapus user <?= e($user['name']) ?> (<?= e($user['email']) ?>) secara permanen? Tindakan ini tidak bisa dibatalkan.">
+                    <?= csrf_field() ?>
+                    <div class="surface-header">
+                        <div>
+                            <h2 class="surface-title text-danger">Hapus user</h2>
+                            <p class="surface-subtitle">User tidak bisa login lagi. Data yang pernah dibuatnya tetap ada dan nama user tetap tercatat di Audit Log.</p>
+                        </div>
+                    </div>
+                    <div class="surface-body small">
+                        <?php if ($assignments !== []): ?>
+                            <p class="mb-1">User ini masih tercatat sebagai PIC / sales pada:</p>
+                            <ul class="mb-2"><?php foreach ($assignments as $label => $n): ?><li><?= e(fmt_qty($n, '0')) ?> <?= e($label) ?></li><?php endforeach; ?></ul>
+                            <p class="text-secondary mb-0">Setelah dihapus, kolom PIC / sales pada data tersebut menjadi kosong. Bila hanya sementara tidak dipakai, cukup hilangkan centang <em>User aktif</em>.</p>
+                        <?php else: ?>
+                            <p class="text-secondary mb-0">User ini tidak sedang menjadi PIC customer, lead, follow up, maupun sales order.</p>
+                        <?php endif; ?>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash"></i> Hapus user</button>
+                    </div>
+                </form>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 </div>

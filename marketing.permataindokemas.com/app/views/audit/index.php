@@ -4,8 +4,8 @@ use App\Helpers\Form;
 
 /** @var App\Helpers\Paginator $logs @var array<string,mixed> $filters */
 $actionTone = static fn (string $a): string => match (true) {
-    in_array($a, ['delete', 'login_failed', 'login_blocked'], true) => 'danger',
-    in_array($a, ['create', 'login'], true) => 'success',
+    in_array($a, ['delete', 'login_failed', 'login_blocked', 'login_locked'], true) => 'danger',
+    in_array($a, ['create', 'login', 'user_unblock', 'ppic_approve'], true) => 'success',
     in_array($a, ['update', 'status_change', 'auto_status', 'payment'], true) => 'info',
     default => 'neutral',
 };

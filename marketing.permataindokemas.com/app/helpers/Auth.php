@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Models\Notification;
+use App\Models\User;
+
 /**
  * Autentikasi berbasis session.
  * - password_hash / password_verify (tidak ada password plaintext)
- * - pembatasan percobaan login (brute force) per email dan per IP
+ * - pembatasan percobaan login (brute force) per email dan per IP; akun yang terblokir
+ *   dilaporkan ke Admin (notifikasi) dan bisa dibuka lebih cepat dari menu Users
  * - session id diganti saat login (anti session fixation)
  * - user dimuat ulang dari database di setiap request, sehingga
  *   penonaktifan user / perubahan role langsung berlaku.
@@ -74,13 +78,11 @@ final class Auth
     {
         $email = mb_strtolower(trim($email));
         $ip = Request::ip();
-        $security = config('app.security');
-        $max = (int) $security['login_max_attempts'];
-        $window = (int) $security['login_lockout_minutes'];
+        [$max, $window] = self::throttleConfig();
 
         if (self::isThrottled($email, $ip, $max, $window)) {
             Audit::log('login_blocked', 'user', null, $email);
-            return ['ok' => false, 'error' => "Terlalu banyak percobaan login gagal. Coba lagi dalam {$window} menit."];
+            return ['ok' => false, 'error' => "Terlalu banyak percobaan login gagal. Coba lagi dalam {$window} menit atau hubungi Admin untuk membuka blokir."];
         }
 
         $user = Database::fetch('SELECT * FROM users WHERE email = :email', ['email' => $email]);
@@ -91,6 +93,13 @@ final class Auth
         if ($user === null || !$valid) {
             self::recordAttempt($email, $ip, false);
             Audit::log('login_failed', 'user', $user ? (int) $user['id'] : null, $email);
+            if (self::failedCount($email, $window) >= $max) {
+                // pesan sama untuk email terdaftar maupun tidak (tidak membocorkan email mana yang ada)
+                if ($user !== null && (int) $user['is_active'] === 1) {
+                    self::notifyBlocked($user, $max, $window);
+                }
+                return ['ok' => false, 'error' => "Email atau password salah. Karena {$max}x gagal, login untuk email ini diblokir {$window} menit — hubungi Admin bila perlu dibuka lebih cepat."];
+            }
             return ['ok' => false, 'error' => 'Email atau password salah.'];
         }
         if ((int) $user['is_active'] !== 1) {
@@ -134,6 +143,98 @@ final class Auth
     {
         self::$resolved = false;
         self::$user = null;
+    }
+
+    /**
+     * Akun (user terdaftar) yang sedang terblokir karena salah password berulang kali.
+     * @return array<string,string> email => waktu blokir berakhir (Y-m-d H:i:s)
+     */
+    public static function blockedAccounts(): array
+    {
+        [$max, $window] = self::throttleConfig();
+        $emails = Database::fetchColumn(
+            'SELECT la.email FROM login_attempts la JOIN users u ON u.email = la.email
+             WHERE la.success = 0 AND la.attempted_at >= :since GROUP BY la.email HAVING COUNT(*) >= ' . $max,
+            ['since' => self::windowStart($window)]
+        );
+        $blocked = [];
+        foreach ($emails as $email) {
+            $until = self::blockedUntil((string) $email);
+            if ($until !== null) {
+                $blocked[(string) $email] = $until;
+            }
+        }
+        return $blocked;
+    }
+
+    /** Waktu blokir login berakhir untuk email ini (Y-m-d H:i:s), atau null bila tidak terblokir. */
+    public static function blockedUntil(string $email): ?string
+    {
+        [$max, $window] = self::throttleConfig();
+        // blokir berakhir saat percobaan gagal ke-$max (dihitung dari yang terbaru) keluar dari jendela waktu
+        $nth = Database::fetchValue(
+            'SELECT attempted_at FROM login_attempts WHERE email = :email AND success = 0 AND attempted_at >= :since
+             ORDER BY attempted_at DESC, id DESC LIMIT 1 OFFSET ' . ($max - 1),
+            ['email' => mb_strtolower($email), 'since' => self::windowStart($window)]
+        );
+        return $nth ? date('Y-m-d H:i:s', strtotime((string) $nth) + $window * 60) : null;
+    }
+
+    /**
+     * Buka blokir login (oleh Admin): hapus catatan gagal login untuk email tsb.
+     * Bila IP yang dipakai user ikut terkunci (batas per IP), catatan gagal dari IP itu juga dihapus.
+     */
+    public static function unblock(string $email): void
+    {
+        [$max, $window] = self::throttleConfig();
+        $email = mb_strtolower($email);
+        $since = self::windowStart($window);
+        $ips = Database::fetchColumn(
+            'SELECT DISTINCT ip_address FROM login_attempts WHERE email = :email AND success = 0 AND attempted_at >= :since',
+            ['email' => $email, 'since' => $since]
+        );
+        $lockedIps = array_filter($ips, static fn ($ip): bool => (int) Database::fetchValue(
+            'SELECT COUNT(*) FROM login_attempts WHERE ip_address = :ip AND success = 0 AND attempted_at >= :since',
+            ['ip' => $ip, 'since' => $since]
+        ) >= $max * 4);
+        Database::delete('login_attempts', 'email = :email AND success = 0', ['email' => $email]);
+        foreach ($lockedIps as $ip) {
+            Database::delete('login_attempts', 'ip_address = :ip AND success = 0', ['ip' => $ip]);
+        }
+    }
+
+    /** @return array{0:int,1:int} [batas percobaan gagal, lama blokir (menit)] */
+    private static function throttleConfig(): array
+    {
+        $security = config('app.security');
+        return [max(1, (int) $security['login_max_attempts']), max(1, (int) $security['login_lockout_minutes'])];
+    }
+
+    private static function windowStart(int $windowMinutes): string
+    {
+        return date('Y-m-d H:i:s', time() - $windowMinutes * 60);
+    }
+
+    private static function failedCount(string $email, int $windowMinutes): int
+    {
+        return (int) Database::fetchValue(
+            'SELECT COUNT(*) FROM login_attempts WHERE email = :email AND success = 0 AND attempted_at >= :since',
+            ['email' => $email, 'since' => self::windowStart($windowMinutes)]
+        );
+    }
+
+    /** Beri tahu semua Admin aktif bahwa login user ini baru saja diblokir. */
+    private static function notifyBlocked(array $user, int $max, int $windowMinutes): void
+    {
+        $until = self::blockedUntil((string) $user['email']) ?? date('Y-m-d H:i:s', time() + $windowMinutes * 60);
+        $title = 'User terblokir: ' . $user['name'];
+        $message = $user['email'] . " salah password {$max}x sehingga login diblokir sampai " . date('H:i', (int) strtotime($until))
+            . '. Buka blokir di menu Users bila user tersebut memang perlu masuk.';
+        foreach (User::activeByRoles(['Admin']) as $admin) {
+            Notification::send((int) $admin['id'], 'user_blocked', $title, $message, '/users?status=blocked', User::ENTITY, (int) $user['id'],
+                'user_blocked:' . $user['id'] . ':' . date('YmdHis'));
+        }
+        Audit::log('login_locked', User::ENTITY, (int) $user['id'], (string) $user['email']);
     }
 
     private static function isThrottled(string $email, string $ip, int $max, int $windowMinutes): bool

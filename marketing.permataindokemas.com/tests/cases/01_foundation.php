@@ -234,6 +234,72 @@ test('brute force: 5x gagal → login diblokir sementara', function () {
     assert_contains('Terlalu banyak percobaan', $res->body);
 });
 
+test('blokir login: Admin dapat notifikasi, user tampil Terblokir, Admin bisa membuka blokir', function () {
+    $uid = create_user('Sales', 'blokir.qa@pik.test');
+    Database::update('users', ['name' => 'Rina Terblokir'], 'id = :id', ['id' => $uid]); // nama unik (tidak dikenali sebagai sales di OEF)
+    $adminId = (int) Database::fetchValue("SELECT id FROM users WHERE email = 'admin.qa@pik.test'");
+    $c = new HttpClient(TEST_BASE_URL);
+    for ($i = 0; $i < 4; $i++) {
+        assert_contains('Email atau password salah', $c->login('blokir.qa@pik.test', 'SalahTerus' . $i)->body);
+    }
+    assert_false((bool) Database::fetchValue("SELECT 1 FROM notifications WHERE type = 'user_blocked' AND entity_id = :id", ['id' => $uid]), 'belum terblokir → belum ada notifikasi');
+    $fifth = $c->login('blokir.qa@pik.test', 'SalahLagi5');
+    assert_status(422, $fifth);
+    assert_contains('diblokir 15 menit', $fifth->body, 'user langsung tahu login diblokir');
+    $notif = Database::fetch("SELECT * FROM notifications WHERE type = 'user_blocked' AND user_id = :u AND entity_id = :id", ['u' => $adminId, 'id' => $uid]);
+    assert_true($notif !== null, 'Admin aktif dapat notifikasi user terblokir');
+    assert_contains('Rina Terblokir', (string) $notif['title']);
+    assert_contains('blokir.qa@pik.test', (string) $notif['message']);
+    assert_same('/users?status=blocked', $notif['link']);
+    assert_same(0, (int) Database::fetchValue("SELECT COUNT(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE n.type = 'user_blocked' AND u.role <> 'Admin'"), 'hanya Admin');
+    $locked = $c->login('blokir.qa@pik.test', 'Rahasia123');
+    assert_contains('Terlalu banyak percobaan', $locked->body, 'password benar pun ditolak selama terblokir');
+    assert_contains('hubungi Admin', $locked->body);
+    $notifCount = (int) Database::fetchValue("SELECT COUNT(*) FROM notifications WHERE type = 'user_blocked'");
+    // email yang tidak terdaftar: pesan sama (tidak membocorkan email), tanpa notifikasi
+    for ($i = 0; $i < 5; $i++) {
+        $res = $c->login('tidak.ada@pik.test', 'SalahTerus' . $i);
+    }
+    assert_contains('diblokir 15 menit', $res->body);
+    assert_same($notifCount, (int) Database::fetchValue("SELECT COUNT(*) FROM notifications WHERE type = 'user_blocked'"));
+
+    $admin = client_as('Admin');
+    $list = $admin->get('/users');
+    assert_contains('sedang terblokir', $list->body, 'peringatan di halaman Users');
+    assert_contains('Terblokir s/d', $list->body);
+    $blockedList = $admin->get('/users', ['status' => 'blocked']);
+    assert_contains('blokir.qa@pik.test', $blockedList->body);
+    assert_contains('action="/users/' . $uid . '/unblock"', $blockedList->body);
+    assert_not_contains('viewer.qa@pik.test', $blockedList->body, 'filter hanya user terblokir');
+    assert_not_contains('tidak.ada@pik.test', $blockedList->body);
+    assert_contains('Login user ini sedang terblokir', $admin->get('/users/' . $uid . '/edit')->body);
+    assert_contains('User terblokir', $admin->get('/notifications')->body);
+
+    assert_status(403, client_as('Viewer')->post('/users/' . $uid . '/unblock'), 'hanya Admin');
+    $res = $admin->post('/users/' . $uid . '/unblock', ['return' => '/users?status=blocked']);
+    assert_redirect($res, '/users?status=blocked');
+    assert_contains('sudah dibuka', $admin->get('/users')->body);
+    assert_same(null, App\Helpers\Auth::blockedUntil('blokir.qa@pik.test'));
+    assert_same(0, (int) Database::fetchValue("SELECT COUNT(*) FROM notifications WHERE type = 'user_blocked' AND entity_id = :id AND is_read = 0", ['id' => $uid]), 'notifikasi ditandai selesai');
+    assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'user_unblock' AND entity_id = :id", ['id' => $uid]));
+    assert_redirect((new HttpClient(TEST_BASE_URL))->login('blokir.qa@pik.test', 'Rahasia123'), '/', 'setelah dibuka bisa login lagi');
+    assert_redirect($admin->post('/users/' . $uid . '/unblock'), '/users');
+    assert_contains('tidak sedang terblokir', $admin->get('/users')->body);
+
+    // IP yang ikut terkunci (batas per IP) juga dibuka
+    $old = date('Y-m-d H:i:s', time() - 60);
+    for ($i = 0; $i < 20; $i++) {
+        Database::insert('login_attempts', ['email' => $i < 5 ? 'blokir.qa@pik.test' : 'acak' . $i . '@pik.test', 'ip_address' => '10.9.9.9', 'success' => 0, 'attempted_at' => $old]);
+    }
+    Database::insert('login_attempts', ['email' => 'lain@pik.test', 'ip_address' => '10.8.8.8', 'success' => 0, 'attempted_at' => $old]);
+    assert_true(App\Helpers\Auth::blockedUntil('blokir.qa@pik.test') !== null);
+    App\Helpers\Auth::unblock('blokir.qa@pik.test');
+    assert_same(0, (int) Database::fetchValue("SELECT COUNT(*) FROM login_attempts WHERE ip_address = '10.9.9.9'"));
+    assert_same(1, (int) Database::fetchValue("SELECT COUNT(*) FROM login_attempts WHERE ip_address = '10.8.8.8'"), 'IP lain tidak tersentuh');
+    Database::query("DELETE FROM login_attempts WHERE email IN ('tidak.ada@pik.test', 'lain@pik.test')");
+    App\Models\User::deleteUser($uid);
+});
+
 test('route tidak dikenal → 404, method salah → 405', function () {
     $c = client_as('Admin');
     assert_status(404, $c->get('/tidak-ada-halaman-ini'));
@@ -330,6 +396,45 @@ test('user dinonaktifkan langsung kehilangan akses (sesi aktif ikut berakhir)', 
     Database::update('users', ['is_active' => 1], 'email = :e', ['e' => 'management.qa@pik.test']);
 });
 
+test('Admin menghapus user: data tetap ada, PIC dilepas, audit tetap mencatat nama; tidak bisa hapus diri sendiri', function () {
+    $uid = create_user('Sales', 'hapus.qa@pik.test');
+    Database::update('users', ['name' => 'Dodi Dihapus'], 'id = :id', ['id' => $uid]);
+    $victim = new HttpClient(TEST_BASE_URL);
+    assert_redirect($victim->login('hapus.qa@pik.test', 'Rahasia123'), '/');
+    $cust = App\Models\Customer::create(['name' => 'PT PIC Dihapus', 'status' => 'Active', 'marketing_pic_id' => $uid]);
+    App\Models\Notification::send($uid, 'system', 'Untuk user yang dihapus');
+    $adminId = (int) Database::fetchValue("SELECT id FROM users WHERE email = 'admin.qa@pik.test'");
+
+    $admin = client_as('Admin');
+    $list = $admin->get('/users', ['q' => 'hapus.qa']);
+    assert_contains('action="/users/' . $uid . '/delete"', $list->body);
+    $self = $admin->get('/users', ['q' => 'admin.qa']);
+    assert_not_contains('action="/users/' . $adminId . '/delete"', $self->body, 'tidak ada tombol hapus untuk akun sendiri');
+    $edit = $admin->get('/users/' . $uid . '/edit');
+    assert_contains('Hapus user', $edit->body);
+    assert_contains('1 customer (PIC marketing)', $edit->body, 'Admin melihat data yang ditangani user');
+    assert_not_contains('/users/' . $adminId . '/delete', $admin->get('/users/' . $adminId . '/edit')->body);
+
+    foreach (['Marketing', 'Management', 'Viewer'] as $role) {
+        assert_status(403, client_as($role)->post('/users/' . $uid . '/delete'), $role);
+    }
+    assert_redirect($admin->post('/users/' . $adminId . '/delete'), '/users/' . $adminId . '/edit');
+    assert_true((bool) Database::fetchValue('SELECT 1 FROM users WHERE id = :id', ['id' => $adminId]), 'tidak bisa menghapus akun sendiri');
+
+    assert_redirect($admin->post('/users/' . $uid . '/delete'), '/users');
+    assert_contains('sudah dihapus', $admin->get('/users')->body);
+    assert_false((bool) Database::fetchValue('SELECT 1 FROM users WHERE id = :id', ['id' => $uid]));
+    assert_same(null, Database::fetchValue('SELECT marketing_pic_id FROM customers WHERE id = :id', ['id' => $cust]), 'customer tetap ada, PIC kosong');
+    assert_false((bool) Database::fetchValue('SELECT 1 FROM notifications WHERE user_id = :id', ['id' => $uid]));
+    assert_same('Dodi Dihapus', Database::fetchValue("SELECT user_name FROM audit_logs WHERE action = 'login' AND entity_type = 'user' AND entity_id = :id ORDER BY id DESC LIMIT 1", ['id' => $uid]), 'audit lama tetap menyimpan nama');
+    assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'delete' AND entity_type = 'user' AND entity_id = :id", ['id' => $uid]));
+    assert_redirect($victim->get('/'), '/login', 'sesi user yang dihapus langsung berakhir');
+    assert_status(422, (new HttpClient(TEST_BASE_URL))->login('hapus.qa@pik.test', 'Rahasia123'));
+    assert_status(404, $admin->post('/users/' . $uid . '/delete'));
+    Database::query("DELETE FROM login_attempts WHERE email = 'hapus.qa@pik.test'");
+    Database::delete('customers', 'id = :id', ['id' => $cust]);
+});
+
 test('audit log mencatat login, create user, dan dapat dibuka Admin', function () {
     $actions = Database::fetchColumn('SELECT DISTINCT action FROM audit_logs');
     foreach (['login', 'login_failed', 'create', 'password_change'] as $a) {
@@ -346,9 +451,10 @@ test('audit log mencatat login, create user, dan dapat dibuka Admin', function (
 test('notifikasi: hanya milik sendiri, tandai dibaca', function () {
     $adminId = (int) Database::fetchValue("SELECT id FROM users WHERE email = 'admin.qa@pik.test'");
     $viewerId = (int) Database::fetchValue("SELECT id FROM users WHERE email = 'viewer.qa@pik.test'");
+    App\Models\Notification::markAllRead($adminId); // notifikasi dari test sebelumnya (mis. user terblokir)
     App\Models\Notification::send($adminId, 'system', 'Tes notifikasi admin', 'Pesan', '/profile', null, null, 'test-1');
     assert_false(App\Models\Notification::send($adminId, 'system', 'Duplikat', null, null, null, null, 'test-1'), 'dedupe');
-    $nid = (int) Database::fetchValue('SELECT id FROM notifications WHERE user_id = :u', ['u' => $adminId]);
+    $nid = (int) Database::fetchValue("SELECT id FROM notifications WHERE user_id = :u AND dedupe_key = 'test-1'", ['u' => $adminId]);
     $viewer = client_as('Viewer');
     assert_status(404, $viewer->get('/notifications/' . $nid . '/open'), 'user lain tidak boleh membuka');
     $admin = client_as('Admin');

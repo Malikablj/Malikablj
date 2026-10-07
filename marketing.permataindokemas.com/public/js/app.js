@@ -59,6 +59,7 @@
 
   /* Konfirmasi sebelum aksi berbahaya: <form data-confirm="Yakin?"> atau <button data-confirm="..."> */
   document.addEventListener('submit', function (e) {
+    if (e.defaultPrevented) { return; }
     var form = e.target;
     var submitter = e.submitter;
     var message = (submitter && submitter.getAttribute && submitter.getAttribute('data-confirm'))
@@ -84,6 +85,41 @@
         if (c.name === name) { c.checked = box.checked; }
       });
     });
+  });
+
+  /* Aksi massal: <form data-bulk="ids[]"> berisi <span data-bulk-count>; tombol [data-bulk-action] aktif bila ada
+     yang dicentang; [data-bulk-require="#field"] menolak submit bila field itu kosong (mis. alasan penolakan). */
+  document.querySelectorAll('form[data-bulk]').forEach(function (form) {
+    var name = form.getAttribute('data-bulk');
+    var counter = form.querySelector('[data-bulk-count]');
+    var feedback = form.querySelector('[data-bulk-feedback]');
+    var all = Array.prototype.filter.call(form.querySelectorAll('[data-check-all]'), function (c) { return c.getAttribute('data-check-all') === name; })[0];
+    var refresh = function () {
+      var boxes = Array.prototype.filter.call(form.querySelectorAll('input[type="checkbox"]'), function (c) { return c.name === name; });
+      var n = boxes.filter(function (c) { return c.checked; }).length;
+      if (counter) { counter.textContent = n; }
+      form.querySelectorAll('[data-bulk-action]').forEach(function (b) { b.disabled = n === 0; });
+      if (all) { all.checked = n > 0 && n === boxes.length; all.indeterminate = n > 0 && n < boxes.length; }
+      form.classList.toggle('has-selection', n > 0);
+    };
+    form.addEventListener('change', refresh);
+    form.addEventListener('input', function (e) {
+      if (e.target.classList && e.target.classList.contains('is-invalid') && e.target.value.trim() !== '') {
+        e.target.classList.remove('is-invalid');
+        if (feedback) { feedback.classList.remove('d-block'); }
+      }
+    });
+    form.addEventListener('submit', function (e) {
+      var selector = e.submitter && e.submitter.getAttribute('data-bulk-require');
+      var field = selector ? form.querySelector(selector) : null;
+      if (field && field.value.trim() === '') {
+        e.preventDefault();
+        field.classList.add('is-invalid');
+        if (feedback) { feedback.classList.add('d-block'); }
+        field.focus();
+      }
+    });
+    refresh();
   });
 
   document.querySelectorAll('[data-history-back]').forEach(function (btn) {
