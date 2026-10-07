@@ -549,3 +549,109 @@ body.guest { min-height: 100vh; min-height: 100dvh; background: var(--bg); }
   :root:not([data-theme]) .brand-logo-light, :root:not([data-theme]) .auth-logo-light { display: none; }
   :root:not([data-theme]) .brand-logo-dark, :root:not([data-theme]) .auth-logo-dark { display: block; }
 }
+
+/* =====================================================================
+   NPR digital — penanda biru (Sales) / pink (Admin NPD) (PRD §4, §11.2)
+   ===================================================================== */
+.eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.pre { white-space: pre-line; }
+.input-static { display: flex; align-items: center; background: var(--surface-3); border-color: transparent; }
+.input-sm { min-height: 34px; padding: 6px 10px; font-size: 13px; width: auto; }
+.check-grid { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.radio-row { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.span-all { grid-column: 1 / -1; }
+.has-error .input, .has-error .check-grid, .has-error .radio-row { border-color: var(--danger); }
+fieldset.has-error { outline: 1px solid var(--danger-border); outline-offset: 6px; border-radius: var(--radius-sm); }
+
+.npr-legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 0 0 18px; font-size: 12.5px; color: var(--text-2); }
+.legend-item { display: inline-flex; align-items: center; gap: 7px; }
+.legend-item .swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border-strong); }
+.legend-item.is-sales .swatch { background: var(--sales-tint); border-color: var(--sales-border); }
+.legend-item.is-npd .swatch { background: var(--npd-tint); border-color: var(--npd-border); }
+.legend-item.is-auto .swatch { background: var(--surface-3); }
+
+.npr-field.is-sales .input:not(:disabled), .npr-field.is-sales.npr-bool, .npr-field.is-sales .check-grid, .npr-field.is-sales .radio-row, .test-table.is-sales, .attach-box.is-sales {
+  background-color: var(--sales-tint); border-color: var(--sales-border);
+}
+.npr-field.is-npd .input:not(:disabled), .npr-field.is-npd .check-grid { background-color: var(--npd-tint); border-color: var(--npd-border); }
+.npr-field.is-sales .input:disabled { background-color: color-mix(in srgb, var(--sales-tint) 55%, var(--surface)); color: var(--text); border-color: color-mix(in srgb, var(--sales-border) 45%, transparent); opacity: 1; }
+.npr-field.is-npd .input:disabled { background-color: color-mix(in srgb, var(--npd-tint) 55%, var(--surface)); color: var(--text); border-color: color-mix(in srgb, var(--npd-border) 45%, transparent); opacity: 1; }
+.npr-field.is-sales .check-grid, .npr-field.is-sales .radio-row, .npr-field.is-npd .check-grid { padding: 8px 12px; border-width: 1px; border-style: solid; border-radius: var(--radius); }
+.npr-field.is-sales > label, .npr-field.is-sales > .field-label { color: var(--sales-text); }
+.npr-field.is-npd > label, .npr-field.is-npd > .field-label { color: var(--npd-text); }
+.npr-field.npr-bool { padding: 6px 12px; border-width: 1px; border-style: solid; border-radius: var(--radius); align-self: start; }
+.npr-field.is-auto .input-static, .sign-box.is-auto { background: var(--surface-3); }
+
+.npr-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 24px; align-items: start; }
+.npr-toc { position: sticky; top: calc(var(--topbar-h) + 20px); font-size: 13px; }
+.npr-toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+.npr-toc li { counter-increment: toc; }
+.npr-toc a { display: block; padding: 6px 10px; border-radius: var(--radius-sm); color: var(--text-2); }
+.npr-toc a::before { content: counter(toc) ". "; color: var(--text-muted); }
+.npr-toc a:hover { background: var(--surface-3); color: var(--text); text-decoration: none; }
+.npr-main { min-width: 0; }
+.npr-form { display: flex; flex-direction: column; gap: 16px; }
+.npr-section { scroll-margin-top: calc(var(--topbar-h) + 16px); }
+.npr-section .card-header h2 { font-size: 15.5px; }
+
+.npr-part { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; background: var(--surface); }
+.npr-part.is-cancelled { opacity: 0.72; background: var(--surface-2); }
+.npr-part-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.npr-part-header h3 { font-size: 15px; }
+.npr-part-no { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--graphite); color: var(--bg); font-size: 12px; font-weight: 700; }
+.npr-part-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 16px; }
+.npr-subgrid { display: contents; }
+.npr-subgrid[hidden] { display: none; }
+.npr-feedback { margin-top: 16px; padding: 14px; border-radius: var(--radius); border: 1px dashed var(--npd-border); background: color-mix(in srgb, var(--npd-tint) 40%, transparent); }
+.npr-feedback-title { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; color: var(--npd-text); font-size: 13px; }
+
+.deco-block { display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.deco-block:last-child { border-bottom: 0; padding-bottom: 0; }
+[data-collapsed] { display: none !important; }
+.test-table { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-width: 1px; border-style: solid; border-radius: var(--radius); }
+.test-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 36px; }
+.test-row .check { min-width: 240px; }
+.attach-box { padding: 14px; border-width: 1px; border-style: solid; border-radius: var(--radius); display: flex; flex-direction: column; gap: 10px; }
+.attach-box h3 { font-size: 14px; }
+.attach-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.attach-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.attach-thumb { width: 52px; height: 52px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); }
+.attach-icon { width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--surface-3); color: var(--text-2); }
+.sign-box { padding: 14px; border-radius: var(--radius); }
+.sign-box h3 { font-size: 14px; margin-bottom: 8px; }
+
+.npr-actionbar {
+  position: sticky; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 16px; margin-top: 4px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+}
+.autosave-status.ok { color: var(--success); }
+.autosave-status.error { color: var(--danger); }
+.stepper-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); position: sticky; top: calc(var(--topbar-h) + 6px); z-index: 15; }
+.step-hidden { display: none !important; }
+
+.timeline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.timeline-list > li { position: relative; padding-left: 18px; border-left: 2px solid var(--border); }
+.timeline-list > li::before { content: ""; position: absolute; left: -6px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--text-muted); }
+.timeline-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+details.diff summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 4px; }
+details.diff .table td { padding: 6px 10px; font-size: 12.5px; }
+
+@media (max-width: 1100px) {
+  .npr-layout { grid-template-columns: minmax(0, 1fr); }
+  .npr-toc { display: none; }
+  .npr-part-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .npr-part-grid { grid-template-columns: minmax(0, 1fr); }
+  .npr-actionbar { position: sticky; bottom: 8px; }
+  .npr-actionbar .btn { flex: 1 1 auto; }
+  .test-row .check { min-width: 0; flex-basis: 100%; }
+}
+.plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.inline-edit { flex-wrap: nowrap; gap: 6px; }
+.inline-edit .input-sm { min-width: 120px; flex: 1; }
+@media (max-width: 640px) { .inline-edit { flex-wrap: wrap; } }

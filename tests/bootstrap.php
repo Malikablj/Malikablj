@@ -29,3 +29,4 @@ if ($code !== 0) {
 require __DIR__ . '/Support/TestCase.php';
 require __DIR__ . '/Support/DbTestCase.php';
 require __DIR__ . '/Support/HttpTestCase.php';
+require __DIR__ . '/Support/NprFixtures.php';

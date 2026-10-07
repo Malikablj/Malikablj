@@ -168,7 +168,9 @@ final class HttpClient
             },
         ]);
         if ($data !== null && $method !== 'GET') {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, is_array($data) ? http_build_query($data) : $data);
+            $hasFile = is_array($data) && array_filter($data, static fn ($v) => $v instanceof \CURLFile) !== [];
+            // multipart bila ada file (field datar), selain itu urlencoded (mendukung array bersarang)
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $hasFile ? $data : (is_array($data) ? http_build_query($data) : $data));
         }
         $body = (string) curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);

@@ -46,39 +46,39 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | DATA-01 | Hierarki Project → Part → Proses; part beda jenis dalam satu project | 3.1 | Must | 3 | `projects`, `project_parts`, `processes` | Planned | `ProjectStructureTest` |
-| DATA-02 | Part ditolak/dibatalkan tidak membatalkan project; project Cancelled bila semua part Cancelled | 3.1 | Must | 3 | `StatusService` | Planned | `StatusServiceTest` |
+| DATA-02 | Part ditolak/dibatalkan tidak membatalkan project; project Cancelled bila semua part Cancelled | 3.1 | Must | 3 | `StatusService` | Partial | `StatusServiceTest` |
 | DATA-03 | Project satu part tampil sederhana | 3.1 | Must | 6 | `public/project.php` | Planned | manual + `ProjectPageHttpTest` |
 | DATA-04 | Status proses: Not Started, Current, Completed, Revision, Problem, Skipped; >1 proses aktif per part | 3.3 | Must | 4 | `WorkflowEngine` | Planned | `WorkflowEngineTest` |
 | DATA-05 | Status turunan part/project sesuai tabel §3.3 (Waiting Approval > Waiting External > On Progress, Hold, Siap Finish, Cancelled) | 3.3 | Must | 4 | `StatusService` | Planned | `StatusServiceTest` |
 | DATA-06 | Overdue = tanda tambahan terhitung (bukan status dasar) | 3.3, 7.1 | Must | 8 | `OverdueService` | Planned | `OverdueServiceTest` |
 | DATA-07 | Kode project NPD-YYYY-XXX urut per tahun | 3.4 | Must | 2 | `NumberSequence` | Done | `NumberSequenceTest` (konkurensi) |
 | DATA-08 | Nomor NPR NO/PIK/NPR/Bulan Romawi/Tahun, reset tiap tahun, dibuat saat pertama dikirim | 3.4 | Must | 2 | `NumberSequence`, `NprService::submit` | Done | `NumberSequenceTest`, `NprServiceTest` |
-| DATA-09 | No. dokumen export: NPR = PIK-FORM-NPD-01 rev 00; timeline = PIK-FORM-NPD-07 tanpa revisi | 3.4 | Must | 2/6 | `NprPdf`, `TimelineExport` | Planned | `PdfExportTest`, `ExcelExportTest` |
+| DATA-09 | No. dokumen export: NPR = PIK-FORM-NPD-01 rev 00; timeline = PIK-FORM-NPD-07 tanpa revisi | 3.4 | Must | 2/6 | `NprPdf`, `TimelineExport` | Done | `PdfExportTest`, `ExcelExportTest` |
 
 ## 4. NPR digital (PRD §4, Lampiran A)
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-NPR-01 | Form NPR memuat seluruh bagian PIK-FORM-NPD-01 + legenda biru/pink | 4.2, Lamp. A | Must | 2 | `public/npr-edit.php`, `modules/Npr/NprFields.php` | Planned | `NprFieldsTest` (cakupan Lampiran A) |
-| FR-NPR-02 | Kolom biru hanya Sales (dan Admin); pink hanya NPD (dan Admin); server menolak di luar hak | 4.2 | Must | 2 | `NprService` + `Gate` | Planned | `NprServiceTest`, `NprHttpTest` (UAT-02) |
-| FR-NPR-03 | Jumlah & nama part dinamis; master nama part oleh Admin; opsi "Lainnya" | 4.3 | Must | 2 | `NprService`, `MasterService` | Planned | `NprServiceTest` |
+| FR-NPR-01 | Form NPR memuat seluruh bagian PIK-FORM-NPD-01 + legenda biru/pink | 4.2, Lamp. A | Must | 2 | `public/npr-edit.php`, `modules/Npr/NprFields.php` | Done | `NprFieldsTest` (cakupan Lampiran A) |
+| FR-NPR-02 | Kolom biru hanya Sales (dan Admin); pink hanya NPD (dan Admin); server menolak di luar hak | 4.2 | Must | 2 | `NprService` + `Gate` | Done | `NprServiceTest`, `NprHttpTest` (UAT-02) |
+| FR-NPR-03 | Jumlah & nama part dinamis; master nama part oleh Admin; opsi "Lainnya" | 4.3 | Must | 2 | `NprService`, `MasterService` | Done | `NprServiceTest` |
 | FR-NPR-04 | Nomor NPR otomatis, urut per tahun, tanpa duplikat meski bersamaan | 3.4, 4.7 | Must | 1/2 | `NumberSequence` (atomic upsert) | Done (mesin penomoran; dipakai saat Kirim NPR di fase 2) | `NumberSequenceTest` (6 proses paralel) |
-| FR-NPR-05 | Setelah kirim kolom biru terkunci; NPD dapat mengembalikan dengan alasan; Revision History otomatis tanpa nomor revisi | 4.1 | Must | 2 | `NprService::return/submit`, `revision_history` | Planned | `NprServiceTest` (UAT-05) |
-| FR-NPR-06 | Feedback per part tersimpan draft, dipublikasikan saat Selesaikan Feedback | 4.1, 4.5 | Must | 2 | `NprFeedbackService` | Planned | `NprServiceTest` |
-| FR-NPR-07 | Tidak Feasible membatalkan part terkait saja; project batal bila semua part batal | 4.5 | Must | 2/3 | `NprFeedbackService`, `StatusService` | Planned | `NprServiceTest` (UAT-03) |
-| FR-NPR-08 | Export PDF NPR mengikuti format form, memuat seluruh data Sales + feedback NPD | 4.6 | Must | 2 | `modules/Report/NprPdf.php` (mPDF) | Planned | `PdfExportTest` (UAT-04) |
-| FR-NPR-09 | Harga mould % PIK + % Customer = 100% (validasi saat simpan) | 4.7 | Should | 2 | `NprFeedbackService` | Planned | `NprServiceTest` |
-| FR-NPR-10 | Upload lampiran gambar/file maks. 25 MB (Contoh Bentuk Produk, Referensi Spek) | 4.7 | Must | 2/7 | `DocumentService` | Planned | `DocumentServiceTest` |
-| FR-NPR-11 | Requested by / Received by otomatis dari akun; tanpa blok tanda tangan | 4.2 | Must | 2 | `NprService` | Planned | `NprServiceTest`, `PdfExportTest` |
-| FR-NPR-12 | Pratinjau PDF berwatermark "BELUM SELESAI FEEDBACK" sebelum Selesai Feedback | 4.6 | Could | 2 | `NprPdf` | Planned | `PdfExportTest` |
-| NPR-13 | Status NPR: Draft, Dikirim, Dikembalikan, Selesai Feedback + siapa yang boleh mengubah | 4.1 | Must | 2 | `NprService` | Planned | `NprServiceTest` |
-| NPR-14 | Simpan draft & autosave; stepper di HP | 4.1, 11.6 | Must | 2/11 | `public/assets/js/npr-form.js`, `public/api/npr-autosave.php` | Planned | `NprHttpTest` |
-| NPR-15 | Daftar master NPR dikelola Admin (nonaktif, bukan hapus; data lama tetap terbaca) | 4.4 | Must | 2 | `MasterService`, `public/settings/masters.php` | Planned | `MasterServiceTest` |
-| NPR-16 | Perlu Revisi → NPR kembali ke Sales; part lain tetap; part yang diubah ditandai "Perlu ditinjau ulang" | 4.5 | Must | 2 | `NprFeedbackService` | Planned | `NprServiceTest` |
-| NPR-17 | "Perlu Masterbatch Baru" per part menentukan Masterbatch dijalankan / Tidak dijalankan | 4.5 | Must | 2/4 | `WorkflowInstantiator` | Planned | `WorkflowEngineTest` |
-| NPR-18 | Hapus part yang sudah punya feedback/proses tidak diizinkan → Cancel dengan alasan | 4.3 | Must | 2 | `NprService` | Planned | `NprServiceTest` |
-| NPR-19 | Jenis part (New Mold/Subcont) per part; Mould & Feedback per part | 4.2 | Must | 2 | `npr_parts`, `npr_feedback` | Planned | `NprServiceTest` |
-| NPR-20 | Nama file PDF `NPR_<nomor>_<produk>.pdf`; export dicatat di aktivitas | 4.6 | Must | 2 | `public/export.php` | Planned | `PdfExportTest` |
+| FR-NPR-05 | Setelah kirim kolom biru terkunci; NPD dapat mengembalikan dengan alasan; Revision History otomatis tanpa nomor revisi | 4.1 | Must | 2 | `NprService::return/submit`, `revision_history` | Done | `NprServiceTest` (UAT-05) |
+| FR-NPR-06 | Feedback per part tersimpan draft, dipublikasikan saat Selesaikan Feedback | 4.1, 4.5 | Must | 2 | `NprFeedbackService` | Done | `NprServiceTest` |
+| FR-NPR-07 | Tidak Feasible membatalkan part terkait saja; project batal bila semua part batal | 4.5 | Must | 2/3 | `NprFeedbackService`, `StatusService` | Done | `NprServiceTest` (UAT-03) |
+| FR-NPR-08 | Export PDF NPR mengikuti format form, memuat seluruh data Sales + feedback NPD | 4.6 | Must | 2 | `modules/Report/NprPdf.php` (mPDF) | Done | `PdfExportTest` (UAT-04) |
+| FR-NPR-09 | Harga mould % PIK + % Customer = 100% (validasi saat simpan) | 4.7 | Should | 2 | `NprFeedbackService` | Done | `NprServiceTest` |
+| FR-NPR-10 | Upload lampiran gambar/file maks. 25 MB (Contoh Bentuk Produk, Referensi Spek) | 4.7 | Must | 2/7 | `DocumentService` | Done | `DocumentServiceTest` |
+| FR-NPR-11 | Requested by / Received by otomatis dari akun; tanpa blok tanda tangan | 4.2 | Must | 2 | `NprService` | Done | `NprServiceTest`, `PdfExportTest` |
+| FR-NPR-12 | Pratinjau PDF berwatermark "BELUM SELESAI FEEDBACK" sebelum Selesai Feedback | 4.6 | Could | 2 | `NprPdf` | Done | `PdfExportTest` |
+| NPR-13 | Status NPR: Draft, Dikirim, Dikembalikan, Selesai Feedback + siapa yang boleh mengubah | 4.1 | Must | 2 | `NprService` | Done | `NprServiceTest` |
+| NPR-14 | Simpan draft & autosave; stepper di HP | 4.1, 11.6 | Must | 2/11 | `public/assets/js/npr-form.js`, `public/api/npr-autosave.php` | Done | `NprHttpTest` |
+| NPR-15 | Daftar master NPR dikelola Admin (nonaktif, bukan hapus; data lama tetap terbaca) | 4.4 | Must | 2 | `MasterService`, `public/settings/masters.php` | Done | `MasterServiceTest` |
+| NPR-16 | Perlu Revisi → NPR kembali ke Sales; part lain tetap; part yang diubah ditandai "Perlu ditinjau ulang" | 4.5 | Must | 2 | `NprFeedbackService` | Done | `NprServiceTest` |
+| NPR-17 | "Perlu Masterbatch Baru" per part menentukan Masterbatch dijalankan / Tidak dijalankan | 4.5 | Must | 2/4 | `WorkflowInstantiator` | Partial | `WorkflowEngineTest` |
+| NPR-18 | Hapus part yang sudah punya feedback/proses tidak diizinkan → Cancel dengan alasan | 4.3 | Must | 2 | `NprService` | Done | `NprServiceTest` |
+| NPR-19 | Jenis part (New Mold/Subcont) per part; Mould & Feedback per part | 4.2 | Must | 2 | `npr_parts`, `npr_feedback` | Done | `NprServiceTest` |
+| NPR-20 | Nama file PDF `NPR_<nomor>_<produk>.pdf`; export dicatat di aktivitas | 4.6 | Must | 2 | `public/export.php` | Done | `PdfExportTest` |
 
 ## 5. Workflow & dependency (PRD §5)
 
@@ -158,10 +158,10 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | DOC-01 | 18 tipe dokumen (Lampiran B) per project › part › proses | 9.1 | Must | 7 | `master_options(document_type)` | Planned | `DocumentServiceTest` |
 | DOC-02 | Revisi tidak menimpa; status Current/Superseded/Rejected/Approved | 9.1 | Must | 7 | `DocumentService` | Planned | `DocumentServiceTest` |
-| DOC-03 | Maks. 25 MB; ekstensi diatur Admin; validasi MIME/ekstensi/nama di server | 9.1, 13.2 | Must | 7 | `UploadValidator` | Planned | `UploadValidatorTest` |
+| DOC-03 | Maks. 25 MB; ekstensi diatur Admin; validasi MIME/ekstensi/nama di server | 9.1, 13.2 | Must | 7 | `UploadValidator` | Done | `UploadValidatorTest` |
 | DOC-04 | Dokumen wajib mencegah penyelesaian proses; kategori Attention "Missing Mandatory Document" | 9.1, 5.4 | Must | 7 | `WorkflowEngine`, `AttentionService` | Planned | `WorkflowEngineTest` |
 | DOC-05 | Halaman Dokumen: pencarian & filter, pratinjau gambar/PDF | 9.1 | Must | 7 | `public/documents.php` | Planned | `DocumentHttpTest` |
-| DOC-06 | File di luar webroot, unduh hanya lewat sesi + cek hak akses | 9.1, 13.2 | Must | 7 | `public/download.php`, `storage/documents` | Planned | `DocumentHttpTest` |
+| DOC-06 | File di luar webroot, unduh hanya lewat sesi + cek hak akses | 9.1, 13.2 | Must | 7 | `public/download.php`, `storage/documents` | Done | `DocumentHttpTest` |
 | APR-01 | 10 tipe approval; pemberi customer/internal | 9.2 | Must | 7 | `ApprovalService` | Planned | `ApprovalServiceTest` |
 | APR-02 | Approval customer dicatat Sales/NPD/Admin dengan bukti & komentar | 9.2 | Must | 7 | `ApprovalService` | Planned | `ApprovalServiceTest` |
 | APR-03 | Status Pending/Approved/Rejected/Revision Required terhubung ke workflow (loop) | 9.2 | Must | 7 | `ApprovalService` + `WorkflowEngine` | Planned | `ApprovalServiceTest` (UAT-15) |
@@ -200,7 +200,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | I18N-01 | Bahasa Indonesia (bawaan) & Inggris; pilihan di header, tersimpan di profil | 12 | Must | 1 | `lang/id.php`, `lang/en.php`, `I18n` | Done | `I18nTest` (UAT-23) |
 | I18N-02 | Diterjemahkan: label, menu, tombol, status, pesan, email, judul/kolom export; isian user tidak | 12 | Must | 1+ | `t()` | Partial | `I18nTest` (kunci lengkap kedua bahasa) |
 | I18N-03 | Format tanggal per bahasa (05 Okt 2026 / 05 Oct 2026) | 12 | Must | 1 | `I18n::date()` | Done | `I18nTest` |
-| I18N-04 | PDF NPR selalu Bahasa Indonesia | 12 | Must | 2 | `NprPdf` | Planned | `PdfExportTest` |
+| I18N-04 | PDF NPR selalu Bahasa Indonesia | 12 | Must | 2 | `NprPdf` | Done | `PdfExportTest` |
 
 ## 12. Non-fungsional (PRD §13)
 
@@ -209,13 +209,13 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | NFR-01 | PHP 8.2+, MySQL 8 InnoDB utf8mb4 | 13.1 | Must | 0/1 | `database/schema.sql` | Done | `SchemaTest` |
 | NFR-02 | Mesin jadwal di server sebagai satu-satunya sumber kebenaran, satu transaksi | 13.1 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
 | NFR-03 | Tugas terjadwal: overdue/due soon, Hold reminder, ringkasan harian, antrean email | 13.1 | Must | 8 | `cron/*.php` | Planned | `CronTest` |
-| NFR-04 | PDF & Excel dibuat server (mPDF, PhpSpreadsheet) | 13.1 | Must | 2/6 | `modules/Report` | Planned | `PdfExportTest` |
+| NFR-04 | PDF & Excel dibuat server (mPDF, PhpSpreadsheet) | 13.1 | Must | 2/6 | `modules/Report` | Done | `PdfExportTest` |
 | NFR-05 | Zona waktu Asia/Jakarta | 13.1 | Must | 1 | `config/config.php` | Done | `ConfigTest` |
 | NFR-06 | Konfigurasi lewat environment (.env) untuk dev/UAT/prod | 13.1 | Must | 1 | `config/config.php`, `.env.example` | Done | `ConfigTest` |
 | NFR-07 | HTTPS, CSRF, XSS escaping, query terparameter | 13.2 | Must | 1+ | `Csrf`, `e()`, `Db` | Done | `SecurityHttpTest` |
 | NFR-08 | Kinerja: halaman utama ≤ 2 dtk, API p95 ≤ 500 ms, export ≤ 15 dtk | 13.3 | Must | 12 | — | Planned | `PerformanceTest` |
 | NFR-09 | Backup harian DB + file, retensi ≥ 30 hari, uji pemulihan | 13.4 | Must | 13 | `docs/BACKUP_AND_RESTORE.md`, `bin/backup.sh` | Planned | restore drill |
-| NFR-10 | Penguncian optimistik (peringatan bila data berubah) | 13.4 | Must | 2+ | kolom `lock_version` | Planned | `OptimisticLockTest` |
+| NFR-10 | Penguncian optimistik (peringatan bila data berubah) | 13.4 | Must | 2+ | kolom `lock_version` | Done | `OptimisticLockTest` |
 | NFR-11 | Pencatatan error & pemantauan dasar; migrasi skema tanpa kehilangan data | 13.4 | Must | 1/13 | `storage/logs`, `database/migrations` | Partial | `MigrationTest` |
 | NFR-12 | Tidak ada AI Assistant (menu, halaman, endpoint) | 1.4 | Must | 1 | — | Done | `NoAiAssistantTest` (UAT-25) |
 
@@ -223,11 +223,11 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | UAT | Skenario | Fase | Test otomatis | Status |
 | --- | --- | --- | --- | --- |
-| UAT-01 | NPR 3 part (Body New Mold, Cap Subcont, "Lainnya") dikirim → nomor, biru terkunci, notifikasi NPD | 2/8 | `NprServiceTest::testUat01` | Planned |
-| UAT-02 | Sales isi pink / NPD isi biru setelah kirim → ditolak server | 2 | `NprServiceTest::testUat02`, `NprHttpTest` | Planned |
-| UAT-03 | Feedback Body Feasible, Cap Feasible+catatan, Plug Tidak Feasible → Plug batal, lainnya jalan | 2/4 | `NprServiceTest::testUat03` | Planned |
-| UAT-04 | Export PDF NPR setelah Selesai Feedback | 2 | `PdfExportTest::testUat04` | Planned |
-| UAT-05 | NPD kembalikan NPR; Sales ubah & kirim ulang → riwayat tanpa nomor revisi | 2 | `NprServiceTest::testUat05` | Planned |
+| UAT-01 | NPR 3 part (Body New Mold, Cap Subcont, "Lainnya") dikirim → nomor, biru terkunci, notifikasi NPD | 2/8 | `NprServiceTest::testUat01…`, `NprHttpTest`, `tests/browser/npr_flow.py` | Done |
+| UAT-02 | Sales isi pink / NPD isi biru setelah kirim → ditolak server | 2 | `NprServiceTest::testUat02…`, `NprHttpTest::testSalesFullDraftSubmitAndBlueLockedForNpd` | Done |
+| UAT-03 | Feedback Body Feasible, Cap Feasible+catatan, Plug Tidak Feasible → Plug batal, lainnya jalan | 2/4 | `NprServiceTest::testUat03…` | Partial (feedback, publikasi, pembatalan part selesai; workflow part mulai berjalan di fase 4) |
+| UAT-04 | Export PDF NPR setelah Selesai Feedback | 2 | `NprPdfTest::testUat04…` | Done |
+| UAT-05 | NPD kembalikan NPR; Sales ubah & kirim ulang → riwayat tanpa nomor revisi | 2 | `NprServiceTest::testUat05…` | Done |
 | UAT-06 | Part New Mold mulai: Masterbatch & 3D aktif bersamaan; 2D menunggu keduanya | 4 | `WorkflowEngineTest::testUat06` | Planned |
 | UAT-07 | Develop MB terlambat 2 hari kerja → turunan bergeser +2, 3D tidak, tercatat, notifikasi | 5 | `SchedulerTest::testUat07` | Planned |
 | UAT-08 | Planned Start manual lebih awal dari dependency → peringatan & tanggal dependency | 5 | `SchedulerTest::testUat08` | Planned |

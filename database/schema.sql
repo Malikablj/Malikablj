@@ -771,6 +771,7 @@ CREATE TABLE IF NOT EXISTS schedule_changes (
 -- 9. Dokumen & approval
 -- ---------------------------------------------------------------------
 -- Dokumen milik NPR (lampiran sebelum project ada) atau milik project › part › proses.
+-- is_removed: lampiran NPR yang dilepas Sales saat draft (file & riwayat tetap disimpan, tidak dihapus).
 -- npr_category: product_shape (Contoh Bentuk Produk) | spec_reference (Referensi Spek)
 CREATE TABLE IF NOT EXISTS documents (
   id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -783,6 +784,9 @@ CREATE TABLE IF NOT EXISTS documents (
   title               VARCHAR(190) NOT NULL,
   current_version_id  INT UNSIGNED NULL,
   version_count       SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  is_removed          TINYINT(1)   NOT NULL DEFAULT 0,
+  removed_by          INT UNSIGNED NULL,
+  removed_at          DATETIME     NULL,
   created_by          INT UNSIGNED NULL,
   created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -795,6 +799,7 @@ CREATE TABLE IF NOT EXISTS documents (
   CONSTRAINT fk_doc_part FOREIGN KEY (part_id) REFERENCES project_parts(id),
   CONSTRAINT fk_doc_process FOREIGN KEY (process_id) REFERENCES processes(id),
   CONSTRAINT fk_doc_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_doc_removed_by FOREIGN KEY (removed_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT chk_doc_owner CHECK (npr_id IS NOT NULL OR project_id IS NOT NULL)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
