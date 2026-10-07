@@ -22,24 +22,24 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| AUTH-01 | Login email + password | 2.4 | Must | 1 | `modules/Core/Auth.php`, `public/login.php` | Planned | `tests/Integration/AuthTest.php`, `tests/Http/AuthHttpTest.php` |
-| AUTH-02 | Password di-hash (bcrypt/argon2) — `password_hash()` / `password_verify()`, tidak pernah plaintext | 2.4, 13.2 | Must | 1 | `Auth`, `UserService` | Planned | `AuthTest` |
-| AUTH-03 | Admin membuat, menonaktifkan, mereset password user | 2.4 | Must | 1 | `modules/User/UserService.php`, `public/settings/users.php` | Planned | `UserServiceTest` |
-| AUTH-04 | User mengganti password sendiri | 2.4 | Must | 1 | `public/profile.php` | Planned | `UserServiceTest` |
-| AUTH-05 | Sesi berakhir otomatis setelah tidak aktif (default 8 jam, dapat diatur) | 2.4 | Must | 1 | `modules/Core/Session.php` | Planned | `SessionTest`, `AuthHttpTest` |
-| AUTH-06 | Penguncian sementara setelah beberapa kali gagal login (rate limiting) | 2.4, 13.2 | Must | 1 | `modules/Core/LoginThrottle.php` | Planned | `LoginThrottleTest`, `AuthHttpTest` |
-| AUTH-07 | Akun nonaktif tidak bisa login, nama tetap tampil di riwayat/audit | 2.4 | Must | 1 | `Auth`, audit snapshot `user_name` | Planned | `AuthTest` |
-| AUTH-08 | Cookie sesi HttpOnly, Secure (HTTPS), SameSite; regenerasi ID sesi setelah login; logout menghancurkan sesi | 13.2 | Must | 1 | `Session` | Planned | `AuthHttpTest` |
+| AUTH-01 | Login email + password | 2.4 | Must | 1 | `modules/Core/Auth.php`, `public/login.php` | Done | `tests/Integration/AuthTest.php`, `tests/Http/AuthHttpTest.php` |
+| AUTH-02 | Password di-hash (bcrypt/argon2) — `password_hash()` / `password_verify()`, tidak pernah plaintext | 2.4, 13.2 | Must | 1 | `Auth`, `UserService` | Done | `AuthTest` |
+| AUTH-03 | Admin membuat, menonaktifkan, mereset password user | 2.4 | Must | 1 | `modules/User/UserService.php`, `public/settings/users.php` | Done | `UserServiceTest` |
+| AUTH-04 | User mengganti password sendiri | 2.4 | Must | 1 | `public/profile.php` | Done | `UserServiceTest` |
+| AUTH-05 | Sesi berakhir otomatis setelah tidak aktif (default 8 jam, dapat diatur) | 2.4 | Must | 1 | `modules/Core/Session.php` | Done | `SessionTest`, `AuthHttpTest` |
+| AUTH-06 | Penguncian sementara setelah beberapa kali gagal login (rate limiting) | 2.4, 13.2 | Must | 1 | `modules/Core/LoginThrottle.php` | Done | `LoginThrottleTest`, `AuthHttpTest` |
+| AUTH-07 | Akun nonaktif tidak bisa login, nama tetap tampil di riwayat/audit | 2.4 | Must | 1 | `Auth`, audit snapshot `user_name` | Done | `AuthTest` |
+| AUTH-08 | Cookie sesi HttpOnly, Secure (HTTPS), SameSite; regenerasi ID sesi setelah login; logout menghancurkan sesi | 13.2 | Must | 1 | `Session` | Done | `AuthHttpTest` |
 
 ## 2. Role & hak akses (PRD §2.1–2.3)
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ROLE-01 | 8 role: Admin, Admin Sales, NPD Staff, Drafter, Purchasing, Production, Quality, Management | 2.1 | Must | 1 | `database/seeds/roles.php`, tabel `roles` | Planned | `GateTest` |
-| ROLE-02 | Semua role melihat semua project | 2.2 | Must | 1/3 | `Gate::can('project.view')` | Planned | `GateTest` |
-| ROLE-03 | Sales hanya mengubah NPR/project di mana ia Sales PIC; Drafter hanya proses yang di-assign | 2.2 | Must | 1/2/4 | `Gate` (scope `own`) | Planned | `GateTest`, `NprServiceTest` |
-| ROLE-04 | NPD Staff & Admin mengubah seluruh project; Management read-only | 2.2 | Must | 1 | `Gate` | Planned | `GateTest`, `AuthorizationHttpTest` |
-| ROLE-05 | Matriks hak akses §2.3 ditegakkan di server pada setiap request/API/unduhan | 2.3, 13.2 | Must | 1+ | `includes/permissions.php`, `Gate`, service layer | Planned | `AuthorizationHttpTest` |
+| ROLE-01 | 8 role: Admin, Admin Sales, NPD Staff, Drafter, Purchasing, Production, Quality, Management | 2.1 | Must | 1 | `database/seeds/roles.php`, tabel `roles` | Done | `GateTest` |
+| ROLE-02 | Semua role melihat semua project | 2.2 | Must | 1/3 | `Gate::can('project.view')` | Done | `GateTest` |
+| ROLE-03 | Sales hanya mengubah NPR/project di mana ia Sales PIC; Drafter hanya proses yang di-assign | 2.2 | Must | 1/2/4 | `Gate` (scope `own`) | Partial | `GateTest`, `NprServiceTest` |
+| ROLE-04 | NPD Staff & Admin mengubah seluruh project; Management read-only | 2.2 | Must | 1 | `Gate` | Done | `GateTest`, `AuthorizationHttpTest` |
+| ROLE-05 | Matriks hak akses §2.3 ditegakkan di server pada setiap request/API/unduhan | 2.3, 13.2 | Must | 1+ | `includes/permissions.php`, `Gate`, service layer | Done | `AuthorizationHttpTest` |
 
 ## 3. Model data, status, penomoran (PRD §3)
 
@@ -51,8 +51,8 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | DATA-04 | Status proses: Not Started, Current, Completed, Revision, Problem, Skipped; >1 proses aktif per part | 3.3 | Must | 4 | `WorkflowEngine` | Planned | `WorkflowEngineTest` |
 | DATA-05 | Status turunan part/project sesuai tabel §3.3 (Waiting Approval > Waiting External > On Progress, Hold, Siap Finish, Cancelled) | 3.3 | Must | 4 | `StatusService` | Planned | `StatusServiceTest` |
 | DATA-06 | Overdue = tanda tambahan terhitung (bukan status dasar) | 3.3, 7.1 | Must | 8 | `OverdueService` | Planned | `OverdueServiceTest` |
-| DATA-07 | Kode project NPD-YYYY-XXX urut per tahun | 3.4 | Must | 2 | `NumberSequence` | Planned | `NumberSequenceTest` (konkurensi) |
-| DATA-08 | Nomor NPR NO/PIK/NPR/Bulan Romawi/Tahun, reset tiap tahun, dibuat saat pertama dikirim | 3.4 | Must | 2 | `NumberSequence`, `NprService::submit` | Planned | `NumberSequenceTest`, `NprServiceTest` |
+| DATA-07 | Kode project NPD-YYYY-XXX urut per tahun | 3.4 | Must | 2 | `NumberSequence` | Done | `NumberSequenceTest` (konkurensi) |
+| DATA-08 | Nomor NPR NO/PIK/NPR/Bulan Romawi/Tahun, reset tiap tahun, dibuat saat pertama dikirim | 3.4 | Must | 2 | `NumberSequence`, `NprService::submit` | Done | `NumberSequenceTest`, `NprServiceTest` |
 | DATA-09 | No. dokumen export: NPR = PIK-FORM-NPD-01 rev 00; timeline = PIK-FORM-NPD-07 tanpa revisi | 3.4 | Must | 2/6 | `NprPdf`, `TimelineExport` | Planned | `PdfExportTest`, `ExcelExportTest` |
 
 ## 4. NPR digital (PRD §4, Lampiran A)
@@ -62,7 +62,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | FR-NPR-01 | Form NPR memuat seluruh bagian PIK-FORM-NPD-01 + legenda biru/pink | 4.2, Lamp. A | Must | 2 | `public/npr-edit.php`, `modules/Npr/NprFields.php` | Planned | `NprFieldsTest` (cakupan Lampiran A) |
 | FR-NPR-02 | Kolom biru hanya Sales (dan Admin); pink hanya NPD (dan Admin); server menolak di luar hak | 4.2 | Must | 2 | `NprService` + `Gate` | Planned | `NprServiceTest`, `NprHttpTest` (UAT-02) |
 | FR-NPR-03 | Jumlah & nama part dinamis; master nama part oleh Admin; opsi "Lainnya" | 4.3 | Must | 2 | `NprService`, `MasterService` | Planned | `NprServiceTest` |
-| FR-NPR-04 | Nomor NPR otomatis, urut per tahun, tanpa duplikat meski bersamaan | 3.4, 4.7 | Must | 2 | `NumberSequence` (atomic upsert) | Planned | `NumberSequenceTest` (proses paralel) |
+| FR-NPR-04 | Nomor NPR otomatis, urut per tahun, tanpa duplikat meski bersamaan | 3.4, 4.7 | Must | 1/2 | `NumberSequence` (atomic upsert) | Done (mesin penomoran; dipakai saat Kirim NPR di fase 2) | `NumberSequenceTest` (6 proses paralel) |
 | FR-NPR-05 | Setelah kirim kolom biru terkunci; NPD dapat mengembalikan dengan alasan; Revision History otomatis tanpa nomor revisi | 4.1 | Must | 2 | `NprService::return/submit`, `revision_history` | Planned | `NprServiceTest` (UAT-05) |
 | FR-NPR-06 | Feedback per part tersimpan draft, dipublikasikan saat Selesaikan Feedback | 4.1, 4.5 | Must | 2 | `NprFeedbackService` | Planned | `NprServiceTest` |
 | FR-NPR-07 | Tidak Feasible membatalkan part terkait saja; project batal bila semua part batal | 4.5 | Must | 2/3 | `NprFeedbackService`, `StatusService` | Planned | `NprServiceTest` (UAT-03) |
@@ -167,8 +167,8 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | APR-03 | Status Pending/Approved/Rejected/Revision Required terhubung ke workflow (loop) | 9.2 | Must | 7 | `ApprovalService` + `WorkflowEngine` | Planned | `ApprovalServiceTest` (UAT-15) |
 | APR-04 | Approval menyimpan revisi dokumen, pemohon, tanggal, iterasi; halaman antrean & riwayat | 9.2 | Must | 7 | `public/approvals.php` | Planned | `ApprovalServiceTest` |
 | REC-01 | Record Trial/T0/Commissioning, Material, Validation per part; Purchasing update material | 9.3 | Must | 7 | `RecordService` | Planned | `RecordServiceTest` |
-| FR-AUD-01 | Audit log append-only: siapa, kapan, IP, aksi, entitas, sebelum/sesudah, alasan | 9.4 | Must | 1+ | `AuditLogger`, `database/hardening.sql` | Planned | `AuditLoggerTest` |
-| FR-AUD-02 | Cakupan audit: NPR, feedback, jadwal, dependency, shift otomatis, skip, hold, target, approval, dokumen, pengaturan, arsip, export, login | 9.4 | Must | 1+ | semua service | Planned | per modul |
+| FR-AUD-01 | Audit log append-only: siapa, kapan, IP, aksi, entitas, sebelum/sesudah, alasan | 9.4 | Must | 1+ | `AuditLogger`, `database/hardening.sql` | Done | `AuditLoggerTest` |
+| FR-AUD-02 | Cakupan audit: NPR, feedback, jadwal, dependency, shift otomatis, skip, hold, target, approval, dokumen, pengaturan, arsip, export, login | 9.4 | Must | 1+ | semua service | Partial | per modul |
 | FR-AUD-03 | Tab Activity semua role; audit log penuh hanya Admin; Revision History | 9.4 | Must | 6/7 | `public/project.php`, `public/settings/audit.php` | Planned | `AuditHttpTest` |
 | NA-01 | Next Action, jatuh tempo, Waiting For per part; notifikasi pemilik | 9.5 | Must | 8 | `NextActionService` | Planned | `NextActionTest` |
 | PD-01 | Halaman detail project dengan 9 tab (Ringkasan … Activity) | 9.6 | Must | 6 | `public/project.php` | Planned | `ProjectPageHttpTest` |
@@ -189,35 +189,35 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| FR-UI-01 | Token warna, font Inter self-hosted, aturan aksen | 11.2–11.4 | Must | 1/11 | `public/assets/css/app.css` | Planned | `UiContractTest` |
-| FR-UI-02 | Mode gelap #000000 di semua halaman/komponen, tanpa kilatan terang | 11.3 | Must | 1/11 | CSS tokens + `data-theme` | Planned | `UiContractTest`, browser test (UAT-21) |
+| FR-UI-01 | Token warna, font Inter self-hosted, aturan aksen | 11.2–11.4 | Must | 1/11 | `public/assets/css/app.css` | Partial | `UiContractTest` |
+| FR-UI-02 | Mode gelap #000000 di semua halaman/komponen, tanpa kilatan terang | 11.3 | Must | 1/11 | CSS tokens + `data-theme` | Partial | `UiContractTest`, browser test (UAT-21) |
 | FR-UI-03 | Responsif laptop/tablet/HP (drawer, kartu, stepper, Gantt scroll, target sentuh ≥ 44px) | 11.6 | Must | 11 | CSS | Planned | browser test (UAT-22) |
 | FR-UI-04 | Animasi 150–250 ms, menghormati reduce motion | 11.5 | Should | 11 | CSS | Planned | `UiContractTest` |
 | FR-UI-05 | Kolom NPR biru/pink dengan legenda dan varian gelap | 11.2 | Must | 2 | CSS `--sales-tint`/`--npd-tint` | Planned | `UiContractTest` |
-| UI-06 | Logo PIK di login, header, kop PDF/Excel; varian mode gelap | 11.4 | Must | 1/6 | `public/assets/images/logo-*.png` | Planned | `UiContractTest` |
-| UI-07 | Navigasi: Dashboard · Project · Process Tracker · Gantt · Kalender · Dokumen · Approval · Laporan · Notifikasi · Pengaturan (Admin) | 11.7 | Must | 1 | `includes/layout/sidebar.php` | Planned | `LayoutHttpTest` |
+| UI-06 | Logo PIK di login, header, kop PDF/Excel; varian mode gelap | 11.4 | Must | 1/6 | `public/assets/images/logo-*.png` | Partial | `UiContractTest` |
+| UI-07 | Navigasi: Dashboard · Project · Process Tracker · Gantt · Kalender · Dokumen · Approval · Laporan · Notifikasi · Pengaturan (Admin) | 11.7 | Must | 1 | `includes/layout/sidebar.php` | Done | `LayoutHttpTest` |
 | UI-08 | Aksesibilitas: kontras WCAG AA, keyboard, fokus terlihat, status tidak hanya warna | 11.8 | Must | 11 | CSS/markup | Planned | `UiContractTest` |
-| I18N-01 | Bahasa Indonesia (bawaan) & Inggris; pilihan di header, tersimpan di profil | 12 | Must | 1 | `lang/id.php`, `lang/en.php`, `I18n` | Planned | `I18nTest` (UAT-23) |
-| I18N-02 | Diterjemahkan: label, menu, tombol, status, pesan, email, judul/kolom export; isian user tidak | 12 | Must | 1+ | `t()` | Planned | `I18nTest` (kunci lengkap kedua bahasa) |
-| I18N-03 | Format tanggal per bahasa (05 Okt 2026 / 05 Oct 2026) | 12 | Must | 1 | `I18n::date()` | Planned | `I18nTest` |
+| I18N-01 | Bahasa Indonesia (bawaan) & Inggris; pilihan di header, tersimpan di profil | 12 | Must | 1 | `lang/id.php`, `lang/en.php`, `I18n` | Done | `I18nTest` (UAT-23) |
+| I18N-02 | Diterjemahkan: label, menu, tombol, status, pesan, email, judul/kolom export; isian user tidak | 12 | Must | 1+ | `t()` | Partial | `I18nTest` (kunci lengkap kedua bahasa) |
+| I18N-03 | Format tanggal per bahasa (05 Okt 2026 / 05 Oct 2026) | 12 | Must | 1 | `I18n::date()` | Done | `I18nTest` |
 | I18N-04 | PDF NPR selalu Bahasa Indonesia | 12 | Must | 2 | `NprPdf` | Planned | `PdfExportTest` |
 
 ## 12. Non-fungsional (PRD §13)
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| NFR-01 | PHP 8.2+, MySQL 8 InnoDB utf8mb4 | 13.1 | Must | 0/1 | `database/schema.sql` | Planned | `SchemaTest` |
+| NFR-01 | PHP 8.2+, MySQL 8 InnoDB utf8mb4 | 13.1 | Must | 0/1 | `database/schema.sql` | Done | `SchemaTest` |
 | NFR-02 | Mesin jadwal di server sebagai satu-satunya sumber kebenaran, satu transaksi | 13.1 | Must | 5 | `Scheduler` | Planned | `SchedulerTest` |
 | NFR-03 | Tugas terjadwal: overdue/due soon, Hold reminder, ringkasan harian, antrean email | 13.1 | Must | 8 | `cron/*.php` | Planned | `CronTest` |
 | NFR-04 | PDF & Excel dibuat server (mPDF, PhpSpreadsheet) | 13.1 | Must | 2/6 | `modules/Report` | Planned | `PdfExportTest` |
-| NFR-05 | Zona waktu Asia/Jakarta | 13.1 | Must | 1 | `config/config.php` | Planned | `ConfigTest` |
-| NFR-06 | Konfigurasi lewat environment (.env) untuk dev/UAT/prod | 13.1 | Must | 1 | `config/config.php`, `.env.example` | Planned | `ConfigTest` |
-| NFR-07 | HTTPS, CSRF, XSS escaping, query terparameter | 13.2 | Must | 1+ | `Csrf`, `e()`, `Db` | Planned | `SecurityHttpTest` |
+| NFR-05 | Zona waktu Asia/Jakarta | 13.1 | Must | 1 | `config/config.php` | Done | `ConfigTest` |
+| NFR-06 | Konfigurasi lewat environment (.env) untuk dev/UAT/prod | 13.1 | Must | 1 | `config/config.php`, `.env.example` | Done | `ConfigTest` |
+| NFR-07 | HTTPS, CSRF, XSS escaping, query terparameter | 13.2 | Must | 1+ | `Csrf`, `e()`, `Db` | Done | `SecurityHttpTest` |
 | NFR-08 | Kinerja: halaman utama ≤ 2 dtk, API p95 ≤ 500 ms, export ≤ 15 dtk | 13.3 | Must | 12 | — | Planned | `PerformanceTest` |
 | NFR-09 | Backup harian DB + file, retensi ≥ 30 hari, uji pemulihan | 13.4 | Must | 13 | `docs/BACKUP_AND_RESTORE.md`, `bin/backup.sh` | Planned | restore drill |
 | NFR-10 | Penguncian optimistik (peringatan bila data berubah) | 13.4 | Must | 2+ | kolom `lock_version` | Planned | `OptimisticLockTest` |
-| NFR-11 | Pencatatan error & pemantauan dasar; migrasi skema tanpa kehilangan data | 13.4 | Must | 1/13 | `storage/logs`, `database/migrations` | Planned | `MigrationTest` |
-| NFR-12 | Tidak ada AI Assistant (menu, halaman, endpoint) | 1.4 | Must | 1 | — | Planned | `NoAiAssistantTest` (UAT-25) |
+| NFR-11 | Pencatatan error & pemantauan dasar; migrasi skema tanpa kehilangan data | 13.4 | Must | 1/13 | `storage/logs`, `database/migrations` | Partial | `MigrationTest` |
+| NFR-12 | Tidak ada AI Assistant (menu, halaman, endpoint) | 1.4 | Must | 1 | — | Done | `NoAiAssistantTest` (UAT-25) |
 
 ## 13. Skenario UAT (PRD §15) → test otomatis
 
@@ -245,6 +245,6 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 | UAT-20 | KPI PIC: Management & Admin bisa, Sales ditolak UI & API | 10 | `AuthorizationHttpTest::testUat20` | Planned |
 | UAT-21 | Mode gelap semua halaman #000000 | 11 | browser test `tests/browser` | Planned |
 | UAT-22 | NPR, timeline, dashboard di tablet & HP | 11 | browser test `tests/browser` | Planned |
-| UAT-23 | Ganti bahasa ID/EN: label, menu, status, email berganti; isian tidak | 1/11 | `I18nTest`, `LayoutHttpTest` | Planned |
+| UAT-23 | Ganti bahasa ID/EN: label, menu, status, email berganti; isian tidak | 1/11 | `I18nTest`, `LayoutHttpTest` | Partial (label/menu/tersimpan di profil; email & status menyusul) |
 | UAT-24 | Arsip project Hold lalu pulihkan | 9 | `ProjectServiceTest::testUat24` | Planned |
-| UAT-25 | Tidak ada AI Assistant | 1 | `NoAiAssistantTest` | Planned |
+| UAT-25 | Tidak ada AI Assistant | 1 | `SchemaTest::testNoAiAssistantArtifacts`, `AuthorizationHttpTest::testNoAiAssistantEndpoint` | Done |

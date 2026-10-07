@@ -39,5 +39,6 @@ Perintah: `composer test` (atau `vendor/bin/phpunit`). Database test dibuat otom
 
 | Fase | Status | Commit | Catatan |
 | --- | --- | --- | --- |
-| 0 | Selesai | (lihat git log) | Audit, dokumen, schema 45 tabel teruji di MySQL 8.0.46 |
-| 1 | Berjalan | | |
+| 0 | Selesai | `670687e` | Audit, dokumen, schema 45 tabel teruji di MySQL 8.0.46 (idempoten) |
+| 1 | Selesai | (commit Phase 1) | Auth, sesi aman, rate limit, CSRF, Gate (matriks §2.3), manajemen user, audit log, i18n ID/EN, tema terang/gelap, layout responsif. 119 test hijau (unit 22 · integrasi 73 · HTTP 24). Bug ditemukan & diperbaiki: ID sesi berkoma (cookie tidak valid), POST form ke /api/ membalas JSON, spesifisitas CSS tombol drawer. |
+| 2 | Berikutnya | | |

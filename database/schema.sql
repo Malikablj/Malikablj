@@ -246,7 +246,9 @@ SET @fk_exists := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
 SET @ddl := IF(@fk_exists = 0,
   'ALTER TABLE workflow_templates ADD CONSTRAINT fk_wt_current_version FOREIGN KEY (current_version_id) REFERENCES workflow_template_versions(id) ON DELETE SET NULL',
   'DO 0');
-PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- step_type: task | approval | decision | finish | gate | request | feedback
 -- activation: auto (aktif saat dependency terpenuhi) | loop_only (hanya via loop, mis. Mold Correction)
@@ -824,7 +826,9 @@ SET @fk_exists := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
 SET @ddl := IF(@fk_exists = 0,
   'ALTER TABLE documents ADD CONSTRAINT fk_doc_current_version FOREIGN KEY (current_version_id) REFERENCES document_versions(id) ON DELETE SET NULL',
   'DO 0');
-PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- approval_type: npr | artwork | masterbatch | 3d | layout_decoration | mold_drawing
 --                | t0 | trial | commissioning | validation
