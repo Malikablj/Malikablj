@@ -1,13 +1,25 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-.pytest_cache/
+# Dependency Composer (install dengan: composer install --no-dev)
+/vendor/
 
-# Data lokal (database SQLite & file upload)
-data/
+# Konfigurasi lokal & rahasia
+.env
+.env.local
+.env.testing
 
-# Lain-lain
+# Data runtime (di luar webroot)
+/storage/documents/*
+/storage/exports/*
+/storage/logs/*
+/storage/cache/*
+/storage/sessions/*
+!/storage/**/.gitkeep
+!/storage/.htaccess
+
+# Alat & OS
+.phpunit.result.cache
+.phpunit.cache/
+/tests/browser/node_modules/
+/tests/browser/output/
 .DS_Store
-*.local
+.idea/
+.vscode/

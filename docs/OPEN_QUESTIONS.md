@@ -1,0 +1,32 @@
+# Open Questions — NPD Project Control v3.0
+
+Butir di bawah **belum dijelaskan tegas** oleh PRD atau saling bertentangan. Untuk setiap butir
+dicatat **asumsi bawaan** yang dipakai agar pengembangan tidak terhenti. Asumsi dibuat
+**dapat diubah** (pengaturan/template) bila memungkinkan. Mohon konfirmasi atau koreksi.
+
+Kolom *Blocking?* = apakah jawaban mengubah struktur sistem secara mendasar. Saat ini **tidak ada
+butir yang blocking**; semua dapat disesuaikan lewat konfigurasi atau perubahan kecil.
+
+| # | Pertanyaan | Sumber PRD | Asumsi bawaan yang diimplementasikan | Dapat diubah via | Blocking? |
+| --- | --- | --- | --- | --- | --- |
+| OQ-01 | PRD §13.1 menyarankan Laravel & API JSON + klien React; brief teknis melarang framework/React. | 13.1 | Ikuti brief: **PHP native + SSR + Vanilla JS**, endpoint JSON hanya untuk interaksi (autosave, pratinjau, Gantt, notifikasi). | — | Tidak (sudah diputuskan brief) |
+| OQ-02 | Matriks §2.3 memberi NPD Staff hak "Membuat dan mengirim NPR", tetapi FR-NPR-02 menyatakan kolom biru hanya Sales (dan Admin). | 2.3, 4.7 | NPD Staff **boleh membuat & mengirim NPR atas nama Sales PIC** dan mengisi kolom biru **hanya pada draft yang ia buat**; setelah dikirim kolom biru terkunci bagi NPD (sesuai UAT-02). | permission `npr.create` / `npr.edit_sales_fields` | Tidak |
+| OQ-03 | Siapa yang menetapkan **Target Finish** project dan kapan? Form NPR hanya punya "Launching Target". | 3.2, 6.4 | Target Finish **diisi otomatis dari Launching Target** saat NPR dikirim (bila ada); NPD/Admin menetapkan/menyetujui saat Selesaikan Feedback; perubahan berikutnya wajib alasan (tercatat, tidak mengubah baseline). | UI project | Tidak |
+| OQ-04 | Siapa yang menetapkan **Prioritas** dan **NPD PIC** project? (tidak ada di form NPR) | 3.2, 10.1 | Prioritas bawaan **Normal**, diubah NPD/Admin. NPD PIC = NPD Staff yang menyelesaikan feedback (dapat diganti NPD/Admin). | UI project | Tidak |
+| OQ-05 | Bila satu part "Perlu Revisi", apakah part lain yang Feasible boleh langsung mulai? | 4.5, 5.2 | **Tidak** — NPR kembali ke Sales; keputusan part lain disimpan; seluruh part yang diterima mulai bersamaan saat Selesaikan Feedback. | — | Tidak |
+| OQ-06 | Customer baru: apakah Sales boleh menambah customer? (PRD: master customer dikelola Admin) | 2.1, 4.2 | Hanya **Admin** menambah/mengubah customer master; Sales memilih customer dan dapat menyesuaikan alamat/telepon **pada NPR** (tidak mengubah master). | permission `customer.manage` | Tidak |
+| OQ-07 | T0 Not OK: setelah **Mold Correction**, PRD menyebut "kembali ke Mold Machining" lalu T0 diulang. Apakah Mold Machining benar dijalankan ulang (durasi 30 hk)? | 5.1, 5.2 | Diikuti apa adanya: Mold Correction → Mold Machining dibuka kembali (NPD dapat mengubah durasi iterasi tersebut) → T0 diulang. Tujuan loop dapat diubah Admin di template. | Template workflow | Tidak |
+| OQ-08 | Tujuan loop **Mold Drawing Approval = Not Approved** tidak disebut. | 5.2 | Mengulang proses Mold Drawing Approval itu sendiri (status Revision, iterasi +1). | Template workflow | Tidak |
+| OQ-09 | **Gate Fail**: proses mana yang dibuka kembali pada part yang dipilih? | 5.7 | NPD memilih part **dan** proses yang dibuka kembali per part (bawaan = proses milestone part: T0 Trial / Customer Trial Approval → untuk Subcont bawaan dibuka dari Trial & Evaluation). | UI gate | Tidak |
+| OQ-10 | Kapan proses menjadi **Current**: segera saat dependency terpenuhi, atau pada Planned Start? | 5.4, 6.3 | Saat **status dependency terpenuhi dan Planned Start ≤ hari ini** (PRD: "langsung aktif pada tanggal mulai part"). PIC/NPD dapat **Mulai lebih awal** bila dependency sudah terpenuhi. Cron mengaktifkan proses tiap pagi. | — | Tidak |
+| OQ-11 | Overdue saat akhir pekan setelah Planned Finish hari Jumat? | 7.1 | Keterlambatan dihitung **hari kerja**; proses dianggap overdue mulai hari kerja pertama setelah Planned Finish (Sabtu/Minggu belum terlambat). | — | Tidak |
+| OQ-12 | "Dokumen: X" di tabel workflow — wajib atau disarankan? (hanya beberapa baris menulis "wajib"/"mewajibkan") | 5.1 | **Wajib** hanya: 2D Drawing → Layout Decoration; Mold Drawing Approval → Technical Drawing. Lainnya **disarankan**. | Template workflow (Admin) | Tidak |
+| OQ-13 | Approval internal (T0, Commissioning, Validation): siapa pemberi keputusan? | 9.2, B.2 | PIC proses (NPD Staff) atau Admin; Quality/Production mengisi record pendukung. | Template workflow (executor roles) | Tidak |
+| OQ-14 | Commissioning **NG**: apakah komentar wajib? (PRD hanya menulis wajib untuk Validation & approval Not Approved) | 5.2 | Komentar **opsional** untuk Commissioning NG dan T0 Not OK; **wajib** untuk Not Approved, PASS WITH CONDITION, dan FAIL. | Template (comment_required) | Tidak |
+| OQ-15 | KPI untuk proses yang diulang (loop): dihitung per iterasi atau hanya penyelesaian terakhir? | 10.3 | **Per iterasi (run)** — setiap aktivasi yang selesai adalah satu sampel, dengan Planned Finish saat aktivasi iterasi tsb. Drill-down menampilkan iterasi. | — | Tidak |
+| OQ-16 | Agenda Kalender (meeting/follow-up) dapat dibuat oleh siapa? | 6.8 | Admin, NPD Staff, Admin Sales. | permission `calendar.manage` | Tidak |
+| OQ-17 | Jenis file unggahan yang diizinkan | 9.1, §16 #15 | Bawaan: pdf, gambar (jpg/jpeg/png/gif/webp), Office (doc/docx/xls/xlsx/ppt/pptx/csv/txt), arsip (zip/rar/7z), video (mp4/mov), CAD (dwg/dxf/step/stp/igs/iges/stl/x_t). SVG/HTML/EXE ditolak demi keamanan. | Pengaturan Admin | Tidak |
+| OQ-18 | Layanan SMTP perusahaan belum diketahui | §16 #16 | Diatur Admin di Pengaturan (atau `.env`); email nonaktif sampai SMTP diisi; notifikasi web tetap berjalan. | Pengaturan Admin | Tidak |
+| OQ-19 | Logo varian mode gelap belum tersedia | 11.4, §16 #14 | Dibuat otomatis dari logo PNG yang ada (garis tepi & tulisan hitam diubah menjadi terang). Mohon kirim varian resmi bila ada. | file `public/assets/images/logo-dark.png` | Tidak |
+| OQ-20 | Proses Purchasing/Production/Quality — PIC default siapa? | 2.3 | Tidak ditugaskan otomatis; NPD menugaskan per part/proses. Role "Terbatas" boleh mengisi record (material / trial / validasi) dan menyelesaikan proses hanya bila ia PIC proses tersebut. | UI planning | Tidak |
+| OQ-21 | Menambah part setelah Selesai Feedback (PRD: NPD/Admin kapan pun) | 4.3 | Diizinkan dengan alasan; part baru membutuhkan feedback dan dipublikasikan lewat tombol Selesaikan Feedback (hanya memproses part yang belum dipublikasikan). | — | Tidak |
