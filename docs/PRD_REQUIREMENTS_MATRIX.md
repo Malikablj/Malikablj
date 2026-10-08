@@ -210,7 +210,7 @@ Prioritas mengikuti PRD (Must / Should / Could). Kebutuhan tanpa ID di PRD diber
 
 | ID | Kebutuhan | PRD | Prio | Fase | Modul / file | Status | Test |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| NFR-01 | PHP 8.2+, MySQL 8 InnoDB utf8mb4 | 13.1 | Must | 0/1 | `database/schema.sql` | Done | `SchemaTest` |
+| NFR-01 | PHP 8.2+, MySQL 8 InnoDB utf8mb4 | 13.1 | Must | 0/1 | `database/schema.sql` (juga MariaDB 10.6+, OQ-35) | Done | `SchemaTest::testSupportedServerVersion`, `SchemaTest::testEngineAndCollation`; seluruh suite lulus di MySQL 8.0.46 dan MariaDB 10.11.14 |
 | NFR-02 | Mesin jadwal di server sebagai satu-satunya sumber kebenaran, satu transaksi | 13.1 | Must | 5 | `Scheduler`, `ScheduleService::recalculate` (transaksi + kunci baris project) | Done | `SchedulerTest`, `ScheduleServiceTest` |
 | NFR-03 | Tugas terjadwal: overdue/due soon, Hold reminder, ringkasan harian, antrean email | 13.1 | Must | 8/9 | `cron/overdue.php`, `cron/notifications.php`, `cron/daily-report.php` (`JobRunner`: GET_LOCK + `job_runs`) | Done | `DailyActivationTest`, `NotificationFlowTest`, `HoldLifecycleTest`::testHoldReminders… |
 | NFR-04 | PDF & Excel dibuat server (mPDF, PhpSpreadsheet) | 13.1 | Must | 2/6 | `modules/Report` | Done | `NprPdfTest`, `TimelineTest`, `ReportsTest` (Excel/PDF laporan) |

@@ -98,7 +98,7 @@ try {
         || (int) Db::value("SELECT COUNT(*) FROM information_schema.SCHEMA_PRIVILEGES WHERE GRANTEE = ? AND ? LIKE TABLE_SCHEMA AND {$writePrivs}", [$grantee, (string) Db::value('SELECT DATABASE()')]) > 0
         || (int) Db::value("SELECT COUNT(*) FROM information_schema.TABLE_PRIVILEGES WHERE GRANTEE = ? AND TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_logs' AND {$writePrivs}", [$grantee]) > 0;
     $check(!$canUpdate || count($triggers) >= 2, 'audit_logs append-only di level database (' . ($canUpdate ? 'trigger' : 'hak user') . ')',
-        'user aplikasi dapat UPDATE/DELETE audit_logs dan trigger hardening tidak ada — terapkan bin/db-grants.php atau database/hardening.sql', 'PERINGATAN');
+        'audit log append-only hanya dijaga aplikasi: user database berhak UPDATE/DELETE audit_logs dan trigger hardening tidak terpasang (di hosting bersama biasanya tidak tersedia; di server sendiri: bin/db-grants.php atau database/hardening.sql)', 'PERINGATAN');
     $super = false;
     try {
         $grants = implode("\n", Db::column('SHOW GRANTS FOR CURRENT_USER()'));
@@ -114,7 +114,7 @@ echo "== Tugas terjadwal\n";
 try {
     foreach ((new JobStatus())->all() as $j) {
         $last = $j['last'] ? $j['last']['started_at'] . ' (' . $j['last']['status'] . ')' : 'belum pernah';
-        $check($j['state'] === 'ok', "{$j['job']}: {$last}", "{$j['job']}: {$last} — periksa crontab (deploy/cron.d-npd) & storage/logs/cron.log", 'PERINGATAN');
+        $check($j['state'] === 'ok', "{$j['job']}: {$last}", "{$j['job']}: {$last} — periksa Cron Jobs (cPanel) atau deploy/cron.d-npd, dan storage/logs/cron.log", 'PERINGATAN');
     }
 } catch (\Throwable $e) {
     $report('PERINGATAN', 'status tugas tidak terbaca: ' . $e->getMessage());
@@ -152,6 +152,12 @@ if (!empty($opts['url'])) {
             'HTTP dialihkan ke HTTPS', 'HTTP tidak dialihkan ke HTTPS (status ' . $plain['status'] . ')');
     }
     $login = $req('GET', $base . '/login.php');
+    if ($login['status'] === 0 && stripos($login['error'], 'SSL') !== false) {
+        // sertifikat belum sah (mis. AutoSSL cPanel belum terbit) — pemeriksaan HTTP lain tidak bermakna
+        $report('GAGAL', 'sertifikat SSL ' . $base . ' belum valid (' . $login['error'] . ') — cek cPanel › SSL/TLS Status / AutoSSL, lalu ulangi');
+        printf("\nRingkasan: %d OK, %d peringatan, %d gagal\n", $results['OK'], $results['PERINGATAN'], $results['GAGAL']);
+        exit(1);
+    }
     if ($login['status'] !== 200) {
         $report('GAGAL', 'halaman login: status ' . $login['status'] . ' ' . $login['error']);
     } else {

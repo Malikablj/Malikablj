@@ -11,13 +11,18 @@ Sumber requirement: `PRD_NPD_Project_Control_v3.0.docx` — dipetakan di
 | Teknologi | Versi |
 | --- | --- |
 | PHP (native, tanpa framework) | 8.2 atau lebih baru (diuji 8.3) |
-| MySQL | 8.0+ (InnoDB, utf8mb4_unicode_ci) — diuji 8.0.46 |
+| MySQL / MariaDB | MySQL 8.0+ atau MariaDB 10.6+ (InnoDB, utf8mb4_unicode_ci) — diuji MySQL 8.0.46 & MariaDB 10.11 |
 | Frontend | HTML5, CSS3, Vanilla JavaScript (tanpa Node.js / build step) |
 | PDF / Excel / Email | mPDF, PhpSpreadsheet, PHPMailer (via Composer) |
 
 ## Status fase
 
 Lihat [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) bagian *Phase log*.
+
+## Instalasi di hosting cPanel
+
+Unduh/bangun paket `dist/npd-project-control-cpanel.zip` (`bash bin/build-release.sh`), unggah & ekstrak ke folder
+domain, lalu di Terminal cPanel jalankan `bash setup.sh`. Langkah lengkap: [`INSTALL-CPANEL.md`](INSTALL-CPANEL.md).
 
 ## Instalasi cepat (development)
 

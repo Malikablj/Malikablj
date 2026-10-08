@@ -7,6 +7,7 @@ declare(strict_types=1);
  *   --phase=prepare    cek PHP & ekstensi, lengkapi .env (database dari NPD_SETUP_DB_*, APP_KEY, sesi, backup),
  *                      siapkan folder storage, uji koneksi & versi server database
  *   --phase=has-admin  kode keluar 0 bila sudah ada Admin aktif, 3 bila belum
+ *   --phase=hardening  coba pasang trigger append-only audit_logs (dilewati bila hosting tidak memberi hak)
  *   --phase=finish     tampilkan baris Cron Jobs (--php=lokasi PHP CLI)
  */
 
@@ -87,6 +88,25 @@ if ($phase === 'has-admin') {
         exit(0);
     }
     exit(3);
+}
+
+if ($phase === 'hardening') {
+    // trigger append-only audit_logs (database/hardening.sql); butuh hak SUPER/log_bin_trust_function_creators bila
+    // binary log aktif — di hosting bersama biasanya tidak tersedia, maka cukup dicoba lalu dilewati
+    require $root . '/vendor/autoload.php';
+    $pdo = $connect($readEnv(), true);
+    $have = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = 'audit_logs'")->fetchColumn();
+    if ($have >= 2) {
+        $ok('trigger append-only audit_logs sudah terpasang');
+        exit(0);
+    }
+    try {
+        \App\Core\SqlScript::runFile($pdo, $root . '/database/hardening.sql');
+        $ok('trigger append-only audit_logs dipasang (UPDATE/DELETE audit log ditolak database)');
+    } catch (\RuntimeException $e) {
+        echo "  [INFO] trigger audit tidak dapat dipasang di hosting ini (" . (str_contains($e->getMessage(), '1419') || str_contains($e->getMessage(), 'SUPER') ? 'butuh hak SUPER' : 'hak tidak cukup') . ") — dilewati; audit log tetap append-only di aplikasi.\n";
+    }
+    exit(0);
 }
 
 if ($phase === 'finish') {

@@ -15,6 +15,10 @@ cron (php-cli) ── cron/*.php, bin/backup.php ─────┘
 Tidak ada Node.js, build step, atau daemon tambahan. Satu server cukup untuk ±30 pengguna dan < 200 project
 aktif (hasil uji kinerja: `docs/PERFORMANCE.md`).
 
+> **Hosting cPanel (folder domain = document root):** ikuti [`INSTALL-CPANEL.md`](../INSTALL-CPANEL.md) —
+> unggah zip dari `bin/build-release.sh`, lalu `bash setup.sh` di Terminal cPanel. `.htaccess` di folder aplikasi
+> mengarahkan semua alamat ke `public/`, sehingga tidak perlu mengubah document root.
+
 ## 2. Kebutuhan server
 
 | Komponen | Versi / catatan |
@@ -23,7 +27,7 @@ aktif (hasil uji kinerja: `docs/PERFORMANCE.md`).
 | Web server | Nginx ≥ 1.18 (diuji 1.24) **atau** Apache 2.4 + `mod_proxy_fcgi` (diuji 2.4.58) |
 | PHP | 8.2+ (diuji 8.3.6) — FPM untuk web, CLI untuk cron |
 | Ekstensi PHP | `pdo_mysql`, `mbstring`, `json`, `fileinfo`, `sodium`, `gd`, `zip`, `xml`, `dom`, `iconv`, `zlib`, `openssl` (`curl` untuk `bin/check-deployment.php --url`) |
-| MySQL | 8.0+ (diuji 8.0.46), InnoDB, `utf8mb4_unicode_ci` |
+| MySQL / MariaDB | MySQL 8.0+ (diuji 8.0.46) **atau** MariaDB 10.6+ (diuji 10.11.14 — seluruh 349 test lulus, termasuk backup dengan `mariadb-dump`), InnoDB, `utf8mb4_unicode_ci` |
 | Program | `mysqldump`, `mysql` (klien), `tar`, `cron`, `composer` (saat instalasi) |
 | Disk | kode + vendor ±420 MB; dokumen tumbuh sesuai unggahan (maks. 25 MB/file); backup harian × 30 hari |
 | Sertifikat | HTTPS wajib (sertifikat internal perusahaan atau Let's Encrypt) |

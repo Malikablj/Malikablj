@@ -62,6 +62,7 @@ unset NPD_SETUP_DB_PASS
 echo; echo "== 4/6 Tabel & data awal"
 NPD_SETUP=1 "$PHP" bin/install.php
 "$PHP" bin/migrate.php
+"$PHP" bin/setup.php --phase=hardening
 
 # --- 5: Admin pertama
 echo; echo "== 5/6 Admin pertama"
