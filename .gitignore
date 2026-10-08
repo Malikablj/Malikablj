@@ -24,3 +24,6 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Paket rilis (bin/build-release.sh)
+/dist/

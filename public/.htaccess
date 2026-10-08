@@ -1,0 +1,28 @@
+# NPD Project Control — web root. RewriteEngine di sini menghentikan pewarisan aturan rewrite dari
+# ../.htaccess (mencegah loop public/public/…). Tidak ada aturan rewrite lain yang dibutuhkan.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+</IfModule>
+
+Options -Indexes
+DirectoryIndex index.php
+
+# File tersembunyi (.htaccess, .user.ini) tidak disajikan
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Batas PHP saat PHP berjalan sebagai modul Apache (mod_php). PHP-FPM/CGI/LiteSpeed memakai .user.ini.
+<IfModule mod_php.c>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 30M
+    php_value memory_limit 256M
+    php_value max_execution_time 120
+    php_flag display_errors Off
+</IfModule>

@@ -18,9 +18,13 @@ final class SchemaTest extends DbTestCase
         'application_settings',
     ];
 
-    public function testMysqlVersion8(): void
+    public function testSupportedServerVersion(): void
     {
-        $this->assertMatchesRegularExpression('/^8\./', (string) Db::value('SELECT VERSION()'));
+        // MySQL 8.0+ (PRD §13.1) atau MariaDB 10.6+ (umum di hosting cPanel; SKIP LOCKED butuh 10.6)
+        $v = (string) Db::value('SELECT VERSION()');
+        preg_match('/^(\d+\.\d+)/', $v, $m);
+        $min = stripos($v, 'mariadb') !== false ? '10.6' : '8.0';
+        $this->assertTrue(version_compare($m[1] ?? '0', $min, '>='), "{$v} < {$min}");
     }
 
     public function testAllRequiredTablesExist(): void
@@ -38,6 +42,12 @@ final class SchemaTest extends DbTestCase
         $this->assertSame([], $bad);
         $badCols = Db::fetchAll("SELECT TABLE_NAME, COLUMN_NAME, COLLATION_NAME FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND COLLATION_NAME IS NOT NULL AND COLLATION_NAME <> 'utf8mb4_unicode_ci'");
+        // MariaDB menyimpan tipe JSON sebagai LONGTEXT utf8mb4_bin + CHECK JSON_VALID — itu benar, bukan salah collation
+        if (stripos((string) Db::value('SELECT VERSION()'), 'mariadb') !== false) {
+            preg_match_all('/^\s+([a-z_]+)\s+JSON\b/m', (string) file_get_contents(dirname(__DIR__, 2) . '/database/schema.sql'), $m);
+            $json = array_flip($m[1]);
+            $badCols = array_values(array_filter($badCols, static fn ($c) => !($c['COLLATION_NAME'] === 'utf8mb4_bin' && isset($json[$c['COLUMN_NAME']]))));
+        }
         $this->assertSame([], $badCols);
     }
 

@@ -67,18 +67,37 @@ final class Response
     public static function basePath(): string
     {
         static $base = null;
-        if ($base !== null) {
-            return $base;
+        return $base ??= self::detectBasePath($_SERVER, (string) realpath(dirname(__DIR__, 2) . '/public'));
+    }
+
+    /**
+     * Awalan URL aplikasi dari variabel server.
+     *  - php -S / document root = public/:           SCRIPT_NAME /login.php            → ''
+     *  - subfolder (mis. XAMPP):                       /npd/public/login.php             → /npd/public
+     *  - folder aplikasi sebagai document root (cPanel): .htaccess akar menulis ulang /login.php → public/login.php,
+     *    SCRIPT_NAME berisi /public/login.php tetapi URL asli (REQUEST_URI) /login.php  → ''
+     * @param array<string,mixed> $server
+     */
+    public static function detectBasePath(array $server, string $publicDir): string
+    {
+        $script = str_replace('\\', '/', (string) ($server['SCRIPT_NAME'] ?? ''));
+        $publicDir = str_replace('\\', '/', $publicDir);
+        $file = str_replace('\\', '/', (string) realpath((string) ($server['SCRIPT_FILENAME'] ?? '')));
+        if ($script === '' || $publicDir === '' || $file === '' || !str_starts_with($file, $publicDir . '/')) {
+            return '';
         }
-        // SCRIPT_NAME mis. /npd/public/settings/users.php → base /npd/public
-        $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
-        $publicDir = str_replace('\\', '/', (string) realpath(dirname(__DIR__, 2) . '/public'));
-        $file = str_replace('\\', '/', (string) realpath((string) ($_SERVER['SCRIPT_FILENAME'] ?? '')));
-        if ($script !== '' && $publicDir !== '' && $file !== '' && str_starts_with($file, $publicDir)) {
-            $relative = substr($file, strlen($publicDir)); // /settings/users.php
-            $base = rtrim(substr($script, 0, strlen($script) - strlen($relative)), '/');
-        } else {
-            $base = '';
+        $relative = substr($file, strlen($publicDir)); // /settings/users.php
+        $base = rtrim(substr($script, 0, max(0, strlen($script) - strlen($relative))), '/');
+        $uri = rawurldecode((string) parse_url((string) ($server['REQUEST_URI'] ?? ''), PHP_URL_PATH));
+        if ($uri !== '' && str_ends_with($relative, '/index.php') && str_ends_with($uri, '/')) {
+            $relative = substr($relative, 0, -strlen('index.php'));
+        }
+        if ($uri !== '' && str_ends_with($uri, $relative)) {
+            $fromUri = rtrim(substr($uri, 0, strlen($uri) - strlen($relative)), '/');
+            // REQUEST_URI berasal dari klien: hanya segmen jalur sederhana (tanpa //, ., ..) agar tidak menjadi open redirect
+            if (preg_match('#^(/[A-Za-z0-9_~-][A-Za-z0-9._~-]*)*$#', $fromUri) && !preg_match('#/\.\.?(/|$)#', $fromUri)) {
+                $base = $fromUri;
+            }
         }
         return $base;
     }

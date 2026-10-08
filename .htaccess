@@ -1,0 +1,33 @@
+# NPD Project Control — dipakai bila FOLDER APLIKASI ini menjadi document root (mis. folder domain di cPanel).
+# Semua request diarahkan ke public/; folder lain (config, storage, vendor, .env, …) tidak pernah dapat
+# diakses dari web. Bila document root sudah diarahkan ke public/, file ini tidak terpakai.
+
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Validasi sertifikat SSL (cPanel AutoSSL / Let's Encrypt) dibiarkan apa adanya
+    RewriteRule ^\.well-known/(acme-challenge|pki-validation)/ - [L]
+
+    # Paksa HTTPS (juga di belakang proxy/CDN yang mengirim X-Forwarded-Proto)
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:[0-9]+)?$ [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Semua request → public/ (public/.htaccess menghentikan pengulangan aturan ini)
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Tanpa mod_rewrite: tolak semuanya (gagal aman) daripada membuka isi folder aplikasi
+<IfModule !mod_rewrite.c>
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</IfModule>

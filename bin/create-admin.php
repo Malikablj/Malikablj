@@ -16,7 +16,8 @@ $opts = getopt('', ['name:', 'email:', 'title:']);
 
 $ask = static function (string $label, bool $hidden = false): string {
     fwrite(STDOUT, $label . ': ');
-    if ($hidden && DIRECTORY_SEPARATOR === '/' && posix_isatty(STDIN)) {
+    // stty butuh posix & shell_exec (sering dimatikan hosting) — tanpa itu input tetap terbaca, hanya terlihat
+    if ($hidden && DIRECTORY_SEPARATOR === '/' && function_exists('posix_isatty') && function_exists('shell_exec') && posix_isatty(STDIN)) {
         shell_exec('stty -echo');
         $v = trim((string) fgets(STDIN));
         shell_exec('stty echo');

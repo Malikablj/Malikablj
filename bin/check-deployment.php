@@ -61,17 +61,25 @@ if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
     $report('PERINGATAN', 'dijalankan sebagai root — hasil "dapat ditulis" kurang bermakna; jalankan: sudo -u www-data php bin/check-deployment.php');
 }
 $bpath = (string) Config::get('backup.path');
-$check(is_dir($bpath) && is_writable($bpath), 'folder backup siap: ' . $bpath, 'folder backup tidak ada / tidak dapat ditulis: ' . $bpath);
-foreach (['mysqldump', 'mysql', 'tar'] as $bin) {
-    $p = @proc_open([(string) Config::get('backup.' . $bin), '--version'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
-    $ok = is_resource($p) && (stream_get_contents($pipes[1]) . stream_get_contents($pipes[2])) !== '' && proc_close($p) === 0;
-    $check($ok, "{$bin} tersedia", "{$bin} tidak dapat dijalankan (cek " . strtoupper($bin) . '_BIN di .env)');
+$check(is_dir($bpath) && is_writable($bpath), 'folder backup siap: ' . $bpath, 'folder backup tidak ada / tidak dapat ditulis: ' . $bpath, 'PERINGATAN');
+$disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+if (!function_exists('proc_open') || in_array('proc_open', $disabled, true)) {
+    $report('PERINGATAN', 'proc_open dinonaktifkan pada PHP CLI — bin/backup.php tidak dapat berjalan (gunakan backup hosting/cPanel)');
+} else {
+    foreach (['mysqldump', 'mysql', 'tar'] as $bin) {
+        $p = @proc_open([(string) Config::get('backup.' . $bin), '--version'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $okBin = is_resource($p) && (stream_get_contents($pipes[1]) . stream_get_contents($pipes[2])) !== '' && proc_close($p) === 0;
+        $check($okBin, "{$bin} tersedia (untuk backup)", "{$bin} tidak dapat dijalankan — backup otomatis tidak jalan (cek " . strtoupper($bin) . '_BIN di .env)', 'PERINGATAN');
+    }
 }
 
 echo "== Database\n";
 try {
     $ver = (string) Db::value('SELECT VERSION()');
-    $check(version_compare($ver, '8.0', '>='), 'MySQL ' . $ver, 'MySQL ' . $ver . ' — butuh 8.0+');
+    $maria = stripos($ver, 'mariadb') !== false;
+    preg_match('/^(\d+\.\d+)/', $ver, $vm);
+    $check(version_compare($vm[1] ?? '0', $maria ? '10.6' : '8.0', '>='), ($maria ? 'MariaDB ' : 'MySQL ') . $ver,
+        ($maria ? 'MariaDB ' : 'MySQL ') . $ver . ' — butuh ' . ($maria ? 'MariaDB 10.6+' : 'MySQL 8.0+'));
     $expected = preg_match_all('/^CREATE TABLE IF NOT EXISTS/m', (string) file_get_contents($root . '/database/schema.sql'));
     $tables = (int) Db::value("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'");
     $check($tables >= $expected, "{$tables} tabel", "hanya {$tables} dari {$expected} tabel — jalankan bin/install.php / bin/migrate.php");

@@ -38,7 +38,19 @@ $pdo = new PDO($dsn, (string) $cfg['user'], (string) $cfg['pass'], [PDO::ATTR_ER
 if ($fresh) {
     $pdo->exec("DROP DATABASE IF EXISTS `{$dbName}`");
 }
-$pdo->exec("CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+// Hosting (cPanel/phpMyAdmin) biasanya sudah membuat database dan user tidak berhak CREATE DATABASE:
+// buat hanya bila belum ada.
+$exists = $pdo->prepare('SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?');
+$exists->execute([$dbName]);
+if ((int) $exists->fetchColumn() === 0) {
+    $pdo->exec("CREATE DATABASE `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+} else {
+    // database buatan panel bisa memakai charset bawaan server; tabel tetap utf8mb4 eksplisit, ini hanya merapikan bawaan
+    try {
+        $pdo->exec("ALTER DATABASE `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    } catch (PDOException) {
+    }
+}
 $pdo->exec("USE `{$dbName}`");
 
 $existingTables = (int) $pdo->query('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()')->fetchColumn();

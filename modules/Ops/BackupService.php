@@ -52,6 +52,9 @@ final class BackupService
     /** @return array<string,mixed> manifest + dir */
     public function create(string $destRoot): array
     {
+        if (!function_exists('proc_open')) {
+            throw new \RuntimeException('proc_open dinonaktifkan pada PHP CLI — mysqldump tidak dapat dijalankan; gunakan backup dari panel hosting');
+        }
         $dbName = (string) $this->db['name'];
         self::assertDbName($dbName);
         if (!is_dir($destRoot) && !mkdir($destRoot, 0700, true) && !is_dir($destRoot)) {
@@ -272,7 +275,7 @@ final class BackupService
         try {
             $err = tempnam(sys_get_temp_dir(), 'npddump');
             $proc = proc_open([$this->bin['mysqldump'], '--defaults-extra-file=' . $cnf, '--single-transaction', '--quick', '--routines', '--triggers',
-                '--no-tablespaces', '--hex-blob', '--default-character-set=utf8mb4', '--set-gtid-purged=OFF', $dbName],
+                '--no-tablespaces', '--hex-blob', '--default-character-set=utf8mb4', ...$this->gtidOption(), $dbName],
                 [1 => ['pipe', 'w'], 2 => ['file', $err, 'w']], $pipes);
             if (!is_resource($proc)) {
                 throw new \RuntimeException('mysqldump tidak dapat dijalankan (cek MYSQLDUMP_BIN)');
@@ -338,6 +341,23 @@ final class BackupService
         } finally {
             @unlink($cnf);
         }
+    }
+
+    /**
+     * --set-gtid-purged=OFF hanya dikenal mysqldump MySQL; mysqldump/mariadb-dump MariaDB (umum di hosting cPanel)
+     * menolak opsi tak dikenal, jadi opsi dipakai hanya bila didukung.
+     * @return list<string>
+     */
+    private function gtidOption(): array
+    {
+        $p = @proc_open([$this->bin['mysqldump'], '--help'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        if (!is_resource($p)) {
+            return [];
+        }
+        $help = (string) stream_get_contents($pipes[1]);
+        stream_get_contents($pipes[2]);
+        proc_close($p);
+        return str_contains($help, 'set-gtid-purged') ? ['--set-gtid-purged=OFF'] : [];
     }
 
     /**
