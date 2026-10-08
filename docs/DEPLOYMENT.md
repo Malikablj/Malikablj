@@ -105,6 +105,7 @@ sudo -u www-data php bin/check-deployment.php --url=https://npd.permataindokemas
 | `STORAGE_PATH` | kosong (= `./storage`) atau path di disk data |
 | `BACKUP_PATH`, `BACKUP_RETENTION_DAYS` | mis. `/var/backups/npd` (disk lain), `30` |
 | `BACKUP_DB_USER`, `BACKUP_DB_PASS` | akun `npd_backup` |
+| `BACKUP_METHOD` | `auto` (mysqldump bila `proc_open` tersedia, selain itu backup murni PHP), atau paksa `mysqldump` / `php` |
 | `MAIL_*` | bawaan SMTP; dapat diatur Admin di **Pengaturan › Notifikasi & Email** (password tersimpan terenkripsi) |
 
 ## 5. Web server

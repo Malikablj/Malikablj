@@ -55,6 +55,8 @@ return [
         'mysqldump'      => Env::get('MYSQLDUMP_BIN', 'mysqldump'),
         'mysql'          => Env::get('MYSQL_BIN', 'mysql'),
         'tar'            => Env::get('TAR_BIN', 'tar'),
+        // auto = mysqldump bila proc_open tersedia, selain itu dump PHP (PDO + ZipArchive); atau paksa: mysqldump | php
+        'method'         => Env::get('BACKUP_METHOD', 'auto'),
         // user MySQL khusus backup (SELECT, SHOW VIEW, TRIGGER); kosong = user aplikasi (trigger tidak ikut ter-dump)
         'db_user'        => Env::get('BACKUP_DB_USER', ''),
         'db_pass'        => Env::get('BACKUP_DB_PASS', ''),

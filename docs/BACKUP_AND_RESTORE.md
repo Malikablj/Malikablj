@@ -4,6 +4,19 @@ Memenuhi NFR-09 (PRD §13.4): backup harian database + file, retensi ≥ 30 hari
 
 ## 1. Apa yang di-backup
 
+**Dua metode, dipilih otomatis (`BACKUP_METHOD=auto`):**
+
+| Metode | Kapan | Cara kerja |
+| --- | --- | --- |
+| `mysqldump` | `proc_open` tersedia (server sendiri) | `mysqldump --single-transaction` + `tar` |
+| `php` | `proc_open` dimatikan hosting (umum di cPanel, termasuk server produksi PIK) | dump via PDO dalam satu snapshot transaksi (`START TRANSACTION WITH CONSISTENT SNAPSHOT`, setara `--single-transaction`; jumlah baris di manifest diambil dari snapshot yang sama), definisi tabel + data + trigger tanpa DEFINER; dokumen ke `documents.zip` (ZipArchive) |
+
+Pemulihan membaca dump dari kedua metode (importer PHP memahami format `mysqldump`, termasuk blok `DELIMITER`
+trigger), sehingga backup dari server satu dapat dipulihkan di server lain. Dipaksa lewat `.env`:
+`BACKUP_METHOD=mysqldump` atau `BACKUP_METHOD=php`. Diuji di `BackupRestoreTest` untuk empat kombinasi
+(mysqldump→mysqldump, php→php, dan silang keduanya), termasuk teks multi-baris, `NULL`, utf8mb4,
+`AUTO_INCREMENT`, dan trigger; serta manual dengan `php -d disable_functions=proc_open,exec,…`.
+
 `php bin/backup.php` (cron harian 01:30, `deploy/cron.d-npd`) membuat satu folder per backup:
 
 ```

@@ -97,6 +97,8 @@ alamat ke `public/`; folder lain (`.env`, `storage/`, `vendor/`, `config/`) tida
 ## Backup & pemulihan
 
 - Backup harian otomatis (cron 01:30) ke `~/npd-backups`, disimpan 30 hari: database + semua dokumen + manifest.
+  Bila hosting menonaktifkan `proc_open` (setup menampilkan *backup otomatis memakai mode PHP*), backup tetap berjalan
+  tanpa `mysqldump` — tidak perlu pengaturan tambahan. Uji kapan saja: `php bin/backup.php`.
 - Simpan salinan juga di luar server (unduh berkala, atau gunakan *cPanel › Backup*).
 - Pemulihan selalu ke database **baru** (buat dulu di cPanel), tidak pernah menimpa: lihat `docs/BACKUP_AND_RESTORE.md`.
 - Simpan isi file `.env` (terutama `APP_KEY`) di password manager perusahaan.

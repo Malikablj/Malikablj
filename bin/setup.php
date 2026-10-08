@@ -140,7 +140,7 @@ if (!is_file($root . '/vendor/autoload.php')) {
 }
 $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
 if (!function_exists('proc_open') || in_array('proc_open', $disabled, true)) {
-    $warn('proc_open dinonaktifkan pada PHP CLI — aplikasi berjalan normal, tetapi bin/backup.php tidak dapat menjalankan mysqldump. Gunakan cPanel › Backup atau minta hosting mengizinkan proc_open untuk CLI.');
+    $ok('proc_open dinonaktifkan hosting — backup otomatis memakai mode PHP (tanpa mysqldump/tar)');
 }
 
 echo "\n== 2/6 Konfigurasi .env\n";

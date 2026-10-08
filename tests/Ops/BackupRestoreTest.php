@@ -13,12 +13,24 @@ use Tests\Support\CliTestCase;
  */
 final class BackupRestoreTest extends CliTestCase
 {
-    public function testBackupRestoreRoundTripIsIdenticalAndNeverOverwrites(): void
+    /** @return array<string,array{0:string,1:string}> metode backup → metode pemulihan */
+    public static function methods(): array
+    {
+        return [
+            'mysqldump → mysqldump' => ['mysqldump', 'mysqldump'],
+            'php → php (proc_open dimatikan hosting)' => ['php', 'php'],
+            'mysqldump → importer php' => ['mysqldump', 'php'],
+            'dump php → klien mysql' => ['php', 'mysqldump'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('methods')]
+    public function testBackupRestoreRoundTripIsIdenticalAndNeverOverwrites(string $backupMethod, string $restoreMethod): void
     {
         $src = $this->freshDb('npd_test_ops');
         $storage = $this->tmpDir('npd_ops_storage');
         mkdir($storage . '/documents/2026/10', 0700, true);
-        $env = ['DB_NAME' => $src, 'STORAGE_PATH' => $storage];
+        $env = ['DB_NAME' => $src, 'STORAGE_PATH' => $storage, 'BACKUP_METHOD' => $backupMethod];
         $seed = $this->php('tests/Support/seed-http.php', [], $env);
         $this->assertSame(0, $seed['code'], $seed['out']);
         $seed = $this->php('tests/Support/seed-http-project.php', [], $env);
@@ -27,6 +39,15 @@ final class BackupRestoreTest extends CliTestCase
         file_put_contents($storage . '/documents/2026/10/d4e5f6.png', random_bytes(4096));
         $pdo = $this->db($src);
         $pdo->exec("INSERT INTO customers (code, name, invoice_address, shipping_address, phone) VALUES ('UNI', 'PT Ünicode – “Kutip” 日本', 'Jl. \\'Apostrof\\'', 'B', '1')");
+        // teks multi-baris, titik koma di akhir baris, backslash & NULL harus pulih persis
+        $pdo->exec("INSERT INTO customers (code, name, invoice_address, shipping_address, phone) VALUES ('MULTI', 'Baris satu;\\nBaris dua;\\r\\n\\\\ akhir;', 'A;', 'B', NULL)");
+        // trigger ikut di-backup bila server mengizinkan user membuatnya (hosting dengan log_bin_trust_function_creators)
+        $hasTrigger = true;
+        try {
+            $pdo->exec("CREATE TRIGGER trg_uji_customers BEFORE INSERT ON customers FOR EACH ROW SET NEW.phone = IFNULL(NEW.phone, '-')");
+        } catch (\PDOException) {
+            $hasTrigger = false; // 1419: butuh SUPER saat binary log aktif — jalur trigger diuji di test lain
+        }
 
         $dest = $this->tmpDir('npd_ops_backup');
         $r = $this->php('bin/backup.php', ['--dest=' . $dest], $env);
@@ -35,12 +56,14 @@ final class BackupRestoreTest extends CliTestCase
         $this->assertCount(1, $dirs);
         $bk = $dirs[0];
         $this->assertMatchesRegularExpression(BackupService::NAME_RE, basename($bk));
-        foreach (['database.sql.gz', 'documents.tar.gz', 'manifest.json'] as $f) {
+        foreach (['database.sql.gz', $backupMethod === 'php' ? 'documents.zip' : 'documents.tar.gz', 'manifest.json'] as $f) {
             $this->assertFileExists($bk . '/' . $f);
         }
         $this->assertSame('0700', substr(sprintf('%o', fileperms($bk)), -4), 'folder backup hanya untuk pemilik');
         $manifest = json_decode((string) file_get_contents($bk . '/manifest.json'), true);
+        $this->assertSame($backupMethod, $manifest['method']);
         $this->assertSame(2, $manifest['documents']['files']);
+        $this->assertSame($hasTrigger ? ['trg_uji_customers'] : [], $manifest['triggers']);
         $this->assertGreaterThan(40, count($manifest['tables']));
         $this->assertSame('success', $pdo->query("SELECT status FROM job_runs WHERE job = 'backup' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'tercatat di job_runs');
         $this->assertStringNotContainsString((string) (\App\Core\Config::get('db')['pass'] ?: '§tidak-ada§'), $r['out'], 'password tidak tercetak');
@@ -48,9 +71,14 @@ final class BackupRestoreTest extends CliTestCase
         // pulihkan ke database & folder baru
         $dst = $this->freshDb('npd_test_ops_restore', false);
         $docs = $storage . '/restore-docs';
+        $env['BACKUP_METHOD'] = $restoreMethod;
         $r = $this->php('bin/restore.php', ['--from=' . $bk, '--database=' . $dst, '--documents=' . $docs], $env);
+        if ($hasTrigger && $restoreMethod === 'mysqldump' && str_contains($r['out'], '1419')) {
+            $this->markTestSkipped('klien mysql tidak berhak membuat trigger di server ini');
+        }
         $this->assertSame(0, $r['code'], $r['out']);
         $this->assertStringContainsString('Cocok dengan manifest', $r['out']);
+        $this->assertStringContainsString('dipulihkan dengan metode ' . $restoreMethod, $r['out']);
 
         // identik: checksum tiap tabel (job_runs berbeda wajar: baris backup selesai setelah dump) + sha256 dokumen
         $tables = $pdo->query("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME <> 'job_runs'")->fetchAll(\PDO::FETCH_COLUMN);
@@ -64,6 +92,16 @@ final class BackupRestoreTest extends CliTestCase
         $restored = $this->db($dst);
         $this->assertSame($sum($pdo, $tables), $sum($restored, $tables), 'semua tabel identik');
         $this->assertSame('PT Ünicode – “Kutip” 日本', $restored->query("SELECT name FROM customers WHERE code = 'UNI'")->fetchColumn(), 'utf8mb4 utuh');
+        $this->assertSame("Baris satu;\nBaris dua;\r\n\\ akhir;", $restored->query("SELECT name FROM customers WHERE code = 'MULTI'")->fetchColumn(), 'teks multi-baris utuh');
+        $this->assertNull($restored->query("SELECT phone FROM customers WHERE code = 'MULTI'")->fetchColumn(), 'NULL tetap NULL');
+        $this->assertSame(
+            (int) $pdo->query("SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customers'")->fetchColumn(),
+            (int) $restored->query("SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customers'")->fetchColumn(),
+            'penghitung AUTO_INCREMENT ikut pulih'
+        );
+        if ($hasTrigger) {
+            $this->assertSame(['trg_uji_customers'], $restored->query("SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()")->fetchAll(\PDO::FETCH_COLUMN));
+        }
         foreach (['2026/10/a1b2c3.pdf', '2026/10/d4e5f6.png'] as $f) {
             $this->assertSame(hash_file('sha256', $storage . '/documents/' . $f), hash_file('sha256', $docs . '/' . $f), $f);
         }

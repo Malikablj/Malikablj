@@ -33,7 +33,7 @@ $from = rtrim((string) $opts['from'], '/\\');
 $svc = new BackupService();
 try {
     $manifest = $svc->readManifest($from);
-    echo "Backup {$manifest['database']} dibuat {$manifest['created_at']} (aplikasi v{$manifest['app_version']}, MySQL {$manifest['mysql_version']})\n";
+    echo "Backup {$manifest['database']} dibuat {$manifest['created_at']} (aplikasi v{$manifest['app_version']}, server {$manifest['mysql_version']}, metode " . ($manifest['method'] ?? 'mysqldump') . "; dipulihkan dengan metode {$svc->method()})\n";
     $t = microtime(true);
     $r = isset($opts['verify-only'])
         ? $svc->verify($manifest, (string) $opts['database'], (string) $opts['documents'])
@@ -44,9 +44,9 @@ try {
 }
 printf("%s %s: %d tabel, %d baris, %d dokumen di %s (%.1f dtk)\n", isset($opts['verify-only']) ? 'Verifikasi' : 'Dipulihkan ke',
     $r['database'], $r['tables'], $r['rows'], $r['doc_files'], $r['documents'], microtime(true) - $t);
-if (!in_array('trg_audit_logs_no_update', $r['triggers'], true)) {
-    echo "Catatan: trigger append-only audit_logs tidak ada di hasil pemulihan. Bila produksi memakai hardening,\n"
-        . "jalankan: mysql -u <admin> -p {$r['database']} < database/hardening.sql (dan pakai BACKUP_DB_USER ber-hak TRIGGER).\n";
+if (isset($opts['without-triggers']) && ($manifest['triggers'] ?? []) !== []) {
+    echo "Catatan: trigger dari backup (" . implode(', ', $manifest['triggers']) . ") sengaja dilewati. Pasang trigger audit setelah .env\n"
+        . "diarahkan ke database ini: php bin/setup.php --phase=hardening  (atau mysql … < database/hardening.sql sebagai admin).\n";
 }
 if ($r['mismatches']) {
     fwrite(STDERR, "TIDAK COCOK dengan manifest:\n - " . implode("\n - ", $r['mismatches']) . PHP_EOL);

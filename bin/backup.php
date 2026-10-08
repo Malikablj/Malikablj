@@ -28,8 +28,9 @@ exit(JobRunner::run('backup', static function () use ($dest, $keep): string {
     $m = $svc->create($dest);
     $removed = $svc->prune($dest, $keep);
     $mb = static fn (int $b): string => number_format($b / 1048576, 1) . ' MB';
-    return sprintf('%s: %d tabel, %d baris, %d dokumen (%s); arsip DB %s%s; retensi %d hari, dihapus: %s',
-        basename($m['dir']), count($m['tables']), array_sum($m['tables']), $m['documents']['files'], $mb($m['documents']['bytes']),
-        $mb($m['files']['database.sql.gz']['bytes']), isset($m['files']['documents.tar.gz']) ? ', arsip dokumen ' . $mb($m['files']['documents.tar.gz']['bytes']) : '',
+    $docArchive = $m['files']['documents.tar.gz'] ?? $m['files']['documents.zip'] ?? null;
+    return sprintf('%s (%s): %d tabel, %d baris, %d dokumen (%s); arsip DB %s%s; retensi %d hari, dihapus: %s',
+        basename($m['dir']), $m['method'], count($m['tables']), array_sum($m['tables']), $m['documents']['files'], $mb($m['documents']['bytes']),
+        $mb($m['files']['database.sql.gz']['bytes']), $docArchive ? ', arsip dokumen ' . $mb($docArchive['bytes']) : '',
         $keep, $removed ? implode(', ', $removed) : '-');
 }));

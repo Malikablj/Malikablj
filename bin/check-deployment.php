@@ -62,14 +62,13 @@ if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
 }
 $bpath = (string) Config::get('backup.path');
 $check(is_dir($bpath) && is_writable($bpath), 'folder backup siap: ' . $bpath, 'folder backup tidak ada / tidak dapat ditulis: ' . $bpath, 'PERINGATAN');
-$disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
-if (!function_exists('proc_open') || in_array('proc_open', $disabled, true)) {
-    $report('PERINGATAN', 'proc_open dinonaktifkan pada PHP CLI — bin/backup.php tidak dapat berjalan (gunakan backup hosting/cPanel)');
+if (!\App\Ops\BackupService::procAvailable() || (new \App\Ops\BackupService())->method() === 'php') {
+    $report('OK', 'backup memakai mode PHP (PDO + zip; proc_open/mysqldump tidak diperlukan)');
 } else {
     foreach (['mysqldump', 'mysql', 'tar'] as $bin) {
         $p = @proc_open([(string) Config::get('backup.' . $bin), '--version'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         $okBin = is_resource($p) && (stream_get_contents($pipes[1]) . stream_get_contents($pipes[2])) !== '' && proc_close($p) === 0;
-        $check($okBin, "{$bin} tersedia (untuk backup)", "{$bin} tidak dapat dijalankan — backup otomatis tidak jalan (cek " . strtoupper($bin) . '_BIN di .env)', 'PERINGATAN');
+        $check($okBin, "{$bin} tersedia (untuk backup)", "{$bin} tidak dapat dijalankan — set BACKUP_METHOD=php di .env, atau cek " . strtoupper($bin) . '_BIN', 'PERINGATAN');
     }
 }
 
