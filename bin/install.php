@@ -74,6 +74,6 @@ if (isset($opts['with-hardening'])) {
     echo "Hardening diterapkan ({$n3} pernyataan).\n";
 }
 $users = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
-if ($users === 0) {
+if ($users === 0 && !getenv('NPD_SETUP')) { // setup.sh membuat Admin pada langkah berikutnya
     echo "Belum ada user. Buat Admin pertama: php bin/create-admin.php\n";
 }

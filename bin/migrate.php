@@ -26,8 +26,12 @@ use App\Core\SqlScript;
 $opts = getopt('', ['status', 'dir:']);
 $dir = rtrim((string) ($opts['dir'] ?? dirname(__DIR__) . '/database/migrations'), '/');
 if (!is_dir($dir)) {
-    fwrite(STDERR, "Folder migrasi tidak ada: {$dir}\n");
-    exit(1);
+    if (isset($opts['dir'])) {
+        fwrite(STDERR, "Folder migrasi tidak ada: {$dir}\n");
+        exit(1);
+    }
+    echo "Tidak ada migrasi baru.\n"; // paket rilis tanpa file migrasi
+    exit(0);
 }
 $pdo = Db::pdo();
 if (!(int) Db::value("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'schema_migrations'")) {

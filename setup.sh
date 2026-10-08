@@ -60,7 +60,7 @@ unset NPD_SETUP_DB_PASS
 
 # --- 4: tabel & data awal + migrasi (tidak menghapus data)
 echo; echo "== 4/6 Tabel & data awal"
-"$PHP" bin/install.php
+NPD_SETUP=1 "$PHP" bin/install.php
 "$PHP" bin/migrate.php
 
 # --- 5: Admin pertama

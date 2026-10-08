@@ -30,6 +30,17 @@ echo "== composer install --no-dev"
 (cd "$STAGE" && composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist -q)
 
 echo "== pangkas vendor"
+# Bila composer jatuh ke instalasi dari source (dist tidak dapat diunduh), samakan isi paket dengan dist resmi:
+# bangun ulang dari git archive (aturan export-ignore paket membuang tests/docs/.git).
+for g in "$STAGE"/vendor/*/*/.git; do
+    [ -d "$g" ] || continue
+    pkg="$(dirname "$g")"
+    tmp="$pkg.dist"
+    mkdir "$tmp"
+    git -C "$pkg" archive --format=tar HEAD | tar -x -C "$tmp"
+    rm -rf "$pkg"
+    mv "$tmp" "$pkg"
+done
 # PDF memakai font DejaVu saja (PdfFactory default_font = dejavusans); font lain ±80 MB tidak dipakai
 find "$STAGE/vendor/mpdf/mpdf/ttfonts" -type f ! -name 'DejaVu*' -delete
 # dokumentasi/sampel paket tidak dibutuhkan saat berjalan
