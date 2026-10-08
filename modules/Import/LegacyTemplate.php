@@ -12,6 +12,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -219,11 +220,24 @@ final class LegacyTemplate
     /** @param array<string,mixed> $lists */
     private static function guideSheet(Worksheet $sh, array $lists): void
     {
-        $sh->getColumnDimension('A')->setWidth(24);
-        $sh->getColumnDimension('B')->setWidth(30);
+        $sh->getColumnDimension('A')->setWidth(36);
+        $sh->getColumnDimension('B')->setWidth(28);
         $sh->getColumnDimension('C')->setWidth(14);
-        $sh->getColumnDimension('D')->setWidth(110);
+        $sh->getColumnDimension('D')->setWidth(100);
+        $sh->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)->setPaperSize(PageSetup::PAPERSIZE_A4)->setFitToWidth(1)->setFitToHeight(0);
         $r = 1;
+        // sel gabungan A:D tidak menyesuaikan tinggi otomatis di Excel → tinggi baris dihitung dari panjang teks
+        $wide = static function (string $text, bool $bold = false, float $size = 11) use ($sh, &$r): void {
+            $sh->setCellValueExplicit('A' . $r, $text, DataType::TYPE_STRING);
+            $sh->mergeCells("A$r:D$r");
+            $st = $sh->getStyle("A$r:D$r");
+            $st->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+            if ($bold) {
+                $st->getFont()->setBold(true)->setSize($size);
+            }
+            $sh->getRowDimension($r)->setRowHeight(max(1, (int) ceil(mb_strlen($text) / 160)) * ($size > 11 ? 20 : 15));
+            $r++;
+        };
         $line = static function (string $a, string $b = '', string $c = '', string $d = '', bool $bold = false) use ($sh, &$r): void {
             foreach (['A' => $a, 'B' => $b, 'C' => $c, 'D' => $d] as $col => $v) {
                 if ($v !== '') {
@@ -236,12 +250,10 @@ final class LegacyTemplate
             $sh->getStyle("A$r:D$r")->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
             $r++;
         };
-        $sh->setCellValueExplicit('A1', 'Template Impor Data Project Lama — NPD Project Control v3.0 (PT. Permata Indo Kemas)', DataType::TYPE_STRING);
-        $sh->getStyle('A1')->getFont()->setBold(true)->setSize(14);
-        $r = 2;
-        $line('Diunduh: ' . Clock::todayString() . ' — daftar customer, user, dan proses di sheet Daftar sesuai data aplikasi saat itu.');
+        $wide('Template Impor Data Project Lama — NPD Project Control v3.0 (PT. Permata Indo Kemas)', true, 14);
+        $wide('Diunduh: ' . Clock::todayString() . ' — daftar customer, user, dan proses di sheet Daftar sesuai data aplikasi saat itu.');
         $r++;
-        $line('LANGKAH', '', '', '', true);
+        $wide('LANGKAH', true);
         foreach ([
             '1. Buat dulu semua Customer (Pengaturan › Customer) dan User (Pengaturan › User), lalu unduh ulang template ini agar dropdown berisi data terbaru.',
             '2. Sheet Project: satu baris per project/NPR. Sheet Part: satu baris per part. Sheet Proses: satu baris per proses yang SUDAH Selesai, sedang Berjalan, atau Dilewati.',
@@ -249,11 +261,10 @@ final class LegacyTemplate
             '4. Unggah di aplikasi: Pengaturan › Impor Data Lama › Periksa file. Sistem menampilkan semua kesalahan per sheet & baris tanpa menyimpan apa pun.',
             '5. Bila tidak ada kesalahan, klik Impor. Semua project disimpan sekaligus; bila satu gagal, tidak ada yang tersimpan.',
         ] as $t) {
-            $line($t);
-            $sh->mergeCells('A' . ($r - 1) . ':D' . ($r - 1));
+            $wide($t);
         }
         $r++;
-        $line('ATURAN PENTING', '', '', '', true);
+        $wide('ATURAN PENTING', true);
         foreach ([
             'Tanggal: isi sebagai tanggal Excel (mis. 25/03/2026) atau teks 2026-03-25 / 25/03/2026. Tidak boleh di masa depan (kecuali Target Finish dan Rencana Selesai).',
             'Kolom bertanda * wajib. Kolom kuning wajib pada kondisi tertentu (lihat keterangan). Arahkan kursor ke judul kolom untuk melihat keterangan.',
@@ -269,11 +280,10 @@ final class LegacyTemplate
             'Hold/Batal tercatat pada tanggal impor; tulis tanggal aslinya di kolom Alasan bila perlu.',
             'No. NPR / Kode Project lama dipakai apa adanya (harus unik). Nomor berformat sistem (001/PIK/NPR/X/2026, NPD-2026-001) membuat penomoran berikutnya melanjutkan dari nomor tertinggi.',
         ] as $t) {
-            $line('• ' . $t);
-            $sh->mergeCells('A' . ($r - 1) . ':D' . ($r - 1));
+            $wide('• ' . $t);
         }
         $r++;
-        $line('KOLOM', '', '', '', true);
+        $wide('KOLOM', true);
         $line('Sheet', 'Kolom', 'Wajib', 'Keterangan', true);
         foreach (LegacyFormat::COLUMNS as $sheet => $cols) {
             foreach ($cols as [$title, $required, , , $note]) {
@@ -281,17 +291,17 @@ final class LegacyTemplate
             }
         }
         $r++;
-        $line('PROSES (template workflow aktif)', '', '', '', true);
+        $wide('PROSES (template workflow aktif)', true);
         $line('Proses', 'Berlaku untuk', 'Durasi bawaan', 'PIC (role) / Boleh dilewati', true);
         foreach ($lists['processes'] as $p) {
             $line($p['option'], $p['scope'], (string) $p['duration'] . ' hari kerja',
                 'PIC: ' . $p['role'] . ' · Boleh dilewati: ' . ($p['skippable'] ? 'Ya' . ($p['skip_group'] !== '' ? ' (grup ' . $p['skip_group'] . ')' : '') : 'Tidak') . ($p['finish'] ? ' · Selesai = part selesai' : ''));
         }
         if (!$lists['gate']) {
-            $line('Gate Assembly / Fit Test (G1) tidak aktif di template project, sehingga tidak perlu diisi.');
+            $wide('Gate Assembly / Fit Test (G1) tidak aktif di template project, sehingga tidak perlu diisi.');
         }
         $r++;
-        $line('CONTOH PENGISIAN (contoh saja — jangan disalin; sheet ini tidak ikut diimpor)', '', '', '', true);
+        $wide('CONTOH PENGISIAN (contoh saja — jangan disalin; sheet ini tidak ikut diimpor)', true);
         foreach ([
             ['Project', 'Ref Project = PRJ-2025-014 · Nama = Botol Serum 30ml · Kode Customer = (dari daftar) · Status Project = Berjalan · Tanggal NPR = 03/02/2025'],
             ['Part', 'PRJ-2025-014 · Body · New Mold      |      PRJ-2025-014 · Cap · Subcont'],
