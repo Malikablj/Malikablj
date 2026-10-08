@@ -26,8 +26,9 @@ final class MigrationTest extends CliTestCase
         $this->assertSame(0, $r['code'], $r['out']);
         $this->assertMatchesRegularExpression('/OK\s+20261008_001_customer_npwp\.sql.*\n.*OK\s+20261008_002_backfill\.sql/s', $r['out'], 'urut sesuai nama file');
         $this->assertSame('-', $pdo->query("SELECT npwp FROM customers WHERE code = 'MIG1'")->fetchColumn(), 'data lama tetap ada & terisi');
+        // (migrasi bawaan aplikasi sudah tercatat oleh instalasi baru; yang diperiksa hanya migrasi folder test)
         $this->assertSame(['20261008_001_customer_npwp.sql', '20261008_002_backfill.sql'],
-            $pdo->query('SELECT migration FROM schema_migrations ORDER BY migration')->fetchAll(\PDO::FETCH_COLUMN));
+            $pdo->query("SELECT migration FROM schema_migrations WHERE migration IN ('20261008_001_customer_npwp.sql', '20261008_002_backfill.sql') ORDER BY migration")->fetchAll(\PDO::FETCH_COLUMN));
 
         // dijalankan ulang → tidak ada perubahan
         $r = $this->php('bin/migrate.php', ['--dir=' . $dir], $env);

@@ -21,6 +21,25 @@ final class Notifier
     /** Jenis yang boleh dikirim lewat email (kolom Email = Ya pada PRD §7.3). */
     public const EMAIL_TYPES = ['project_assigned', 'project_overdue', 'npr_submitted', 'npr_returned', 'hold_reminder'];
 
+    private static int $muted = 0;
+
+    /**
+     * Jalankan $fn tanpa membuat notifikasi/email (impor data lama: ratusan proses tidak membanjiri PIC;
+     * tugas tetap terlihat di dasbor dan pengingat overdue tetap berjalan lewat cron).
+     * @template T
+     * @param callable():T $fn
+     * @return T
+     */
+    public static function muted(callable $fn): mixed
+    {
+        self::$muted++;
+        try {
+            return $fn();
+        } finally {
+            self::$muted--;
+        }
+    }
+
     /**
      * @param list<int> $userIds
      * @param array<string,string|int|float> $params parameter teks (tidak diterjemahkan: nama project, part, dll.)
@@ -41,7 +60,7 @@ final class Notifier
         array $data = [],
     ): int {
         $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds), static fn ($id) => $id > 0 && $id !== $excludeUserId)));
-        if ($userIds === []) {
+        if ($userIds === [] || self::$muted > 0) {
             return 0;
         }
         $users = Db::fetchAll('SELECT id, name, email, language FROM users WHERE is_active = 1 AND id IN ' . Db::in($userIds), $userIds);

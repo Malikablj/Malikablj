@@ -88,6 +88,7 @@ return [
     'nav.masters' => 'NPR Masters',
     'nav.workflow' => 'Workflow',
     'nav.holidays' => 'Holidays',
+    'nav.import' => 'Import Legacy Data',
     'nav.notif_settings' => 'Notifications & Email',
     'nav.email_queue' => 'Email Queue',
     'nav.main' => 'Main navigation',
@@ -249,5 +250,6 @@ return [
     'perm.user.manage' => 'User management',
     'perm.customer.manage' => 'Customer management',
     'perm.audit.view_full' => 'View full system audit log',
+    'perm.project.import' => 'Import legacy project data from Excel',
     'perm.kpi.view' => 'View KPI per PIC',
 ];

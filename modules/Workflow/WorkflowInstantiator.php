@@ -58,39 +58,23 @@ final class WorkflowInstantiator
     public function createProjectProcesses(int $projectId, string $nprCreatedAt, ?User $actor = null): void
     {
         $tpl = $this->currentVersion('project');
-        $project = Db::fetch('SELECT * FROM projects WHERE id = ?', [$projectId]);
         $cal = $this->schedule->calendar();
         $now = Clock::now();
         $today = $now->format('Y-m-d');
-        Db::update('projects', ['gate_enabled' => (int) $tpl['gate_enabled']], ['id' => $projectId]);
-        $ids = [];
+        $duration = [];
         foreach ($this->steps((int) $tpl['version_id']) as $step) {
-            if ($step['step_type'] === 'gate' && !(int) $tpl['gate_enabled']) {
-                continue; // gate dinonaktifkan di template
-            }
-            $pic = $this->defaultPic((string) $step['pic_role_code'], $project, null);
-            $data = [];
-            $duration = (int) $step['default_duration'];
-            if ($step['code'] === 'P1') {
-                $start = substr($nprCreatedAt, 0, 10);
-                $ps = $cal->nextWorkingDay($start);
-                $data = ['status' => 'completed', 'actual_start' => $start, 'actual_finish' => $today, 'planned_start' => $ps,
-                         'planned_finish' => $cal->finishFromStart($ps, $duration), 'activated_at' => $nprCreatedAt,
-                         'completed_at' => $now->format('Y-m-d H:i:s'), 'completed_by' => $actor?->id, 'outcome' => 'submitted'];
-            } elseif ($step['code'] === 'P2') {
-                $ps = $cal->nextWorkingDay($today);
-                $data = ['status' => 'current', 'actual_start' => $today, 'planned_start' => $ps,
-                         'planned_finish' => $cal->finishFromStart($ps, $duration), 'activated_at' => $now->format('Y-m-d H:i:s')];
-            }
-            $ids[$step['code']] = $this->insertProcess($step, $projectId, null, $pic, $data);
+            $duration[(string) $step['code']] = (int) $step['default_duration'];
         }
-        foreach ($this->steps((int) $tpl['version_id']) as $step) {
-            foreach ($step['deps'] as $d) {
-                if (isset($ids[$step['code']], $ids[$d['predecessor_code']])) {
-                    $this->addDep($ids[$step['code']], $ids[$d['predecessor_code']], (string) $d['dep_type'], (int) $d['lag_days']);
-                }
-            }
-        }
+        $start = substr($nprCreatedAt, 0, 10);
+        $ps1 = $cal->nextWorkingDay($start);
+        $ps2 = $cal->nextWorkingDay($today);
+        $ids = $this->insertProjectProcesses($projectId, [
+            'P1' => ['status' => 'completed', 'actual_start' => $start, 'actual_finish' => $today, 'planned_start' => $ps1,
+                     'planned_finish' => $cal->finishFromStart($ps1, $duration['P1'] ?? 1), 'activated_at' => $nprCreatedAt,
+                     'completed_at' => $now->format('Y-m-d H:i:s'), 'completed_by' => $actor?->id, 'outcome' => 'submitted'],
+            'P2' => ['status' => 'current', 'actual_start' => $today, 'planned_start' => $ps2,
+                     'planned_finish' => $cal->finishFromStart($ps2, $duration['P2'] ?? 1), 'activated_at' => $now->format('Y-m-d H:i:s')],
+        ]);
         // run KPI: P1 selesai (PIC Sales), P2 dibuka
         foreach (['P1', 'P2'] as $code) {
             if (isset($ids[$code])) {
@@ -103,6 +87,39 @@ final class WorkflowInstantiator
         }
         Db::update('projects', ['status' => 'on_progress'], ['id' => $projectId]);
         $this->schedule->recalculate($projectId, 'initial', null, null, $actor, 'plan');
+    }
+
+    /**
+     * Sisipkan proses level project dari template "project" versi aktif beserta dependency bawaannya
+     * (G1 hanya bila gate aktif di template). $data[kode] = kolom tambahan/penimpa per proses
+     * (status, tanggal aktual, PIC: 'pic_user_id'). Tidak menghitung jadwal.
+     * @param array<string,array<string,mixed>> $data
+     * @return array<string,int> kode → id proses
+     */
+    public function insertProjectProcesses(int $projectId, array $data = []): array
+    {
+        $tpl = $this->currentVersion('project');
+        $project = Db::fetch('SELECT * FROM projects WHERE id = ?', [$projectId]);
+        Db::update('projects', ['gate_enabled' => (int) $tpl['gate_enabled']], ['id' => $projectId]);
+        $steps = $this->steps((int) $tpl['version_id']);
+        $ids = [];
+        foreach ($steps as $step) {
+            if ($step['step_type'] === 'gate' && !(int) $tpl['gate_enabled']) {
+                continue; // gate dinonaktifkan di template
+            }
+            $extra = $data[(string) $step['code']] ?? [];
+            $pic = array_key_exists('pic_user_id', $extra) ? $extra['pic_user_id'] : $this->defaultPic((string) $step['pic_role_code'], $project, null);
+            unset($extra['pic_user_id']);
+            $ids[$step['code']] = $this->insertProcess($step, $projectId, null, $pic, $extra);
+        }
+        foreach ($steps as $step) {
+            foreach ($step['deps'] as $d) {
+                if (isset($ids[$step['code']], $ids[$d['predecessor_code']])) {
+                    $this->addDep($ids[$step['code']], $ids[$d['predecessor_code']], (string) $d['dep_type'], (int) $d['lag_days']);
+                }
+            }
+        }
+        return $ids;
     }
 
     /**
@@ -120,9 +137,36 @@ final class WorkflowInstantiator
             return; // sudah diinstansiasi
         }
         $projectId = (int) $part['project_id'];
-        $project = Db::fetch('SELECT * FROM projects WHERE id = ?', [$projectId]);
         $tpl = $this->currentVersion((string) $part['part_type']);
         $start = $startDate ?? Clock::todayString();
+        $data = [];
+        if ($part['needs_new_masterbatch'] !== null && (int) $part['needs_new_masterbatch'] === 0) {
+            foreach ($this->steps((int) $tpl['version_id']) as $step) {
+                if ($step['skip_group'] === 'MB') {
+                    $data[(string) $step['code']] = ['status' => 'skipped', 'skip_reason' => I18n::t('wf.skip_no_masterbatch', [], 'id'), 'skipped_at' => Clock::nowString(), 'skipped_by' => $actor?->id];
+                }
+            }
+        }
+        $ids = $this->insertPartProcesses($projectPartId, $start, $data);
+        AuditLogger::log('part.start', 'project_part', $projectPartId, null, ['template' => $part['part_type'], 'version' => (int) $tpl['version_no'], 'start_date' => $start, 'processes' => count($ids)], null, $projectId, $actor);
+        $this->schedule->recalculate($projectId, 'initial', null, null, $actor, 'plan');
+        $this->schedule->createBaseline($projectId, $projectPartId, I18n::t('sched.baseline_v1', [], 'id'), $actor);
+    }
+
+    /**
+     * Instansiasi proses part dari template versi aktif sesuai jenis part: status part On Progress dengan
+     * tanggal mulai $start, proses (PIC bawaan per peran), dependency efektif, kaitan ke gate & Project Finish.
+     * $data[kode] = kolom tambahan/penimpa per proses (status, tanggal aktual, PIC: 'pic_user_id').
+     * Tidak menghitung jadwal dan tidak membuat baseline.
+     * @param array<string,array<string,mixed>> $data
+     * @return array<string,int> kode → id proses
+     */
+    public function insertPartProcesses(int $projectPartId, string $start, array $data = []): array
+    {
+        $part = Db::fetch('SELECT * FROM project_parts WHERE id = ?', [$projectPartId]);
+        $projectId = (int) $part['project_id'];
+        $project = Db::fetch('SELECT * FROM projects WHERE id = ?', [$projectId]);
+        $tpl = $this->currentVersion((string) $part['part_type']);
         Db::update('project_parts', ['workflow_template_version_id' => (int) $tpl['version_id'], 'start_date' => $start, 'status' => 'on_progress'], ['id' => $projectPartId]);
 
         $steps = $this->steps((int) $tpl['version_id']);
@@ -130,12 +174,10 @@ final class WorkflowInstantiator
         $milestone = null;
         $finish = null;
         foreach ($steps as $step) {
-            $pic = $this->defaultPic((string) $step['pic_role_code'], $project, $part);
-            $data = [];
-            if ($step['skip_group'] === 'MB' && $part['needs_new_masterbatch'] !== null && (int) $part['needs_new_masterbatch'] === 0) {
-                $data = ['status' => 'skipped', 'skip_reason' => I18n::t('wf.skip_no_masterbatch', [], 'id'), 'skipped_at' => Clock::nowString(), 'skipped_by' => $actor?->id];
-            }
-            $ids[$step['code']] = $this->insertProcess($step, $projectId, $projectPartId, $pic, $data);
+            $extra = $data[(string) $step['code']] ?? [];
+            $pic = array_key_exists('pic_user_id', $extra) ? $extra['pic_user_id'] : $this->defaultPic((string) $step['pic_role_code'], $project, $part);
+            unset($extra['pic_user_id']);
+            $ids[$step['code']] = $this->insertProcess($step, $projectId, $projectPartId, $pic, $extra);
             if ((int) $step['is_gate_milestone'] === 1) {
                 $milestone = $ids[$step['code']];
             }
@@ -175,9 +217,16 @@ final class WorkflowInstantiator
                 $this->addDep($projectLevel['PF'], $projectLevel['G1'], 'FS', 0);
             }
         }
-        AuditLogger::log('part.start', 'project_part', $projectPartId, null, ['template' => $part['part_type'], 'version' => (int) $tpl['version_no'], 'start_date' => $start, 'processes' => count($ids)], null, $projectId, $actor);
-        $this->schedule->recalculate($projectId, 'initial', null, null, $actor, 'plan');
-        $this->schedule->createBaseline($projectId, $projectPartId, I18n::t('sched.baseline_v1', [], 'id'), $actor);
+        return $ids;
+    }
+
+    /**
+     * Dependency efektif step aktif sebuah versi template (predecessor nonaktif dijembatani), berkunci kode step.
+     * @return array<string,list<array<string,mixed>>>
+     */
+    public function effectiveDeps(int $versionId): array
+    {
+        return WorkflowTemplateService::resolvedDeps($this->allSteps($versionId));
     }
 
     /** Lepas part yang dibatalkan dari gate & Project Finish (PRD §5.7: predecessor gate = part tidak dibatalkan). */

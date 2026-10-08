@@ -26,6 +26,7 @@ $__items = [
 $__settings = [
     ['users', 'settings/users.php', 'nav.users', 'users', 'user.manage'],
     ['customers', 'settings/customers.php', 'nav.customers', 'folder', 'customer.manage'],
+    ['import', 'settings/import.php', 'nav.import', 'upload', 'project.import'],
     ['masters', 'settings/masters.php', 'nav.masters', 'layers', 'settings.manage'],
     ['workflow', 'settings/workflow.php', 'nav.workflow', 'gantt', 'settings.manage'],
     ['holidays', 'settings/holidays.php', 'nav.holidays', 'calendar', 'settings.manage'],

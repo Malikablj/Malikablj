@@ -64,6 +64,7 @@ return [
     'user.manage'           => ['settings', 'Manajemen user', ['admin' => 'all']],
     'customer.manage'       => ['settings', 'Manajemen customer', ['admin' => 'all']],
     'audit.view_full'       => ['settings', 'Melihat audit log sistem penuh', ['admin' => 'all']],
+    'project.import'        => ['settings', 'Impor data project lama dari Excel', ['admin' => 'all']],
 
     // --- KPI per PIC: Admin & Management saja (FR-RPT-04) ---
     'kpi.view'              => ['report', 'Melihat KPI per PIC', ['admin' => 'all', 'management' => 'all']],

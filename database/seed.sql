@@ -186,6 +186,8 @@ INSERT INTO permissions (code, module, description) VALUES ('customer.manage', '
 INSERT INTO role_permissions (role_id, permission_id, scope) SELECT r.id, p.id, 'all' FROM roles r, permissions p WHERE r.code = 'admin' AND p.code = 'customer.manage' ON DUPLICATE KEY UPDATE scope = VALUES(scope);
 INSERT INTO permissions (code, module, description) VALUES ('audit.view_full', 'settings', 'Melihat audit log sistem penuh') ON DUPLICATE KEY UPDATE module = VALUES(module), description = VALUES(description);
 INSERT INTO role_permissions (role_id, permission_id, scope) SELECT r.id, p.id, 'all' FROM roles r, permissions p WHERE r.code = 'admin' AND p.code = 'audit.view_full' ON DUPLICATE KEY UPDATE scope = VALUES(scope);
+INSERT INTO permissions (code, module, description) VALUES ('project.import', 'settings', 'Impor data project lama dari Excel') ON DUPLICATE KEY UPDATE module = VALUES(module), description = VALUES(description);
+INSERT INTO role_permissions (role_id, permission_id, scope) SELECT r.id, p.id, 'all' FROM roles r, permissions p WHERE r.code = 'admin' AND p.code = 'project.import' ON DUPLICATE KEY UPDATE scope = VALUES(scope);
 INSERT INTO permissions (code, module, description) VALUES ('kpi.view', 'report', 'Melihat KPI per PIC') ON DUPLICATE KEY UPDATE module = VALUES(module), description = VALUES(description);
 INSERT INTO role_permissions (role_id, permission_id, scope) SELECT r.id, p.id, 'all' FROM roles r, permissions p WHERE r.code = 'admin' AND p.code = 'kpi.view' ON DUPLICATE KEY UPDATE scope = VALUES(scope);
 INSERT INTO role_permissions (role_id, permission_id, scope) SELECT r.id, p.id, 'all' FROM roles r, permissions p WHERE r.code = 'management' AND p.code = 'kpi.view' ON DUPLICATE KEY UPDATE scope = VALUES(scope);

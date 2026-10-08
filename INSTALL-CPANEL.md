@@ -94,6 +94,17 @@ alamat ke `public/`; folder lain (`.env`, `storage/`, `vendor/`, `config/`) tida
    (zip hanya membawa `.env.production` dan folder `storage/` kosong).
 3. `bash setup.sh` — menjalankan migrasi database bila ada.
 
+## Impor data project lama (Excel)
+
+1. Buat dulu semua **Customer** dan **User** (role yang benar) di menu Pengaturan.
+2. *Pengaturan › Impor Data Lama* → **Unduh template Excel** (dropdown berisi customer, user, dan proses dari aplikasi).
+3. Isi sheet *Project*, *Part*, *Proses* (petunjuk ada di sheet *Petunjuk*), simpan sebagai `.xlsx`.
+4. Unggah → **Periksa file**: semua kesalahan tampil per baris tanpa menyimpan apa pun. Perbaiki sampai bersih → **Impor**.
+5. File besar (ratusan project) lebih aman lewat Terminal:
+   `php bin/import-legacy.php --file=data.xlsx` lalu `php bin/import-legacy.php --file=data.xlsx --commit --as=email-admin`.
+
+Backup dulu sebelum impor (`php bin/backup.php`). Panduan lengkap & aturan: `docs/IMPORT_DATA_LAMA.md`.
+
 ## Backup & pemulihan
 
 - Backup harian otomatis (cron 01:30) ke `~/npd-backups`, disimpan 30 hari: database + semua dokumen + manifest.

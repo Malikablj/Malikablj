@@ -60,11 +60,11 @@ working_calendar (7 baris), holidays, master_options, application_settings, numb
 | NPR | `npr` | Seluruh isian biru form + status + Requested/Received by |
 | | `npr_parts` | Baris Tabel Komponen (nama part, jenis part, development, supplier mold, komponen Ext, resin, warna, pantone, surface, neck/preform) |
 | | `npr_feedback` | Kolom pink per part (berat, metode mould, cavity, harga mould %, lead time, feedback, keputusan, perlu masterbatch baru, status publikasi) |
-| Project | `projects` | Kode NPD-YYYY-XXX, NPR, customer, prioritas, Sales/NPD PIC, Target Finish, forecast, `schedule_floor` (batas bawah jadwal setelah Resume), status turunan, hold, cancel, arsip |
+| Project | `projects` | Kode NPD-YYYY-XXX, NPR, customer, prioritas, Sales/NPD PIC, Target Finish, forecast, `schedule_floor` (batas bawah jadwal setelah Resume / tanggal impor), status turunan, hold, cancel, arsip, `legacy_ref` + `imported_at` (impor data lama, `docs/IMPORT_DATA_LAMA.md`) |
 | | `project_parts` | Part runtime: jenis, versi template, status, tanggal mulai, forecast, `schedule_floor` (Resume part), PIC per peran, hold, cancel |
 | | `processes` | Instance proses per part/project: PIC, status, durasi, manual start/finish, planned, forecast, actual, iterasi, loop, skip |
 | | `process_dependencies` | Dependency per project (FS/SS/FF/PARALLEL, lag, asal template/override) |
-| | `process_runs` | Satu baris per aktivasi proses: Planned Finish saat aktivasi, PIC saat selesai, hari Hold, tanggal mulai overdue → dasar KPI |
+| | `process_runs` | Satu baris per aktivasi proses: Planned Finish saat aktivasi, PIC saat selesai, hari Hold, tanggal mulai overdue → dasar KPI; `is_imported` = run data lama (tidak dihitung KPI) |
 | | `project_gates` | Hasil gate Assembly/Fit Test (Pass/Fail, part yang diulang) |
 | Jadwal | `schedule_baselines`, `schedule_baseline_items` | Baseline berversi per part/project |
 | | `schedule_changes` | Log setiap penggeseran (penyebab, selisih hari kerja, tanggal lama/baru) |

@@ -20,6 +20,7 @@ use App\Scheduling\WorkingCalendar;
  *  - Durasi aktual = hari kerja Actual Start..Finish dikurangi hari kerja Hold; rencana = durasi saat aktivasi.
  *  - Overdue = run yang menjadi overdue pada periode (overdue_since) ∪ yang sedang overdue saat ini.
  *  - Project arsip tidak dihitung (laporan bawaan).
+ *  - Run dari data lama hasil impor Excel (process_runs.is_imported = 1) tidak dihitung (OQ-38).
  */
 final class KpiService
 {
@@ -145,7 +146,7 @@ final class KpiService
                     u.name AS pic_name, ro.code AS role_code
              FROM process_runs r JOIN processes pr ON pr.id = r.process_id JOIN projects pj ON pj.id = pr.project_id LEFT JOIN project_parts pp ON pp.id = pr.part_id
              JOIN users u ON u.id = r.pic_user_id JOIN roles ro ON ro.id = u.role_id
-             WHERE r.status = 'completed' AND r.actual_finish BETWEEN ? AND ? AND $w
+             WHERE r.status = 'completed' AND r.is_imported = 0 AND r.actual_finish BETWEEN ? AND ? AND $w
              ORDER BY r.actual_finish DESC, r.id DESC",
             array_merge([$from, $to], $p)
         );
@@ -177,7 +178,7 @@ final class KpiService
                 FROM process_runs r JOIN processes pr ON pr.id = r.process_id JOIN projects pj ON pj.id = pr.project_id LEFT JOIN project_parts pp ON pp.id = pr.part_id
                 JOIN users u ON u.id = (CASE WHEN r.status = 'open' THEN pr.pic_user_id ELSE r.pic_user_id END) JOIN roles ro ON ro.id = u.role_id";
         $out = [];
-        foreach (Db::fetchAll("$sel WHERE r.overdue_since BETWEEN ? AND ? AND r.status IN ('open', 'completed') AND $w", array_merge([$period->from, $period->to], $p)) as $r) {
+        foreach (Db::fetchAll("$sel WHERE r.overdue_since BETWEEN ? AND ? AND r.status IN ('open', 'completed') AND r.is_imported = 0 AND $w", array_merge([$period->from, $period->to], $p)) as $r) {
             $r['current'] = false;
             $out[(int) $r['run_id']] = $r;
         }
@@ -188,7 +189,7 @@ final class KpiService
         }
         if ($days) {
             $ids = array_keys($days);
-            foreach (Db::fetchAll("$sel WHERE r.status = 'open' AND r.process_id IN " . Db::in($ids) . " AND $w", array_merge($ids, $p)) as $r) {
+            foreach (Db::fetchAll("$sel WHERE r.status = 'open' AND r.is_imported = 0 AND r.process_id IN " . Db::in($ids) . " AND $w", array_merge($ids, $p)) as $r) {
                 $r['current'] = true;
                 $r['overdue_days'] = $days[(int) $r['process_id']] ?? 0;
                 $out[(int) $r['run_id']] = array_merge($out[(int) $r['run_id']] ?? [], $r);

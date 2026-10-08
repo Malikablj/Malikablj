@@ -88,6 +88,7 @@ return [
     'nav.masters' => 'Master NPR',
     'nav.workflow' => 'Workflow',
     'nav.holidays' => 'Hari Libur',
+    'nav.import' => 'Impor Data Lama',
     'nav.notif_settings' => 'Notifikasi & Email',
     'nav.email_queue' => 'Antrean Email',
     'nav.main' => 'Navigasi utama',
@@ -249,5 +250,6 @@ return [
     'perm.user.manage' => 'Manajemen user',
     'perm.customer.manage' => 'Manajemen customer',
     'perm.audit.view_full' => 'Melihat audit log sistem penuh',
+    'perm.project.import' => 'Impor data project lama dari Excel',
     'perm.kpi.view' => 'Melihat KPI per PIC',
 ];

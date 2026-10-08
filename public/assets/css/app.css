@@ -884,6 +884,7 @@ details[open] > summary { margin-bottom: 12px; }
 .bar-planned { background: color-mix(in srgb, var(--text-2) 45%, transparent); }
 .legend-swatch { display: inline-block; width: 12px; height: 6px; border-radius: 3px; vertical-align: middle; margin-left: 6px; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.stat-grid-compact { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .stat-danger .stat-value { color: var(--danger); }
 .period-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 18px; flex-wrap: wrap; }
 .report-text { width: 100%; white-space: pre; font-size: 12px; }

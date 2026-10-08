@@ -58,7 +58,7 @@ final class WeeklyReport
             'completed_projects' => $count("SELECT COUNT(*) FROM projects WHERE id IN {$in['in']} AND finished_at BETWEEN ? AND ?", [$from, $toTs]),
             'parts_started' => $count("SELECT COUNT(*) FROM project_parts pp WHERE pp.project_id IN {$in['in']} AND pp.start_date BETWEEN ? AND ?$typeSql", array_merge([$from, $to], $tp)),
             'processes_completed' => $count("SELECT COUNT(*) FROM process_runs r JOIN processes pr ON pr.id = r.process_id LEFT JOIN project_parts pp ON pp.id = pr.part_id
-                WHERE pr.project_id IN {$in['in']} AND r.status = 'completed' AND pr.step_type <> 'request' AND r.actual_finish BETWEEN ? AND ?$typeSql", array_merge([$from, $to], $tp)),
+                WHERE pr.project_id IN {$in['in']} AND r.status = 'completed' AND r.is_imported = 0 AND pr.step_type <> 'request' AND r.actual_finish BETWEEN ? AND ?$typeSql", array_merge([$from, $to], $tp)),
             'on_hold' => $count("SELECT COUNT(*) FROM projects WHERE id IN {$in['in']} AND is_on_hold = 1"),
             'approved' => $count("SELECT COUNT(*) FROM approvals a LEFT JOIN project_parts pp ON pp.id = a.part_id WHERE a.project_id IN {$in['in']} AND a.status = 'approved' AND a.decided_at BETWEEN ? AND ?$typeSql", array_merge([$from, $toTs], $tp)),
             'rejected' => $count("SELECT COUNT(*) FROM approvals a LEFT JOIN project_parts pp ON pp.id = a.part_id WHERE a.project_id IN {$in['in']} AND a.status = 'rejected' AND a.decided_at BETWEEN ? AND ?$typeSql", array_merge([$from, $toTs], $tp)),
