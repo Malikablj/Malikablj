@@ -34,6 +34,7 @@ final class ReportWorkbook
         $this->book = new Spreadsheet();
         $this->book->getProperties()->setCreator('NPD Project Control')->setCompany('PT. Permata Indo Kemas')->setTitle($title);
         $this->book->removeSheetByIndex(0);
+        $this->book->getDefaultStyle()->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
     }
 
     /**
@@ -64,6 +65,8 @@ final class ReportWorkbook
             $sh->getStyle('A' . $row)->getFont()->setItalic(true)->getColor()->setARGB('FF6E6E73');
             $row++;
         }
+        $first = $row;
+        $flagged = [];
         foreach ($rows as $r) {
             foreach (array_values($r) as $i => $v) {
                 $cell = Coordinate::stringFromColumnIndex($i + 1) . $row;
@@ -75,18 +78,13 @@ final class ReportWorkbook
                 switch ($type) {
                     case 'date':
                         $sh->setCellValue($cell, XlsDate::PHPToExcel(new \DateTimeImmutable((string) $v)));
-                        $sh->getStyle($cell)->getNumberFormat()->setFormatCode('dd-mmm-yyyy');
                         break;
                     case 'int':
-                        $sh->setCellValueExplicit($cell, (int) $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-                        break;
                     case 'dec':
-                        $sh->setCellValueExplicit($cell, (float) $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-                        $sh->getStyle($cell)->getNumberFormat()->setFormatCode('0.0');
+                        $sh->setCellValueExplicit($cell, $type === 'int' ? (int) $v : (float) $v, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
                         break;
                     case 'pct':
                         $sh->setCellValueExplicit($cell, (float) $v / 100, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-                        $sh->getStyle($cell)->getNumberFormat()->setFormatCode('0.0%');
                         break;
                     default:
                         // teks: cegah formula injection (nilai diawali = + - @ dianggap teks)
@@ -94,11 +92,30 @@ final class ReportWorkbook
                 }
             }
             if ($flag !== null && $flag($r)) {
-                $sh->getStyle("A$row:$lastCol$row")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFDE2E1');
+                $flagged[] = $row;
             }
             $row++;
         }
-        $sh->getStyle('A' . ($hr + 1) . ':' . $lastCol . max($hr + 1, $row - 1))->getAlignment()->setVertical(Alignment::VERTICAL_TOP)->setWrapText(true);
+        // Format angka/tanggal & warna baris diterapkan per rentang (bukan per sel): ribuan baris tetap cepat
+        if ($rows) {
+            $formats = ['date' => 'dd-mmm-yyyy', 'dec' => '0.0', 'pct' => '0.0%'];
+            foreach ($types as $i => $type) {
+                if (isset($formats[$type])) {
+                    $col = Coordinate::stringFromColumnIndex($i + 1);
+                    $sh->getStyle($col . $first . ':' . $col . ($row - 1))->getNumberFormat()->setFormatCode($formats[$type]);
+                }
+            }
+            foreach (self::blocks($flagged) as [$a, $b]) {
+                $sh->getStyle("A$a:$lastCol$b")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFDE2E1');
+            }
+        }
+        // rata atas = gaya bawaan workbook; bungkus teks hanya pada kolom teks (gaya per sel mahal untuk ribuan baris)
+        foreach (range(1, $cols) as $i) {
+            if (($types[$i - 1] ?? 'text') === 'text') {
+                $col = Coordinate::stringFromColumnIndex($i);
+                $sh->getStyle($col . ($hr + 1) . ':' . $col . max($hr + 1, $row - 1))->getAlignment()->setWrapText(true);
+            }
+        }
         if ($rows) {
             $sh->setAutoFilter("A$hr:$lastCol" . ($row - 1));
         }
@@ -109,6 +126,25 @@ final class ReportWorkbook
         $sh->getPageSetup()->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)->setPaperSize(PageSetup::PAPERSIZE_A4)->setFitToWidth(1)->setFitToHeight(0);
         $sh->getPageSetup()->setRowsToRepeatAtTopByStartAndEnd($hr, $hr);
         return $this;
+    }
+
+    /**
+     * Kelompokkan nomor baris berurutan menjadi rentang [awal, akhir].
+     * @param list<int> $rows
+     * @return list<array{0:int,1:int}>
+     */
+    private static function blocks(array $rows): array
+    {
+        $out = [];
+        foreach ($rows as $r) {
+            $last = count($out) - 1;
+            if ($last >= 0 && $out[$last][1] === $r - 1) {
+                $out[$last][1] = $r;
+            } else {
+                $out[] = [$r, $r];
+            }
+        }
+        return $out;
     }
 
     /** @return array{filename:string,content:string} */

@@ -36,7 +36,12 @@ $filters = [
     'mine' => Request::query('mine') === '1',
     'q' => Request::query('q'),
 ];
-$rows = $service->list($user, $filters);
+$page = max(1, (int) Request::int('page', 1));
+$result = $service->list($user, $filters, $page);
+$rows = $result['rows'];
+$pages = max(1, (int) ceil($result['total'] / 25));
+$qs = array_filter(['status' => $filters['status'], 'customer_id' => $filters['customer_id'], 'mine' => $filters['mine'] ? '1' : null, 'q' => $filters['q']],
+    static fn ($v) => $v !== null && $v !== '');
 $customers = Db::fetchAll('SELECT id, name FROM customers ORDER BY name');
 $canCreate = Gate::can($user, 'npr.create');
 $needsSalesPic = $canCreate && $user->roleCode !== 'admin_sales';
@@ -125,7 +130,16 @@ require APP_ROOT . '/includes/layout/header.php';
       </tbody>
     </table>
   </div>
-  <div class="pagination"><span><?= t('npr.count', ['count' => count($rows)]) ?></span></div>
+  <div class="pagination">
+    <span><?= t('npr.count', ['count' => $result['total']]) ?></span>
+    <?php if ($pages > 1): ?>
+      <span class="pagination-links">
+        <?php if ($page > 1): ?><a class="btn btn-sm" href="<?= e(url('npr.php', $qs + ['page' => $page - 1])) ?>"><?= icon('chevron-left') ?> <?= t('common.previous') ?></a><?php endif; ?>
+        <span class="muted"><?= t('common.page_of', ['page' => $page, 'pages' => $pages]) ?></span>
+        <?php if ($page < $pages): ?><a class="btn btn-sm" href="<?= e(url('npr.php', $qs + ['page' => $page + 1])) ?>"><?= t('common.next') ?> <?= icon('chevron-right') ?></a><?php endif; ?>
+      </span>
+    <?php endif; ?>
+  </div>
 </div>
 
 <?php if ($needsSalesPic): ?>

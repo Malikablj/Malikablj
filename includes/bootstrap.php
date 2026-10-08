@@ -83,6 +83,11 @@ require APP_ROOT . '/includes/permissions.php';
 if (PHP_SAPI !== 'cli') {
     Response::sendSecurityHeaders();
     Session::start();
+    // Pertahanan berlapis: setiap request yang mengubah data wajib membawa token CSRF yang sah,
+    // walaupun endpoint lupa memanggil require_post() (gagal → 419 lewat exception handler).
+    if (Request::isMutating()) {
+        \App\Core\Csrf::verify();
+    }
     $user = Auth::user();
     RequestContext::set($user, Request::ip(), Request::userAgent());
     I18n::setLocale($user?->language ?? (string) ($_SESSION['guest_language'] ?? Config::get('app.default_language', 'id')));

@@ -456,7 +456,28 @@ final class NprServiceTest extends DbTestCase
         $id = $this->npr->createDraft($this->sales);
         $this->npr->discard($this->sales, $id);
         $this->assertSame('discarded', $this->npr->find($id)['status']);
-        $this->assertSame([], array_filter($this->npr->list($this->sales), static fn ($r) => (int) $r['id'] === $id));
+        $this->assertSame([], array_filter($this->npr->list($this->sales)['rows'], static fn ($r) => (int) $r['id'] === $id));
+    }
+
+    public function testListIsPaginatedWithoutHidingOlderNprs(): void
+    {
+        $before = $this->npr->list($this->sales, [], 1, 25)['total'];
+        $ids = [];
+        for ($i = 0; $i < 31; $i++) {
+            $ids[] = $this->npr->createDraft($this->sales);
+        }
+        $p1 = $this->npr->list($this->sales, [], 1, 25);
+        $this->assertSame($before + 31, $p1['total']);
+        $this->assertCount(25, $p1['rows']);
+        $seen = array_map(static fn ($r) => (int) $r['id'], $p1['rows']);
+        for ($page = 2; $page <= (int) ceil($p1['total'] / 25); $page++) {
+            $seen = array_merge($seen, array_map(static fn ($r) => (int) $r['id'], $this->npr->list($this->sales, [], $page, 25)['rows']));
+        }
+        $this->assertSame(count($seen), count(array_unique($seen)), 'tidak ada NPR ganda antarhalaman');
+        $this->assertSame([], array_diff($ids, $seen), 'semua NPR dapat dijangkau lewat halaman');
+        $this->assertSame([], $this->npr->list($this->sales, [], 999, 25)['rows']);
+        // filter tetap dihitung pada total
+        $this->assertSame(0, $this->npr->list($this->sales, ['q' => 'tidak-ada-produk-xyz'])['total']);
     }
 
     public function testAutosaveDoesNotFloodAudit(): void

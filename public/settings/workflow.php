@@ -111,6 +111,20 @@ $roles = Db::fetchAll("SELECT code FROM roles WHERE code <> 'management' ORDER B
 $roleCodes = array_column($roles, 'code');
 $docTypes = MasterService::options('document_type');
 
+if ($templateId !== null) {
+    // dimuat sebelum layout agar template yang tidak ada → 404 sungguhan
+    $tpl = $svc->template($templateId);
+    $draftId = Db::value("SELECT id FROM workflow_template_versions WHERE template_id = ? AND status = 'draft' ORDER BY id DESC LIMIT 1", [$templateId]);
+    $versionId = $draftId ? (int) $draftId : (int) $tpl['current_version_id'];
+    $version = $svc->version($versionId);
+    $isDraft = $version['status'] === 'draft';
+    $steps = $svc->steps($versionId);
+    $byId = array_column($steps, null, 'id');
+    $codes = array_column($steps, 'code');
+    $predChoices = array_merge($codes, $tpl['scope'] === 'part' ? ['P2', 'G1'] : []);
+    $problems = $isDraft ? $svc->validate($versionId) : [];
+    $stepLabel = static fn (array $s): string => $s['code'] . ' · ' . (I18n::locale() === 'en' && $s['name_en'] ? $s['name_en'] : $s['name']);
+}
 $pageTitle = I18n::t('nav.workflow');
 $activeNav = 'workflow';
 require APP_ROOT . '/includes/layout/header.php';
@@ -138,19 +152,6 @@ require APP_ROOT . '/includes/layout/header.php';
 </div>
 
 <?php else: ?>
-<?php
-$tpl = $svc->template($templateId);
-$draftId = Db::value("SELECT id FROM workflow_template_versions WHERE template_id = ? AND status = 'draft' ORDER BY id DESC LIMIT 1", [$templateId]);
-$versionId = $draftId ? (int) $draftId : (int) $tpl['current_version_id'];
-$version = $svc->version($versionId);
-$isDraft = $version['status'] === 'draft';
-$steps = $svc->steps($versionId);
-$byId = array_column($steps, null, 'id');
-$codes = array_column($steps, 'code');
-$predChoices = array_merge($codes, $tpl['scope'] === 'part' ? ['P2', 'G1'] : []);
-$problems = $isDraft ? $svc->validate($versionId) : [];
-$stepLabel = static fn (array $s): string => $s['code'] . ' · ' . (I18n::locale() === 'en' && $s['name_en'] ? $s['name_en'] : $s['name']);
-?>
 <nav class="breadcrumbs" aria-label="<?= t('common.breadcrumbs') ?>">
   <a href="<?= e(url('settings/workflow.php')) ?>"><?= t('nav.workflow') ?></a><span class="breadcrumbs-sep">/</span>
   <?php if ($stepId || $applyView): ?><a href="<?= e(url('settings/workflow.php', ['template' => $templateId])) ?>"><?= e($tpl['name']) ?></a><span class="breadcrumbs-sep">/</span><span aria-current="page"><?= $applyView ? t('wft.apply_title') : e($stepLabel($byId[$stepId] ?? ['code' => '', 'name' => '', 'name_en' => ''])) ?></span>

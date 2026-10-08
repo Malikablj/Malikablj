@@ -146,8 +146,11 @@ final class NprService
         ];
     }
 
-    /** @return list<array<string,mixed>> */
-    public function list(User $user, array $filters = []): array
+    /**
+     * Daftar NPR berhalaman (PRD §13.3: daftar besar dipaginasi — tidak ada NPR yang tersembunyi oleh batas tetap).
+     * @return array{rows:list<array<string,mixed>>,total:int}
+     */
+    public function list(User $user, array $filters = [], int $page = 1, int $perPage = 25): array
     {
         $where = ["n.status <> 'discarded'"];
         $params = [];
@@ -175,7 +178,11 @@ final class NprService
             $where[] = '(n.product_name LIKE ? OR n.npr_number LIKE ? OR p.code LIKE ?)';
             array_push($params, $like, $like, $like);
         }
-        return Db::fetchAll(
+        $sqlWhere = implode(' AND ', $where);
+        $total = (int) Db::value('SELECT COUNT(*) FROM npr n LEFT JOIN projects p ON p.npr_id = n.id WHERE ' . $sqlWhere, $params);
+        $perPage = max(5, min(100, $perPage));
+        $offset = max(0, ($page - 1) * $perPage);
+        $rows = Db::fetchAll(
             'SELECT n.id, n.npr_number, n.status, n.product_name, n.requested_at, n.updated_at, n.created_at,
                     c.name AS customer_name, s.name AS sales_pic_name, p.code AS project_code, p.id AS project_id,
                     (SELECT COUNT(*) FROM npr_parts x WHERE x.npr_id = n.id AND x.status = \'active\') AS part_count
@@ -183,11 +190,12 @@ final class NprService
              LEFT JOIN customers c ON c.id = n.customer_id
              LEFT JOIN users s ON s.id = n.sales_pic_id
              LEFT JOIN projects p ON p.npr_id = n.id
-             WHERE ' . implode(' AND ', $where) . '
-             ORDER BY FIELD(n.status, \'returned\', \'draft\', \'submitted\', \'feedback_completed\'), n.updated_at DESC
-             LIMIT 500',
+             WHERE ' . $sqlWhere . '
+             ORDER BY FIELD(n.status, \'returned\', \'draft\', \'submitted\', \'feedback_completed\'), n.updated_at DESC, n.id DESC
+             LIMIT ' . $perPage . ' OFFSET ' . $offset,
             $params
         );
+        return ['rows' => $rows, 'total' => $total];
     }
 
     // ------------------------------------------------------------------ perintah

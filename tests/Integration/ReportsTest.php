@@ -311,6 +311,41 @@ final class ReportsTest extends DbTestCase
         $x->kpiXlsx($this->sales, $month, KpiService::cleanFilters([]));
     }
 
+    public function testWorkbookFormatsByColumnRangeAndFlagsOnlyMarkedRows(): void
+    {
+        // format diterapkan per rentang kolom (kinerja ribuan baris) — hasilnya harus tetap sama per sel
+        $rows = [];
+        for ($i = 1; $i <= 300; $i++) {
+            $rows[] = ['=CMD()' . $i, '2026-10-' . str_pad((string) (1 + $i % 28), 2, '0', STR_PAD_LEFT), $i, $i / 3, 50 + $i % 50, $i % 7 === 0 ? 'late' : 'ok'];
+        }
+        $wb = new \App\Report\ReportWorkbook('Uji Format', [['Periode', 'Okt 2026']]);
+        $out = $wb->table('Data', ['Teks', 'Tanggal', 'Int', 'Dec', 'Pct', 'Status'], $rows, ['text', 'date', 'int', 'dec', 'pct', 'text'], [], static fn ($r) => $r[5] === 'late')
+            ->output('uji');
+        $sh = $this->readXlsx($out['content'])->getSheet(0);
+        $hr = 0;
+        for ($r = 1; $r < 10 && !$hr; $r++) {
+            $hr = $sh->getCell('A' . $r)->getValue() === 'Teks' ? $r : 0;
+        }
+        $this->assertGreaterThan(0, $hr, 'baris header');
+        foreach ([1, 150, 300] as $n) {
+            $row = $hr + $n;
+            $this->assertSame('dd-mmm-yyyy', $sh->getStyle('B' . $row)->getNumberFormat()->getFormatCode());
+            $this->assertTrue(\PhpOffice\PhpSpreadsheet\Shared\Date::isDateTime($sh->getCell('B' . $row)));
+            $this->assertSame('0.0', $sh->getStyle('D' . $row)->getNumberFormat()->getFormatCode());
+            $this->assertSame('0.0%', $sh->getStyle('E' . $row)->getNumberFormat()->getFormatCode());
+            $this->assertSame('General', $sh->getStyle('C' . $row)->getNumberFormat()->getFormatCode());
+            $this->assertTrue($sh->getStyle('A' . $row)->getAlignment()->getWrapText(), 'kolom teks dibungkus');
+            $this->assertSame('top', $sh->getStyle('C' . $row)->getAlignment()->getVertical(), 'rata atas');
+            $this->assertSame(\PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING, $sh->getCell('A' . $row)->getDataType(), 'formula injection dicegah');
+            $late = $rows[$n - 1][5] === 'late';
+            $fill = $sh->getStyle('C' . $row)->getFill();
+            $this->assertSame($late ? 'FFFDE2E1' : 'FFFFFFFF', $late ? $fill->getStartColor()->getARGB() : ($fill->getFillType() === 'none' ? 'FFFFFFFF' : $fill->getStartColor()->getARGB()), "baris {$n}");
+        }
+        $this->assertSame('FFFDE2E1', $sh->getStyle('A' . ($hr + 7))->getFill()->getStartColor()->getARGB(), 'baris ke-7 ditandai');
+        $this->assertSame('none', $sh->getStyle('A' . ($hr + 8))->getFill()->getFillType(), 'baris ke-8 tidak ditandai');
+        $this->assertSame('A' . $hr . ':F' . ($hr + 300), $sh->getAutoFilter()->getRange());
+    }
+
     private function readXlsx(string $content): \PhpOffice\PhpSpreadsheet\Spreadsheet
     {
         $tmp = tempnam(sys_get_temp_dir(), 'xl');
