@@ -19,6 +19,9 @@
         <testsuite name="http">
             <directory>tests/Http</directory>
         </testsuite>
+        <testsuite name="ops">
+            <directory>tests/Ops</directory>
+        </testsuite>
     </testsuites>
     <php>
         <env name="APP_ENV" value="testing" force="true"/>

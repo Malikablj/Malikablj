@@ -21,6 +21,26 @@ final class Request
         return in_array(self::method(), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
     }
 
+    /**
+     * Kiriman melebihi post_max_size? PHP lalu membuang SELURUH isi ($_POST, $_FILES, token CSRF),
+     * sehingga perlu dikenali lebih dulu agar pengguna melihat pesan ukuran, bukan "sesi kedaluwarsa".
+     */
+    public static function exceedsPostLimit(): bool
+    {
+        $max = self::iniBytes((string) ini_get('post_max_size'));
+        return $max > 0 && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > $max;
+    }
+
+    /** Nilai ini PHP berukuran (mis. "30M", "1G", "512K") dalam byte. */
+    public static function iniBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '' || !preg_match('/^(\d+)\s*([KMG]?)$/i', $value, $m)) {
+            return 0;
+        }
+        return (int) $m[1] * match (strtoupper($m[2])) { 'G' => 1073741824, 'M' => 1048576, 'K' => 1024, default => 1 };
+    }
+
     /** Nilai string dari POST lalu GET (trim). */
     public static function input(string $key, ?string $default = null): ?string
     {

@@ -34,7 +34,8 @@ abstract class HttpTestCase extends TestCase
         @mkdir(self::$tmp . '/sessions', 0700, true);
         $env['SESSION_SAVE_PATH'] = self::$tmp . '/sessions';
         $spec = [0 => ['pipe', 'r'], 1 => ['file', self::$tmp . '/server.log', 'a'], 2 => ['file', self::$tmp . '/server.log', 'a']];
-        self::$proc = proc_open([PHP_BINARY, '-S', '127.0.0.1:' . $port, '-t', $root . '/public'], $spec, $pipes, $root, $env);
+        // batas kiriman tetap (tidak bergantung php.ini mesin) agar test ukuran deterministik
+        self::$proc = proc_open([PHP_BINARY, '-d', 'post_max_size=8M', '-d', 'upload_max_filesize=8M', '-S', '127.0.0.1:' . $port, '-t', $root . '/public'], $spec, $pipes, $root, $env);
         // tunggu server siap
         for ($i = 0; $i < 50; $i++) {
             $fp = @fsockopen('127.0.0.1', $port, $errno, $errstr, 0.1);

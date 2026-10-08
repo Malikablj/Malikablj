@@ -1,0 +1,14 @@
+# NPD Project Control — tugas terjadwal. Salin ke /etc/cron.d/npd (pemilik root, mode 0644).
+# Jam server diatur Asia/Jakarta (timedatectl set-timezone Asia/Jakarta); aplikasi selalu memakai Asia/Jakarta.
+# Status tiap tugas terlihat di aplikasi: Pengaturan › Antrean Email › Tugas terjadwal (tabel job_runs).
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# aktivasi proses, overdue/due soon, pengingat Hold — tiap jam pada jam kerja
+0 6-20 * * 1-5  www-data  php /var/www/npd/cron/overdue.php        >> /var/www/npd/storage/logs/cron.log 2>&1
+# kirim antrean email (retry otomatis)
+*/5 * * * *     www-data  php /var/www/npd/cron/notifications.php  >> /var/www/npd/storage/logs/cron.log 2>&1
+# ringkasan overdue harian (hari libur nasional dilewati otomatis)
+5 7 * * 1-5     www-data  php /var/www/npd/cron/daily-report.php   >> /var/www/npd/storage/logs/cron.log 2>&1
+# backup database + dokumen, retensi 30 hari (BACKUP_PATH, BACKUP_RETENTION_DAYS di .env)
+30 1 * * *      www-data  php /var/www/npd/bin/backup.php          >> /var/www/npd/storage/logs/cron.log 2>&1

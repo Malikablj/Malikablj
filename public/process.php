@@ -313,7 +313,7 @@ require APP_ROOT . '/includes/layout/header.php';
           <?php endif; ?>
           <?php if ($p['approval_type'] && $p['approval_type'] !== 'npr'): ?>
             <div class="field<?= isset($errors['file']) ? ' has-error' : '' ?>"><label for="evidence"><?= t('approval.evidence') ?> <span class="muted">(<?= t('common.optional') ?>)</span></label>
-              <input class="input" type="file" id="evidence" name="evidence"><?= $err('file') ?>
+              <input class="input" type="file" id="evidence" name="evidence"<?= file_limit_attrs() ?>><?= $err('file') ?>
               <p class="field-hint"><?= t('approval.evidence_hint') ?></p></div>
           <?php endif; ?>
           <?php if ($p['approval_giver'] === 'customer'): ?>
@@ -465,7 +465,7 @@ require APP_ROOT . '/includes/layout/header.php';
                 <?php foreach ($types as $opt): ?><?php if (!in_array($opt['code'], $preferred, true)): ?><option value="<?= e($opt['code']) ?>"><?= e(MasterService::label('document_type', (string) $opt['code'])) ?></option><?php endif; ?><?php endforeach; ?>
               </select><?= $err('doc_type') ?></div>
             <div class="field<?= isset($errors['file']) ? ' has-error' : '' ?>"><label for="doc-file"><?= t('process.file') ?></label>
-              <input class="input" type="file" id="doc-file" name="file" required><?= $err('file') ?>
+              <input class="input" type="file" id="doc-file" name="file" required<?= file_limit_attrs() ?>><?= $err('file') ?>
               <p class="field-hint"><?= t('process.upload_hint') ?></p></div>
             <div class="field span-2"><label for="doc-notes"><?= t('process.notes') ?> <span class="muted">(<?= t('common.optional') ?>)</span></label>
               <input class="input" id="doc-notes" name="notes" maxlength="500"></div>

@@ -79,6 +79,25 @@ final class SecuritySweepHttpTest extends HttpTestCase
         $this->assertSame('admin@test.local', $this->scalar("SELECT email FROM users WHERE email = 'admin@test.local'"), 'tidak ada perubahan');
     }
 
+    public function testOversizedSubmissionExplainsLimitInsteadOfSessionExpired(): void
+    {
+        $c = $this->loginAs('admin@test.local');
+        $c->get('/dashboard.php');
+        $body = str_repeat('a', 8 * 1024 * 1024 + 1024); // > post_max_size server test (8M)
+        $res = $c->request('POST', '/project.php?id=' . self::$projectId, $body, ['Content-Type: application/x-www-form-urlencoded']);
+        $this->assertSame(413, $res['status']);
+        $this->assertStringContainsString('Kiriman terlalu besar', $res['body']);
+        $this->assertStringContainsString('8 MB', $res['body'], 'batas efektif = min(post_max_size, upload.max_mb)');
+        $json = $c->request('POST', '/api/schedule-preview.php', $body, ['Content-Type: application/json', 'Accept: application/json']);
+        $this->assertSame(413, $json['status']);
+        $this->assertStringStartsWith('application/json', $json['headers']['content-type'][0] ?? '');
+        // kiriman normal tanpa token tetap 419 (CSRF tidak dilemahkan)
+        $this->assertSame(419, $c->post('/project.php?id=' . self::$projectId, ['action' => 'hold'])['status']);
+        // input file membawa batas untuk pemeriksaan di browser
+        $page = $c->get('/process.php?id=' . (int) $this->scalar("SELECT id FROM processes WHERE project_id = ? AND status = 'current' LIMIT 1", [self::$projectId]))['body'];
+        $this->assertMatchesRegularExpression('/type="file"[^>]*data-max-bytes="\d+" data-max-message="[^"]*:name/', $page);
+    }
+
     public function testStoredXssIsEscapedOnAllPages(): void
     {
         $pid = self::$projectId;

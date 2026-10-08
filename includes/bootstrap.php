@@ -83,14 +83,19 @@ require APP_ROOT . '/includes/permissions.php';
 if (PHP_SAPI !== 'cli') {
     Response::sendSecurityHeaders();
     Session::start();
-    // Pertahanan berlapis: setiap request yang mengubah data wajib membawa token CSRF yang sah,
-    // walaupun endpoint lupa memanggil require_post() (gagal → 419 lewat exception handler).
-    if (Request::isMutating()) {
-        \App\Core\Csrf::verify();
-    }
     $user = Auth::user();
     RequestContext::set($user, Request::ip(), Request::userAgent());
     I18n::setLocale($user?->language ?? (string) ($_SESSION['guest_language'] ?? Config::get('app.default_language', 'id')));
+    if (Request::isMutating()) {
+        // kiriman di atas post_max_size dibuang PHP (termasuk token CSRF) → beri tahu batas ukurannya (413)
+        if (Request::exceedsPostLimit()) {
+            $mb = (int) floor(min(Request::iniBytes((string) ini_get('post_max_size')), \App\Document\UploadValidator::maxBytes()) / 1048576);
+            Response::error(413, I18n::t('upload.request_too_large', ['mb' => $mb]));
+        }
+        // Pertahanan berlapis: setiap request yang mengubah data wajib membawa token CSRF yang sah,
+        // walaupun endpoint lupa memanggil require_post() (gagal → 419 lewat exception handler).
+        \App\Core\Csrf::verify();
+    }
 } else {
     I18n::setLocale((string) Config::get('app.default_language', 'id'));
 }

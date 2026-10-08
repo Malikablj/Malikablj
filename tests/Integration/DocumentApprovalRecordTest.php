@@ -104,6 +104,12 @@ final class DocumentApprovalRecordTest extends DbTestCase
         $this->assertSame($reviewedVersion, (int) $a['document_version_id']);
         $this->assertSame('approved', Db::value('SELECT status FROM document_versions WHERE id = ?', [$reviewedVersion]));
         $this->assertSame(['request', 'decide'], Db::column('SELECT action FROM approval_history WHERE approval_id = ? ORDER BY id', [(int) $pending['id']]));
+        // FR-AUD-02: keputusan approval tercatat di audit log (siapa, nilai sebelum/sesudah, pemberi keputusan, bukti)
+        $audit = Db::fetch("SELECT * FROM audit_logs WHERE action = 'approval.decide' AND entity_type = 'approval' AND entity_id = ?", [(string) $pending['id']]);
+        $this->assertNotNull($audit);
+        $this->assertSame($this->sales->id, (int) $audit['user_id']);
+        $after = json_decode((string) $audit['new_value'], true);
+        $this->assertSame(['approved', 'Ibu Rina', $evidence], [$after['status'], $after['decision_maker'], $after['evidence_document_id']]);
     }
 
     public function testPendingWithdrawnWhenProcessReset(): void

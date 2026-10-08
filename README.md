@@ -43,8 +43,9 @@ php -S 127.0.0.1:8080 -t public
 
 Buka `http://127.0.0.1:8080`. Di produksi, **document root web server harus menunjuk ke folder
 `public/`** — folder lain (config, storage, modules, .env) tidak boleh dapat diakses dari web.
-Panduan produksi lengkap (Apache/Nginx, HTTPS, cron, backup) ada di `docs/DEPLOYMENT.md`
-dan `docs/BACKUP_AND_RESTORE.md` (Phase 13).
+Panduan produksi lengkap (akun MySQL berhak minimal, Apache/Nginx, HTTPS, cron, upgrade, rollback) ada di
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), backup & pemulihan di [`docs/BACKUP_AND_RESTORE.md`](docs/BACKUP_AND_RESTORE.md);
+contoh konfigurasi siap pakai di [`deploy/`](deploy).
 
 ## Struktur
 
@@ -56,9 +57,12 @@ modules/     logika bisnis (namespace App\…): Core, User, Npr, Project, Workfl
 lang/        id.php (bawaan), en.php
 database/    schema.sql, seed.sql (generated), seeds/*.php, hardening.sql, migrations/
 cron/        overdue.php, notifications.php, daily-report.php
-bin/         install.php, create-admin.php, build-seed.php, generate-key.php
-storage/     documents/, exports/, logs/, sessions/   (di luar webroot)
-tests/       Unit/, Integration/ (MySQL nyata), Http/ (server PHP + curl), browser/
+bin/         install.php, migrate.php, create-admin.php, backup.php, restore.php, db-grants.php,
+             check-deployment.php, build-seed.php, generate-key.php
+deploy/      contoh nginx, Apache, php.ini, cron.d, logrotate
+storage/     documents/, exports/, logs/, sessions/, backups/   (di luar webroot)
+tests/       Unit/, Integration/ (MySQL nyata), Http/ (server PHP + curl), Ops/ (skrip operasional),
+             browser/ (Chromium), perf/ (uji kinerja)
 docs/        PRD matrix, arsitektur, desain database, rencana, open questions
 legacy/      implementasi Python/Flask lama (PRD v2.1) — referensi, tidak dipakai
 ```
@@ -70,17 +74,18 @@ vendor/bin/phpunit                      # semua suite
 vendor/bin/phpunit --testsuite unit     # tanpa database
 vendor/bin/phpunit --testsuite integration
 vendor/bin/phpunit --testsuite http     # menjalankan php -S terhadap database npd_test_http
+vendor/bin/phpunit --testsuite ops      # migrasi, backup/restore, pemeriksaan deploy (database npd_test_*)
 ```
 
-Test membuat ulang database `npd_test` dan `npd_test_http` (user MySQL di `.env` butuh hak
-CREATE/DROP untuk database berawalan `npd_test`). Database lain tidak pernah disentuh.
+Test membuat ulang database berawalan `npd_test` (user MySQL di `.env` butuh hak CREATE/DROP untuk
+database tersebut). Database lain tidak pernah disentuh. Uji kinerja: `docs/PERFORMANCE.md`.
 
 ## Keamanan (ringkas)
 
 PDO prepared statements · token CSRF · escaping output `e()` · CSP dengan nonce · sesi
 HttpOnly/Secure/SameSite + timeout idle + regenerasi ID · `password_hash()` · rate limiting login ·
 otorisasi role × permission di server (`App\Core\Gate`) · audit log append-only.
-Detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §5.
+Detail & test yang membuktikannya: [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Mengubah data awal
 

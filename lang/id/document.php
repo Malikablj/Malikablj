@@ -9,4 +9,6 @@ return [
     'upload.too_large' => 'Ukuran file melebihi :mb MB.',
     'upload.type_not_allowed' => 'Jenis file tidak diizinkan. Jenis yang diizinkan: :types.',
     'upload.mime_mismatch' => 'Isi file tidak sesuai dengan ekstensinya.',
+    'upload.request_too_large' => 'Kiriman terlalu besar: batas unggah :mb MB. Kecilkan atau pecah file lalu coba lagi.',
+    'upload.file_too_large' => 'File ":name" melebihi :mb MB.',
 ];

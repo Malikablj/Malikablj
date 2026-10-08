@@ -1,0 +1,11 @@
+# NPD Project Control — rotasi log aplikasi & cron. Salin ke /etc/logrotate.d/npd
+/var/www/npd/storage/logs/*.log {
+    su www-data www-data
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

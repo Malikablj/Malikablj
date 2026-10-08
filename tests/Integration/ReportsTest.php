@@ -206,6 +206,11 @@ final class ReportsTest extends DbTestCase
         $this->assertSame(['projects' => 1, 'parts' => 2], $d['cards']['overdue']);
         $this->assertSame(1, $q->list($this->admin, ['overdue' => true])['total']);
         $this->assertCount(2, $d['overdue'], 'Panel Overdue: N1 & S1');
+        // DATA-06: overdue adalah tanda terhitung (hari kerja), status dasar proses tetap tersimpan apa adanya
+        foreach ($d['overdue'] as $o) {
+            $this->assertSame('current', Db::value('SELECT status FROM processes WHERE id = ?', [(int) $o['id']]));
+        }
+        $this->assertSame(0, (int) Db::value("SELECT COUNT(*) FROM processes WHERE status = 'overdue'"));
         $this->assertSame('S1', $d['overdue'][0]['code'], 'urut dari yang paling lama terlambat');
         $this->assertSame(['N1'], array_column($d['mine'], 'code'), 'Menunggu tindakan NPD: N1');
         $this->assertSame(['S1'], array_column($svc->build($this->drafter, DashboardService::cleanFilters([]), '2026-10-20')['mine'], 'code'));
@@ -309,6 +314,25 @@ final class ReportsTest extends DbTestCase
         $this->assertSame('application/pdf', $pdf['mime']);
         $this->expectException(AuthorizationException::class);
         $x->kpiXlsx($this->sales, $month, KpiService::cleanFilters([]));
+    }
+
+    public function testAttentionListsMissingMandatoryDocumentUntilUploaded(): void
+    {
+        [$projectId, $parts] = $this->running();
+        $pid = $this->pid($projectId, $parts[0], 'N1');
+        $this->assertSame('current', Db::value('SELECT status FROM processes WHERE id = ?', [$pid]));
+        // DOC-04: proses aktif dengan dokumen wajib (snapshot template) yang belum diunggah
+        Db::update('processes', ['required_doc_types_json' => json_encode(['prototype_3d_document'])], ['id' => $pid]);
+        $svc = new DashboardService();
+        $row = array_values(array_filter($svc->build($this->npd, DashboardService::cleanFilters([]))['attention']['missing_document'], static fn ($r) => (int) $r['id'] === $pid));
+        $this->assertCount(1, $row, 'kategori Attention "Missing Mandatory Document"');
+        $this->assertSame([\App\Master\MasterService::label('document_type', 'prototype_3d_document')], $row[0]['missing']);
+        $docId = Db::insert('documents', ['project_id' => $projectId, 'part_id' => $parts[0], 'process_id' => $pid, 'doc_type_code' => 'prototype_3d_document', 'title' => '3D', 'created_by' => $this->npd->id]);
+        $ver = Db::insert('document_versions', ['document_id' => $docId, 'version_no' => 1, 'original_name' => '3d.pdf', 'stored_path' => 'test/' . bin2hex(random_bytes(6)),
+            'mime_type' => 'application/pdf', 'extension' => 'pdf', 'size_bytes' => 10, 'sha256' => str_repeat('b', 64), 'uploaded_by' => $this->npd->id]);
+        Db::update('documents', ['current_version_id' => $ver], ['id' => $docId]);
+        $after = array_filter($svc->build($this->npd, DashboardService::cleanFilters([]))['attention']['missing_document'], static fn ($r) => (int) $r['id'] === $pid);
+        $this->assertSame([], $after, 'hilang setelah dokumen wajib diunggah');
     }
 
     public function testWorkbookFormatsByColumnRangeAndFlagsOnlyMarkedRows(): void

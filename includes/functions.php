@@ -149,3 +149,11 @@ function nav_active(string $current, string $item): string
 {
     return $current === $item ? ' aria-current="page" class="active"' : '';
 }
+
+/** Atribut batas ukuran untuk <input type="file"> (diperiksa app.js sebelum unggah; server tetap memvalidasi). */
+function file_limit_attrs(): string
+{
+    $max = \App\Document\UploadValidator::maxBytes();
+    $msg = I18n::t('upload.file_too_large', ['name' => ':name', 'mb' => (int) floor($max / 1048576)]);
+    return ' data-max-bytes="' . $max . '" data-max-message="' . e($msg) . '"';
+}

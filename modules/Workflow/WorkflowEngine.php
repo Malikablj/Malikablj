@@ -506,6 +506,10 @@ final class WorkflowEngine
             ]);
         }
         Db::insert('approval_history', ['approval_id' => $id, 'action' => 'decide', 'status_from' => 'pending', 'status_to' => $status, 'comment' => $comment, 'user_id' => $actor->id, 'created_at' => $now]);
+        AuditLogger::log('approval.decide', 'approval', $id, ['status' => 'pending'], [
+            'status' => $status, 'process_id' => (int) $p['id'], 'iteration' => (int) $p['iteration'], 'giver' => (string) ($p['approval_giver'] ?? 'internal'),
+            'decision_maker' => $decisionMaker, 'document_version_id' => $docVersion !== null ? (int) $docVersion : null, 'evidence_document_id' => $evidenceDocId,
+        ], $comment, (int) $p['project_id'], $actor);
         $notify = array_filter([(int) $p['npd_pic_id'], (int) $p['sales_pic_id'], $p['pic_user_id'] !== null ? (int) $p['pic_user_id'] : 0]);
         Notifier::send($notify, $status === 'approved' ? 'approval_approved' : 'approval_rejected',
             $status === 'approved' ? 'notif.approval_approved.title' : 'notif.approval_rejected.title', 'notif.approval_decided.body',

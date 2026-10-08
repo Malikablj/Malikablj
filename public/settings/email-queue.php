@@ -1,7 +1,10 @@
 <?php
 declare(strict_types=1);
 
-/** Antrean email (Admin): status, percobaan, error terakhir; kirim ulang / batalkan (PRD §7.3). */
+/**
+ * Antrean email (Admin): status, percobaan, error terakhir; kirim ulang / batalkan (PRD §7.3),
+ * ditambah status tugas terjadwal (cron & backup) dari job_runs sebagai pemantauan dasar (NFR-11).
+ */
 
 require dirname(__DIR__, 2) . '/includes/bootstrap.php';
 
@@ -10,6 +13,7 @@ use App\Core\I18n;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
+use App\Cron\JobStatus;
 use App\Notification\MailQueue;
 
 $user = require_permission('settings.manage');
@@ -35,6 +39,8 @@ $rows = Db::fetchAll("SELECT d.id, d.to_email, d.subject, d.status, d.attempts, 
 $pages = max(1, (int) ceil($total / 50));
 $counts = $queue->counts();
 $lastRun = Db::fetch("SELECT * FROM job_runs WHERE job = 'notifications' ORDER BY id DESC LIMIT 1");
+$jobs = (new JobStatus())->all();
+$tone = static fn (string $v): string => match ($v) { 'ok', 'success' => 'success', 'warning', 'failed' => 'danger', 'running' => 'accent', default => 'neutral' };
 
 $pageTitle = I18n::t('nav.email_queue');
 $activeNav = 'email_queue';
@@ -46,6 +52,7 @@ require APP_ROOT . '/includes/layout/header.php';
   <a href="<?= e(url('settings/email-queue.php')) ?>"<?= $status === null ? ' class="active"' : '' ?>><?= t('common.all') ?></a>
   <?php foreach ($counts as $st => $n): ?><a href="<?= e(url('settings/email-queue.php', ['status' => $st])) ?>"<?= $status === $st ? ' class="active" aria-current="page"' : '' ?>><?= t('equeue.' . $st) ?> <span class="badge badge-neutral"><?= (int) $n ?></span></a><?php endforeach; ?>
 </nav>
+<div class="stack">
 <div class="card"><div class="table-wrap"><table class="table">
   <thead><tr><th scope="col"><?= t('common.date') ?></th><th scope="col"><?= t('equeue.to') ?></th><th scope="col"><?= t('equeue.subject') ?></th><th scope="col"><?= t('common.status') ?></th><th scope="col"><?= t('equeue.attempts') ?></th><th scope="col"><?= t('equeue.error') ?></th><th scope="col"><span class="visually-hidden"><?= t('common.actions') ?></span></th></tr></thead>
   <tbody>
@@ -69,5 +76,24 @@ require APP_ROOT . '/includes/layout/header.php';
     <?php if ($page > 1): ?><a class="btn btn-sm" href="<?= e(url('settings/email-queue.php', array_filter(['status' => $status, 'page' => $page - 1]))) ?>"><?= t('common.previous') ?></a><?php endif; ?>
     <?php if ($page < $pages): ?><a class="btn btn-sm" href="<?= e(url('settings/email-queue.php', array_filter(['status' => $status, 'page' => $page + 1]))) ?>"><?= t('common.next') ?></a><?php endif; ?>
   </span></div><?php endif; ?>
+</div>
+
+<section class="card" id="jobs" aria-labelledby="jobs-title">
+  <div class="card-header"><div><h2 id="jobs-title"><?= t('jobs.title') ?></h2><p class="muted small"><?= t('jobs.subtitle') ?></p></div></div>
+  <div class="table-wrap"><table class="table table-cards" data-jobs>
+    <thead><tr><th scope="col"><?= t('jobs.job') ?></th><th scope="col"><?= t('common.status') ?></th><th scope="col"><?= t('jobs.last_run') ?></th><th scope="col"><?= t('jobs.last_success') ?></th><th scope="col"><?= t('jobs.message') ?></th></tr></thead>
+    <tbody>
+      <?php foreach ($jobs as $j): $last = $j['last']; ?>
+        <tr data-job="<?= e($j['job']) ?>" data-state="<?= e($j['state']) ?>">
+          <td><strong><?= t('jobs.name.' . $j['job']) ?></strong><div class="muted small mono"><?= e($j['job']) ?></div></td>
+          <td><span class="badge badge-<?= $tone($j['state']) ?>"><?= t('jobs.state.' . $j['state']) ?></span></td>
+          <td class="small nowrap"><?php if ($last): ?><?= fmt_datetime($last['started_at']) ?> <span class="badge badge-<?= $tone((string) $last['status']) ?>"><?= t('jobs.status.' . $last['status']) ?></span><?php else: ?>—<?php endif; ?></td>
+          <td class="small nowrap"><?= $j['last_success_at'] ? fmt_datetime($j['last_success_at']) : '—' ?></td>
+          <td class="small"><?= $last ? e(mb_strimwidth((string) $last['message'], 0, 300, '…')) : '' ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</section>
 </div>
 <?php require APP_ROOT . '/includes/layout/footer.php'; ?>

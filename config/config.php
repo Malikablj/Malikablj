@@ -48,4 +48,15 @@ return [
         'cache'     => $storage . '/cache',
     ],
     'mail' => require __DIR__ . '/mail.php',
+    // backup harian (bin/backup.php) — simpan di disk lain / salin ke luar server bila memungkinkan
+    'backup' => [
+        'path'           => Env::get('BACKUP_PATH') ?: $storage . '/backups',
+        'retention_days' => max(1, (int) Env::get('BACKUP_RETENTION_DAYS', '30')),
+        'mysqldump'      => Env::get('MYSQLDUMP_BIN', 'mysqldump'),
+        'mysql'          => Env::get('MYSQL_BIN', 'mysql'),
+        'tar'            => Env::get('TAR_BIN', 'tar'),
+        // user MySQL khusus backup (SELECT, SHOW VIEW, TRIGGER); kosong = user aplikasi (trigger tidak ikut ter-dump)
+        'db_user'        => Env::get('BACKUP_DB_USER', ''),
+        'db_pass'        => Env::get('BACKUP_DB_PASS', ''),
+    ],
 ];

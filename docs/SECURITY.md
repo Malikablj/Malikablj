@@ -103,9 +103,14 @@ Test: `AuditAndSettingsTest` (testAuditRecordsAllRequiredFields, testSensitiveVa
 testNoApplicationCodeUpdatesOrDeletesAuditLogs, testSecretSettingEncryptedAtRest), `CoreHelpersTest::testCryptoRoundTripAndTamperDetection`,
 `ConfigAndMastersTest::testConfigurationComesFromEnvironment`.
 
-## 8. Yang menjadi tanggung jawab deployment
+## 8. Deployment
 
-- HTTPS wajib di produksi (reverse proxy / web server); set `SESSION_SECURE=1` dan `TRUSTED_PROXIES` bila di
-  belakang proxy. Web root hanya folder `public/`.
-- User MySQL aplikasi dengan hak minimal; jalankan `database/hardening.sql` bila hak TRIGGER tersedia.
-- Detail langkah: `docs/DEPLOYMENT.md` (Phase 13).
+- HTTPS wajib (contoh `deploy/nginx.conf`, `deploy/apache-vhost.conf`); `SESSION_SECURE=1`, `TRUSTED_PROXIES` bila di
+  belakang proxy. Web root hanya folder `public/`; kode milik root, hanya `storage/` yang dapat ditulis web server.
+- Tiga akun MySQL berhak minimal: admin (instalasi/migrasi/pemulihan), aplikasi (`bin/db-grants.php`: DML per tabel,
+  `audit_logs` hanya SELECT/INSERT), backup (`--role=backup`: SELECT, SHOW VIEW, TRIGGER). Terverifikasi: dengan akun
+  aplikasi, `UPDATE/DELETE audit_logs`, `DROP`, `ALTER` ditolak MySQL (1142) sementara seluruh alur browser & cron berjalan.
+- Kiriman di atas `post_max_size` dijawab 413 dengan batas ukuran (PHP membuang token CSRF pada kiriman seperti itu);
+  browser menolak file di atas batas sebelum diunggah. Test: `SecuritySweepHttpTest::testOversizedSubmissionExplainsLimitInsteadOfSessionExpired`.
+- `bin/check-deployment.php --url=…` memeriksa konfigurasi, header, cookie, jalur sensitif, HTTPS, batas unggah.
+- Detail: `docs/DEPLOYMENT.md`.

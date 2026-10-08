@@ -190,6 +190,19 @@
     if (e.target.matches && e.target.matches('[data-autosubmit]') && e.target.form) { e.target.form.submit(); }
   });
 
+  // --- Batas ukuran unggah: <input type="file" data-max-bytes data-max-message="… :name …"> ---
+  // (server tetap memvalidasi; ini mencegah menunggu unggahan besar yang pasti ditolak)
+  doc.addEventListener('change', function (e) {
+    var input = e.target;
+    if (!input.matches || !input.matches('input[type=file][data-max-bytes]')) { return; }
+    var max = parseInt(input.getAttribute('data-max-bytes'), 10), msg = '';
+    Array.prototype.forEach.call(input.files || [], function (f) {
+      if (!msg && max > 0 && f.size > max) { msg = (input.getAttribute('data-max-message') || '').replace(':name', f.name); }
+    });
+    input.setCustomValidity(msg);
+    if (msg) { input.reportValidity(); }
+  });
+
   // --- Dialog: <button data-open-dialog="id"> & [data-close-dialog] ---
   doc.addEventListener('click', function (e) {
     var opener = e.target.closest('[data-open-dialog]');

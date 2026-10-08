@@ -492,7 +492,7 @@ require APP_ROOT . '/includes/layout/header.php';
               <?php if ($can['upload']): ?>
                 <div class="field">
                   <label for="att-<?= e($cat) ?>"><?= t('npr.attach_upload') ?></label>
-                  <input class="input" type="file" id="att-<?= e($cat) ?>" name="attachment_<?= e($cat) ?>" accept="<?= e('.' . implode(',.', UploadValidator::allowedExtensions())) ?>">
+                  <input class="input" type="file" id="att-<?= e($cat) ?>" name="attachment_<?= e($cat) ?>"<?= file_limit_attrs() ?> accept="<?= e('.' . implode(',.', UploadValidator::allowedExtensions())) ?>">
                   <p class="field-hint"><?= t('npr.attach_hint', ['mb' => (int) (UploadValidator::maxBytes() / 1048576)]) ?></p>
                   <?= nf_err('attachment') ?>
                 </div>

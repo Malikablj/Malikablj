@@ -12,6 +12,7 @@
 /storage/logs/*
 /storage/cache/*
 /storage/sessions/*
+/storage/backups/*
 !/storage/**/.gitkeep
 !/storage/.htaccess
 

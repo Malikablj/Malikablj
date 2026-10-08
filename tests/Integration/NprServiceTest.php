@@ -279,6 +279,15 @@ final class NprServiceTest extends DbTestCase
         $this->assertNotNull(Db::value('SELECT accepted_at FROM project_parts WHERE npr_part_id = ?', [$parts[0]]));
         $this->assertNotSame('cancelled', Db::value('SELECT p.status FROM projects p WHERE p.npr_id = ?', [$id]));
         $this->assertSame(1, (int) Db::value("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'npr_feedback_completed'", [$this->sales->id]));
+        // "lainnya jalan": workflow Body & Cap terbentuk & terjadwal; Plug yang batal tidak berjalan
+        $projectId = (int) Db::value('SELECT id FROM projects WHERE npr_id = ?', [$id]);
+        (new \App\Workflow\WorkflowEngine())->activateReady($projectId);
+        foreach ([$parts[0], $parts[1]] as $np) {
+            $pp = (int) Db::value('SELECT id FROM project_parts WHERE npr_part_id = ?', [$np]);
+            $this->assertGreaterThan(0, (int) Db::value('SELECT COUNT(*) FROM processes WHERE part_id = ? AND planned_start IS NOT NULL', [$pp]), 'part diterima terjadwal');
+        }
+        $plug = (int) Db::value('SELECT id FROM project_parts WHERE npr_part_id = ?', [$parts[2]]);
+        $this->assertSame(0, (int) Db::value("SELECT COUNT(*) FROM processes WHERE part_id = ? AND status IN ('current', 'revision', 'problem', 'completed')", [$plug]), 'part batal tidak berjalan');
     }
 
     public function testFeedbackCompletenessAndPercentRule(): void

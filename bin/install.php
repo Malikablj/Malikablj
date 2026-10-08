@@ -7,13 +7,15 @@ declare(strict_types=1);
  *   php bin/install.php --database=npd_test --fresh   # (test) hapus & buat ulang database
  *
  * schema.sql dan seed.sql idempoten, sehingga aman dijalankan ulang di server berisi data.
+ * Database BARU langsung berskema terbaru, maka seluruh file database/migrations/ dicatat sebagai sudah
+ * dijalankan. Database LAMA yang sudah berisi tabel diperbarui dengan: php bin/migrate.php
  * Opsi --fresh MENGHAPUS database; ditolak bila APP_ENV=production.
  */
 
 require dirname(__DIR__) . '/includes/bootstrap.php';
 
 use App\Core\Config;
-use App\Core\Db;
+use App\Core\SqlScript;
 
 $opts = getopt('', ['database:', 'fresh', 'with-hardening']);
 $dbName = $opts['database'] ?? (string) Config::get('db.name');
@@ -39,29 +41,24 @@ if ($fresh) {
 $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 $pdo->exec("USE `{$dbName}`");
 
-/** Jalankan file SQL (tanpa baris CREATE DATABASE/USE agar bisa ke database mana pun). */
-$run = static function (PDO $pdo, string $file): int {
-    $sql = (string) file_get_contents($file);
-    $sql = preg_replace('/^\s*(CREATE DATABASE|USE)\b[^;]*;/mi', '', $sql) ?? $sql;
-    $sql = preg_replace('/^\s*--.*$/m', '', $sql) ?? $sql;
-    $count = 0;
-    foreach (preg_split('/;\s*(?:\r?\n|$)/', $sql) ?: [] as $stmt) {
-        $stmt = trim($stmt);
-        if ($stmt === '') {
-            continue;
-        }
-        $pdo->exec($stmt);
-        $count++;
-    }
-    return $count;
-};
+$existingTables = (int) $pdo->query('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()')->fetchColumn();
 
 $root = dirname(__DIR__);
-$n1 = $run($pdo, $root . '/database/schema.sql');
-$n2 = $run($pdo, $root . '/database/seed.sql');
+$n1 = SqlScript::runFile($pdo, $root . '/database/schema.sql');
+$n2 = SqlScript::runFile($pdo, $root . '/database/seed.sql');
 echo "Database `{$dbName}` siap: {$n1} pernyataan skema, {$n2} pernyataan seed.\n";
+$migrations = glob($root . '/database/migrations/*.sql') ?: [];
+if ($existingTables === 0) {
+    // skema baru sudah memuat seluruh perubahan migrasi → catat sebagai sudah dijalankan
+    $mark = $pdo->prepare('INSERT IGNORE INTO schema_migrations (migration) VALUES (?)');
+    foreach ($migrations as $m) {
+        $mark->execute([basename($m)]);
+    }
+} elseif ($migrations) {
+    echo "Database sudah berisi data: jalankan php bin/migrate.php untuk menerapkan perubahan skema.\n";
+}
 if (isset($opts['with-hardening'])) {
-    $n3 = $run($pdo, $root . '/database/hardening.sql');
+    $n3 = SqlScript::runFile($pdo, $root . '/database/hardening.sql');
     echo "Hardening diterapkan ({$n3} pernyataan).\n";
 }
 $users = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
