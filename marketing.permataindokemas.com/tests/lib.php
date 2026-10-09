@@ -256,7 +256,9 @@ final class HttpClient
             throw new RuntimeException('HTTP request failed: ' . curl_error($ch));
         }
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        return new HttpResponse($method, $url, $status, (string) $content, $responseHeaders['location'] ?? null, $responseHeaders);
+        // <wbr> hanya petunjuk pemotongan baris (tidak terlihat, tidak ikut tersalin) → test membandingkan teks yang terlihat
+        $content = str_replace('<wbr>', '', (string) $content);
+        return new HttpResponse($method, $url, $status, $content, $responseHeaders['location'] ?? null, $responseHeaders);
     }
 
     /** Download mentah (untuk export file). */

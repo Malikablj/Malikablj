@@ -103,6 +103,7 @@ return static function (Router $r): void {
     $r->get('/purchase-orders/create', [PurchaseOrderController::class, 'create'], 'purchase_orders.create');
     $r->post('/purchase-orders', [PurchaseOrderController::class, 'store'], 'purchase_orders.create');
     $r->post('/purchase-orders/ppic-bulk', [PurchaseOrderController::class, 'ppicBulk'], 'ppic.approve');
+    $r->post('/purchase-orders/bulk-delete', [PurchaseOrderController::class, 'destroyBulk'], 'purchase_orders_bulk.delete');
     $r->get('/purchase-orders/{id}', [PurchaseOrderController::class, 'show'], 'purchase_orders.view');
     $r->get('/purchase-orders/{id}/edit', [PurchaseOrderController::class, 'edit'], 'purchase_orders.edit');
     $r->post('/purchase-orders/{id}', [PurchaseOrderController::class, 'update'], 'purchase_orders.edit');

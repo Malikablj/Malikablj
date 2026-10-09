@@ -31,6 +31,7 @@ Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (l
 17. [Order Entry Form & Complaint (update Oktober 2026)](#17-order-entry-form--complaint-update-oktober-2026)
 18. [Pembagian tugas per divisi, Stock & Inbound Supplier (update Oktober 2026 — 2)](#18-pembagian-tugas-per-divisi-stock--inbound-supplier-update-oktober-2026--2)
 19. [Konfirmasi PPIC massal, hapus user & buka blokir (update Oktober 2026 — 3)](#19-konfirmasi-ppic-massal-hapus-user--buka-blokir-update-oktober-2026--3)
+20. [Hapus OEF massal & perbaikan tampilan angka besar (update Oktober 2026 — 4)](#20-hapus-oef-massal--perbaikan-tampilan-angka-besar-update-oktober-2026--4)
 
 ---
 
@@ -263,6 +264,7 @@ Otorisasi dicek di **backend** pada setiap route (lihat `app/routes.php` + `conf
 | Customers & Contacts | ✔ | ✔ | ✔ | — | — | — | ✔ | lihat |
 | Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | — | — | — | lihat |
 | Order Entry Form (buat / edit) | ✔ | ✔ | buat & edit | lihat | — | — | ✔ | lihat |
+| Hapus OEF massal (centang / pilih semua di daftar) | ✔ | — | — | — | — | — | — | — |
 | Konfirmasi PPIC (Bisa / Tidak bisa diproses, satu per satu atau massal) | ✔ | — | — | ✔ | — | — | — | — |
 | Deliveries / Surat Jalan (catat, edit, ubah jadwal) | ✔ | lihat | lihat | ✔ | — | — | lihat | lihat |
 | Complaint & Return | ✔ | ✔ | lihat & catat | — | — | — | ✔ | lihat |
@@ -542,3 +544,21 @@ Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-se
 - Salah password **5x dalam 15 menit** → login email tersebut diblokir sementara 15 menit (aturan lama). Kini user langsung diberi tahu di percobaan ke-5, dan **semua Admin aktif mendapat notifikasi** *"User terblokir: …"* (lonceng notifikasi) yang mengarah ke daftar user terblokir.
 - **Settings › Users** menampilkan peringatan *"N user sedang terblokir"*, label **Terblokir s/d jam …** di baris user, dan filter status **Terblokir**.
 - Tombol **Buka blokir** (di daftar maupun di halaman Edit) membuka blokir saat itu juga; notifikasi terkait ditandai selesai untuk semua Admin dan tercatat di Audit Log (`user_unblock`). Bila tidak dibuka, blokir tetap berakhir otomatis setelah 15 menit. Reset password juga membuka blokir.
+
+## 20. Hapus OEF massal & perbaikan tampilan angka besar (update Oktober 2026 — 4)
+
+Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-setiap-update). Tidak ada perubahan struktur database.
+
+### Hapus OEF massal (khusus Admin)
+
+- Di daftar **Order Entry Form**, Admin bisa mencentang beberapa order — atau kotak di judul kolom untuk **memilih semua order di halaman itu** (25 / 50 / 100 per halaman) — lalu menekan **Hapus**. Konfirmasi menyebutkan jumlah order yang akan dihapus. PO lama (tanpa konfirmasi PPIC) juga bisa dicentang Admin.
+- Aturannya sama dengan hapus satu per satu: jadwal delivery otomatis & baris produk ikut terhapus, tercatat di Audit Log, dan notifikasi yang menunjuk ke order tersebut ikut dibersihkan. Order yang **sudah punya surat jalan, complaint/retur, lead time, atau inbound tidak dihapus** — namanya disebutkan di pesan hasil (gunakan status *Cancelled* untuk order seperti itu).
+- Hak akses memakai permission terpisah `purchase_orders_bulk.delete` (default hanya Admin). Marketing & Management tetap bisa menghapus OEF satu per satu dari halaman detail seperti sebelumnya, tetapi tidak bisa menghapus massal.
+- Menekan Enter di kolom catatan tidak lagi mengirim form aksi massal (mencegah aksi tidak sengaja).
+
+### Perbaikan tampilan
+
+- **Angka besar** (mis. *Outstanding 310.083.505* atau miliaran) di kartu dashboard dan ringkasan angka di halaman daftar/detail kini otomatis mengecil mengikuti lebar kartu — tidak lagi keluar dari kotak.
+- Teks panjang tanpa spasi (No. order, kode, nama) di tabel turun baris di tempat yang wajar (No. order dipotong setelah tanda `/`), sehingga tabel tidak melebar dan teks di HP tidak terpotong.
+- Daftar OEF: di layar laptop (< 1400px) badge **Status** ditampilkan di bawah badge **PPIC** dan kolom *Progres* disembunyikan, sehingga seluruh kolom muat tanpa digeser; di tablet status order kini juga terlihat. Judul kolom yang panjang boleh turun baris.
+- Diperiksa otomatis untuk 8 role di lebar layar 1440, 1280, 1024, 768, dan 390 px dengan data berangka sangat besar.

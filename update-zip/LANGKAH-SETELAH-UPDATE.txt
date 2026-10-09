@@ -1,10 +1,9 @@
 1. Buka aplikasi di browser, login sebagai Admin, lalu tekan Ctrl+F5 (muat ulang tampilan baru).
 2. Bila belum: Settings › Users → buat akun untuk divisi PPIC, Produksi, dan Gudang.
-3. Yang baru di update ini (detail: README.md bagian 19):
-   - Order Entry Form: Admin & PPIC bisa mencentang beberapa OEF (atau "pilih semua" di halaman)
-     lalu menekan Bisa diproses / Tidak bisa diproses sekaligus (alasan wajib untuk Tidak bisa).
-     Tersedia pilihan 25 / 50 / 100 order per halaman.
-   - Settings › Users: hapus user (Admin), tombol Buka blokir untuk user yang terblokir,
-     filter status "Terblokir", dan notifikasi ke Admin saat ada user terblokir (salah password 5x).
-   Update sebelumnya (tetap termasuk): OEF manual, role PPIC/Produksi/Gudang, Stock,
-   Inbound Maklon manual, Inbound Supplier, menu Finance dihapus (README bagian 18).
+3. Yang baru di update ini (detail: README.md bagian 20):
+   - Order Entry Form: Admin bisa mencentang beberapa OEF (atau "pilih semua" di halaman) lalu
+     menekan Hapus. Order yang sudah punya surat jalan/complaint/lead time/inbound tidak dihapus.
+   - Tampilan: angka besar di kartu dashboard & ringkasan tidak lagi keluar dari kotak; tabel
+     lebih rapi di laptop & HP (teks panjang turun baris, Status tampil di bawah PPIC).
+   Update sebelumnya (tetap termasuk): konfirmasi PPIC massal, hapus user & buka blokir +
+   notifikasi Admin (README 19); OEF manual, role PPIC/Produksi/Gudang, Stock, Inbound (README 18).

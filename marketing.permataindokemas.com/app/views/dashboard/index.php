@@ -138,7 +138,7 @@ $followRow = static function (array $f) use ($today): string {
                                 <tbody>
                                 <?php foreach ($orders as $o): ?>
                                     <tr>
-                                        <td class="min-w-0"><a class="cell-title" href="<?= e(url('/purchase-orders/' . $o['id'])) ?>"><?= e($o['po_number'] ?? $o['code']) ?></a>
+                                        <td class="min-w-0"><a class="cell-title" href="<?= e(url('/purchase-orders/' . $o['id'])) ?>"><?= e_wrap($o['po_number'] ?? $o['code']) ?></a>
                                             <div class="cell-sub"><?= e($o['customer_name'] ?? 'Customer belum terhubung') ?></div>
                                             <div class="cell-sub d-sm-none"><?= e(fmt_date($o['po_date'], 'Tanpa tanggal')) ?> · <?= status_badge($o['status']) ?></div></td>
                                         <td class="d-none d-sm-table-cell nowrap text-secondary"><?= e(fmt_date($o['po_date'], 'Tanpa tanggal')) ?></td>

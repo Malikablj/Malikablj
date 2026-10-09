@@ -44,6 +44,15 @@ function e(mixed $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * Seperti e(), ditambah titik potong baris (<wbr>) setelah "/" — untuk nomor dokumen panjang
+ * (mis. OEF/PIK/2026/10/0001) agar turun baris di tempat yang wajar di layar sempit.
+ */
+function e_wrap(mixed $value): string
+{
+    return str_replace('/', '/<wbr>', e($value));
+}
+
 /** URL internal aplikasi. @param array<string,mixed> $query */
 function url(string $path = '/', array $query = []): string
 {

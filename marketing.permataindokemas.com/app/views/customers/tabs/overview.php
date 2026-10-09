@@ -52,7 +52,7 @@ $id = (int) $customer['id'];
                             <tbody>
                             <?php foreach ($data['openPos'] as $po): $progress = pct((int) $po['delivered_qty'], (int) $po['total_qty']); ?>
                                 <tr>
-                                    <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e(App\Models\PurchaseOrder::displayNumber($po)) ?></a>
+                                    <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e_wrap(App\Models\PurchaseOrder::displayNumber($po)) ?></a>
                                         <div class="cell-sub d-sm-none">Order <?= e(fmt_qty($po['total_qty'])) ?> · <?= status_badge($po['status']) ?></div></td>
                                     <td class="d-none d-md-table-cell text-secondary nowrap"><?= e(fmt_date($po['po_date'])) ?></td>
                                     <td class="d-none d-sm-table-cell"><?= status_badge($po['status']) ?></td>

@@ -263,6 +263,8 @@ final class PurchaseOrder extends Model
                 PoLine::delete((int) $line['id'], $line);
             }
             self::delete($id, $po);
+            // notifikasi yang menunjuk ke order ini tidak lagi bisa dibuka
+            Database::delete('notifications', 'entity_type = :t AND entity_id = :id', ['t' => self::ENTITY, 'id' => $id]);
         });
     }
 

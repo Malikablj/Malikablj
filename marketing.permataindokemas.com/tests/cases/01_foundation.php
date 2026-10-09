@@ -92,6 +92,11 @@ test('permission: matriks role sesuai PRD', function () {
     assert_true(Permission::allows('Sales', 'leads.edit'));
     assert_true(Permission::allows('Sales', 'purchase_orders.create'), 'Sales menginput OEF');
     assert_false(Permission::allows('Sales', 'purchase_orders.delete'));
+    // hapus OEF massal khusus Admin (role dengan purchase_orders.* tidak ikut mendapatkannya)
+    assert_true(Permission::allows('Admin', 'purchase_orders_bulk.delete'));
+    foreach (['Marketing', 'Management', 'Sales', 'PPIC', 'Viewer'] as $role) {
+        assert_false(Permission::allows($role, 'purchase_orders_bulk.delete'), $role . ' tanpa hapus massal');
+    }
     assert_false(Permission::allows('Sales', 'deliveries.edit'));
     // PPIC: hanya tinjau OEF + menu Delivery (mengisi surat jalan)
     assert_true(Permission::allows('PPIC', 'purchase_orders.view'));
@@ -147,6 +152,12 @@ test('deteksi base path untuk berbagai cara deploy Apache', function () {
     assert_same('/pik', App\Helpers\Request::detectBasePath('/pik/public/index.php', '/pik/'), 'subfolder, halaman awal');
     assert_same('/pik/public', App\Helpers\Request::detectBasePath('/pik/public/index.php', '/pik/public/login'), 'URL memuat /public secara eksplisit');
     assert_same('/pik', App\Helpers\Request::detectBasePath('/pik/index.php', '/pik/login'), 'alias langsung ke public/');
+});
+
+test('e_wrap: tetap di-escape, titik potong baris hanya setelah "/"', function () {
+    assert_same('OEF/<wbr>PIK/<wbr>0001', e_wrap('OEF/PIK/0001'));
+    assert_same('&lt;b&gt;/<wbr>&quot;x&quot;', e_wrap('<b>/"x"'));
+    assert_same('', e_wrap(null));
 });
 
 test('SqlFile memecah statement dengan benar (komentar & string)', function () {

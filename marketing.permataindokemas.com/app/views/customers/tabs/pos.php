@@ -18,7 +18,7 @@ $list = $data['pos'];
                 <tbody>
                 <?php foreach ($list->items as $po): ?>
                     <tr>
-                        <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e(App\Models\PurchaseOrder::displayNumber($po)) ?></a>
+                        <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e_wrap(App\Models\PurchaseOrder::displayNumber($po)) ?></a>
                             <div class="cell-sub"><?= $po['order_number'] && $po['po_number'] ? 'PO ' . e($po['po_number']) . ' · ' : '' ?><?= $po['ppic_status'] ? ppic_badge($po['ppic_status']) : '<span class="code-chip">' . e($po['code']) . '</span>' ?></div>
                             <div class="cell-sub d-sm-none">Order <?= e(fmt_qty($po['total_qty'])) ?> · <?= status_badge($po['status']) ?></div></td>
                         <td class="d-none d-md-table-cell nowrap text-secondary"><?= e(fmt_date($po['po_date'])) ?></td>

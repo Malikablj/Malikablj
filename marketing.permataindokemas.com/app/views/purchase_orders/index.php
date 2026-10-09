@@ -7,9 +7,13 @@ use App\Models\PurchaseOrder;
 $hasFilter = $filters['q'] !== '' || $filters['status'] !== '' || $filters['ppic'] !== '' || $filters['customer_id'] > 0 || $filters['from'] !== '' || $filters['to'] !== '' || $filters['issue'] !== '';
 $ppicOptions = PurchaseOrder::PPIC_LABELS + ['legacy' => 'PO lama (tanpa PPIC)'];
 $canCustomer = can('customers.view');
-// Admin & PPIC: centang beberapa order (atau semua di halaman ini) lalu ubah konfirmasi PPIC sekaligus
+// Aksi massal (centang beberapa order atau semua di halaman ini):
+// Admin & PPIC mengubah konfirmasi PPIC (hanya OEF), Admin juga bisa menghapus (semua order, termasuk PO lama)
 $canPpic = can('ppic.approve');
-$selectable = $canPpic ? count(array_filter($orders->items, static fn ($po) => $po['ppic_status'] !== null)) : 0;
+$canBulkDelete = can('purchase_orders_bulk.delete');
+$isSelectable = static fn (array $po): bool => $canBulkDelete || ($canPpic && $po['ppic_status'] !== null);
+$selectable = count(array_filter($orders->items, $isSelectable));
+$ppicRows = $canPpic ? count(array_filter($orders->items, static fn (array $po): bool => $po['ppic_status'] !== null)) : 0;
 ?>
 <div class="page-header">
     <div>
@@ -63,17 +67,28 @@ $selectable = $canPpic ? count(array_filter($orders->items, static fn ($po) => $
         <div class="empty-state"><i class="bi bi-receipt"></i><div class="empty-title"><?= $hasFilter ? 'Tidak ada order yang cocok' : 'Belum ada order' ?></div><p>Order Entry Form dari customer akan tampil di sini.</p></div>
     <?php else: ?>
         <?php if ($selectable > 0): ?>
-        <form method="post" action="<?= e(url('/purchase-orders/ppic-bulk')) ?>" data-bulk="ids[]" id="ppic-bulk">
+        <form method="post" action="<?= e(url($ppicRows > 0 ? '/purchase-orders/ppic-bulk' : '/purchase-orders/bulk-delete')) ?>" data-bulk="ids[]" id="orders-bulk">
             <?= csrf_field() ?>
             <input type="hidden" name="return" value="<?= e($returnPath) ?>">
+            <button type="submit" class="d-none" disabled aria-hidden="true" tabindex="-1"></button><?php /* Enter di kolom catatan tidak mengirim form */ ?>
             <div class="bulk-bar">
                 <div class="bulk-bar-info" title="Centang kotak di judul kolom untuk memilih semua order di halaman ini"><i class="bi bi-ui-checks"></i>
                     <span><strong data-bulk-count>0</strong> order dipilih</span>
                     <span class="text-secondary d-none d-xxl-inline">· kotak di judul kolom = pilih semua di halaman ini</span></div>
-                <input type="text" class="form-control form-control-sm bulk-bar-note" name="ppic_note" id="bulk-ppic-note" maxlength="2000" placeholder="Catatan / alasan (wajib bila tidak bisa diproses)" aria-label="Catatan atau alasan PPIC">
-                <button class="btn btn-success btn-sm" type="submit" name="decision" value="approve" data-bulk-action data-confirm="Tandai semua order yang dicentang BISA diproses?"><i class="bi bi-check2-circle"></i> Bisa diproses</button>
-                <button class="btn btn-danger btn-sm" type="submit" name="decision" value="reject" data-bulk-action data-bulk-require="#bulk-ppic-note" data-confirm="Tandai semua order yang dicentang TIDAK bisa diproses? Jadwal delivery-nya akan dibatalkan."><i class="bi bi-x-circle"></i> Tidak bisa diproses</button>
-                <div class="invalid-feedback w-100" data-bulk-feedback>Isi alasan mengapa order yang dicentang tidak bisa diproses.</div>
+                <?php if ($ppicRows > 0): ?>
+                    <input type="text" class="form-control form-control-sm bulk-bar-note" name="ppic_note" id="bulk-ppic-note" maxlength="2000" placeholder="Catatan / alasan (wajib bila tidak bisa diproses)" aria-label="Catatan atau alasan PPIC">
+                    <button class="btn btn-success btn-sm" type="submit" formaction="<?= e(url('/purchase-orders/ppic-bulk')) ?>" name="decision" value="approve" data-bulk-action
+                        data-confirm-template="Tandai {n} order yang dicentang BISA diproses?" data-confirm="Tandai semua order yang dicentang BISA diproses?"><i class="bi bi-check2-circle"></i> Bisa diproses</button>
+                    <button class="btn btn-danger btn-sm" type="submit" formaction="<?= e(url('/purchase-orders/ppic-bulk')) ?>" name="decision" value="reject" data-bulk-action data-bulk-require="#bulk-ppic-note"
+                        data-confirm-template="Tandai {n} order yang dicentang TIDAK bisa diproses? Jadwal delivery-nya akan dibatalkan." data-confirm="Tandai semua order yang dicentang TIDAK bisa diproses? Jadwal delivery-nya akan dibatalkan."><i class="bi bi-x-circle"></i> Tidak bisa diproses</button>
+                <?php endif; ?>
+                <?php if ($canBulkDelete): ?>
+                    <?php if ($ppicRows > 0): ?><span class="bulk-bar-sep" aria-hidden="true"></span><?php endif; ?>
+                    <button class="btn btn-outline-danger btn-sm" type="submit" formaction="<?= e(url('/purchase-orders/bulk-delete')) ?>" data-bulk-action
+                        data-confirm-template="Hapus {n} order yang dicentang secara permanen? Order yang sudah punya surat jalan, complaint/retur, lead time, atau inbound tidak akan dihapus."
+                        data-confirm="Hapus order yang dicentang secara permanen?"><i class="bi bi-trash"></i> Hapus</button>
+                <?php endif; ?>
+                <?php if ($ppicRows > 0): ?><div class="invalid-feedback w-100" data-bulk-feedback>Isi alasan mengapa order yang dicentang tidak bisa diproses.</div><?php endif; ?>
             </div>
         <?php endif; ?>
         <div class="table-wrap">
@@ -82,18 +97,18 @@ $selectable = $canPpic ? count(array_filter($orders->items, static fn ($po) => $
                     <?php if ($selectable > 0): ?><th class="col-check"><input class="form-check-input" type="checkbox" data-check-all="ids[]" aria-label="Pilih semua order di halaman ini" title="Pilih semua order di halaman ini"></th><?php endif; ?>
                     <th><?= sort_link('number', 'No. order', $sort, $dir) ?></th>
                     <th class="d-none d-md-table-cell"><?= sort_link('customer', 'Customer · Produk', $sort, $dir) ?></th>
-                    <th class="d-none d-lg-table-cell"><?= sort_link('requested', 'Permintaan kirim', $sort, $dir) ?></th>
-                    <th class="d-none d-sm-table-cell"><?= sort_link('ppic', 'PPIC', $sort, $dir) ?></th>
-                    <th class="d-none d-xl-table-cell"><?= sort_link('status', 'Status', $sort, $dir) ?></th>
+                    <th class="d-none d-xl-table-cell"><?= sort_link('requested', 'Permintaan kirim', $sort, $dir) ?></th>
+                    <th class="d-none d-sm-table-cell"><?= sort_link('ppic', 'PPIC', $sort, $dir) ?><span class="d-xxl-none"> · <?= sort_link('status', 'Status', $sort, $dir) ?></span></th>
+                    <th class="d-none d-xxl-table-cell"><?= sort_link('status', 'Status', $sort, $dir) ?></th>
                     <th class="num d-none d-md-table-cell"><?= sort_link('qty', 'Qty', $sort, $dir) ?></th>
                     <th class="num"><?= sort_link('outstanding', 'Outstanding', $sort, $dir) ?></th>
-                    <th class="d-none d-lg-table-cell">Progres</th>
+                    <th class="d-none d-xxl-table-cell">Progres</th>
                 </tr></thead>
                 <tbody>
                 <?php foreach ($orders->items as $po): $progress = pct((int) $po['delivered_qty'], (int) $po['total_qty']); $out = (int) $po['outstanding_qty']; ?>
                     <tr>
-                        <?php if ($selectable > 0): ?><td class="col-check"><?php if ($po['ppic_status'] !== null): ?><input class="form-check-input" type="checkbox" name="ids[]" value="<?= (int) $po['id'] ?>" aria-label="Pilih order <?= e(PurchaseOrder::displayNumber($po)) ?>"><?php endif; ?></td><?php endif; ?>
-                        <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e(PurchaseOrder::displayNumber($po)) ?></a>
+                        <?php if ($selectable > 0): ?><td class="col-check"><?php if ($isSelectable($po)): ?><input class="form-check-input" type="checkbox" name="ids[]" value="<?= (int) $po['id'] ?>" aria-label="Pilih order <?= e(PurchaseOrder::displayNumber($po)) ?>"><?php endif; ?></td><?php endif; ?>
+                        <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e_wrap(PurchaseOrder::displayNumber($po)) ?></a>
                             <div class="cell-sub">
                                 <?php if ($po['order_number'] && $po['po_number']): ?>PO <?= e($po['po_number']) ?> · <?php endif; ?>
                                 <?= e(fmt_date($po['po_date'], 'Tanpa tanggal')) ?><?= $po['sales_name'] ? ' · ' . e($po['sales_name']) : '' ?>
@@ -101,13 +116,13 @@ $selectable = $canPpic ? count(array_filter($orders->items, static fn ($po) => $
                             <div class="d-sm-none mt-1"><?= ppic_badge($po['ppic_status']) ?> <?= status_badge($po['status']) ?></div></td>
                         <td class="d-none d-md-table-cell"><?= $po['customer_id'] ? ($canCustomer ? '<a href="' . e(url('/customers/' . $po['customer_id'])) . '">' . e($po['customer_name']) . '</a>' : e($po['customer_name'])) : '<span class="badge-soft badge-soft-warning no-dot">Customer belum terhubung</span>' ?>
                             <div class="cell-sub"><?= e($po['first_product'] ?? '—') ?><?= (int) $po['line_count'] > 1 ? ' +' . ((int) $po['line_count'] - 1) . ' produk' : '' ?><?= (int) $po['is_subcont'] === 1 ? ' · <span class="badge-soft badge-soft-neutral no-dot">Subcont</span>' : '' ?></div></td>
-                        <td class="d-none d-lg-table-cell nowrap"><?= e(fmt_date($po['requested_date'])) ?>
+                        <td class="d-none d-xl-table-cell nowrap"><?= e(fmt_date($po['requested_date'])) ?>
                             <?php if ($po['schedule_date'] && $po['schedule_date'] !== $po['requested_date'] && $po['schedule_status'] !== 'Cancelled'): ?><div class="cell-sub">Jadwal: <?= e(fmt_date($po['schedule_date'])) ?></div><?php endif; ?></td>
-                        <td class="d-none d-sm-table-cell"><?= ppic_badge($po['ppic_status']) ?></td>
-                        <td class="d-none d-xl-table-cell"><?= status_badge($po['status']) ?></td>
+                        <td class="d-none d-sm-table-cell"><?= ppic_badge($po['ppic_status']) ?><div class="d-xxl-none mt-1"><?= status_badge($po['status']) ?></div></td>
+                        <td class="d-none d-xxl-table-cell"><?= status_badge($po['status']) ?></td>
                         <td class="num d-none d-md-table-cell"><?= e(fmt_qty($po['total_qty'])) ?></td>
                         <td class="num fw-semibold<?= $out < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($out)) ?><?= $out < 0 ? '<div class="x-small">over</div>' : '' ?></td>
-                        <td class="d-none d-lg-table-cell"><div class="progress-thin<?= $progress >= 100 ? ($out < 0 ? ' is-over' : ' is-done') : '' ?>" title="<?= $progress ?>% terkirim"><span style="width: <?= $progress ?>%"></span></div></td>
+                        <td class="d-none d-xxl-table-cell"><div class="progress-thin<?= $progress >= 100 ? ($out < 0 ? ' is-over' : ' is-done') : '' ?>" title="<?= $progress ?>% terkirim"><span style="width: <?= $progress ?>%"></span></div></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

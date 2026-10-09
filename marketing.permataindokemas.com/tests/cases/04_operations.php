@@ -281,6 +281,72 @@ test('PPIC massal: centang beberapa / semua OEF di halaman → Bisa / Tidak bisa
     Database::query("DELETE FROM customers WHERE name = 'PT Massal Uji'");
 });
 
+test('hapus OEF massal (khusus Admin): centang beberapa / semua di halaman; order dengan surat jalan tidak terhapus', function () {
+    $mkt = client_as('Marketing');
+    $ids = [];
+    foreach (['OEF-DEL-001', 'OEF-DEL-002', 'OEF-DEL-003'] as $no) {
+        assert_redirect($mkt->post('/purchase-orders', ['order_number' => $no, 'customer_name' => 'PT Hapus Massal', 'sales_name' => 'Sales Uji', 'po_date' => today(),
+            'product_name' => 'Tutup Hapus Massal', 'product_spec' => 'PP', 'order_qty' => '50', 'requested_date' => date('Y-m-d', strtotime('+5 days'))]), '/purchase-orders/');
+        $ids[$no] = (int) Database::fetchValue('SELECT id FROM purchase_orders WHERE order_number = :n', ['n' => $no]);
+    }
+    $customer = (int) Database::fetchValue('SELECT customer_id FROM purchase_orders WHERE id = :id', ['id' => $ids['OEF-DEL-001']]);
+    $legacy = Database::insert('purchase_orders', ['code' => 'PO-DEL0000001', 'po_number' => 'PO/DEL/LAMA', 'customer_id' => $customer, 'po_date' => today(), 'status' => 'Open']);
+    // OEF-DEL-003 sudah punya surat jalan → tidak boleh ikut terhapus
+    $line3 = (int) Database::fetchValue('SELECT id FROM po_lines WHERE po_id = :p', ['p' => $ids['OEF-DEL-003']]);
+    $sj = Database::insert('deliveries', ['code' => 'DLV-DEL000001', 'po_id' => $ids['OEF-DEL-003'], 'po_line_id' => $line3, 'delivery_date' => today(), 'sj_number' => 'SJ/DEL/001', 'delivered_qty' => 10, 'status' => 'Delivered']);
+    $schedules = Database::fetchColumn('SELECT schedule_delivery_id FROM purchase_orders WHERE id IN (' . $ids['OEF-DEL-001'] . ',' . $ids['OEF-DEL-002'] . ')');
+    assert_true((bool) Database::fetchValue("SELECT 1 FROM notifications WHERE entity_type = 'purchase_order' AND entity_id = :id", ['id' => $ids['OEF-DEL-001']]), 'ada notifikasi OEF baru');
+
+    // hanya Admin: role yang boleh hapus satu per satu (Marketing, Management) pun ditolak untuk hapus massal
+    foreach (['Marketing', 'Management', 'Sales', 'PPIC', 'Viewer'] as $role) {
+        assert_status(403, client_as($role)->post('/purchase-orders/bulk-delete', ['ids' => [(string) $ids['OEF-DEL-001']]]), $role);
+    }
+    assert_not_contains('bulk-delete', $mkt->get('/purchase-orders', ['q' => 'DEL'])->body);
+    $ppicPage = client_as('PPIC')->get('/purchase-orders', ['q' => 'DEL']);
+    assert_not_contains('bulk-delete', $ppicPage->body, 'PPIC hanya konfirmasi, tanpa tombol hapus');
+    assert_not_contains('name="ids[]" value="' . $legacy . '"', $ppicPage->body);
+
+    $admin = client_as('Admin');
+    $page = $admin->get('/purchase-orders', ['q' => 'DEL']);
+    assert_contains('formaction="/purchase-orders/bulk-delete"', $page->body);
+    assert_contains('data-check-all="ids[]"', $page->body);
+    assert_contains('name="ids[]" value="' . $legacy . '"', $page->body, 'Admin juga bisa mencentang PO lama untuk dihapus');
+    assert_contains('formaction="/purchase-orders/ppic-bulk"', $page->body, 'Admin tetap punya tombol konfirmasi PPIC');
+
+    assert_redirect($admin->post('/purchase-orders/bulk-delete', ['return' => '/purchase-orders?q=DEL']), '/purchase-orders?q=DEL');
+    assert_contains('Centang minimal satu order', $admin->get('/purchase-orders')->body);
+    assert_redirect($admin->post('/purchase-orders/bulk-delete', ['ids' => array_map('strval', range(1, 101))]), '/purchase-orders');
+    assert_contains('Maksimal 100 order', $admin->get('/purchase-orders')->body);
+
+    $all = array_map('strval', [$ids['OEF-DEL-001'], $ids['OEF-DEL-002'], $ids['OEF-DEL-003'], $legacy]);
+    $res = $admin->post('/purchase-orders/bulk-delete', ['ids' => $all, 'return' => '/purchase-orders?q=DEL&per_page=50']);
+    assert_redirect($res, '/purchase-orders?q=DEL&per_page=50', 'kembali ke filter yang sama');
+    $flash = $admin->get('/purchase-orders', ['q' => 'DEL', 'per_page' => '50'])->body;
+    assert_contains('3 order dihapus', $flash);
+    assert_contains('1 order tidak dihapus', $flash);
+    assert_contains('OEF-DEL-003', $flash);
+    foreach ([$ids['OEF-DEL-001'], $ids['OEF-DEL-002'], $legacy] as $id) {
+        assert_false((bool) Database::fetchValue('SELECT 1 FROM purchase_orders WHERE id = :id', ['id' => $id]), 'terhapus: ' . $id);
+        assert_false((bool) Database::fetchValue('SELECT 1 FROM po_lines WHERE po_id = :id', ['id' => $id]));
+        assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'delete' AND entity_type = 'purchase_order' AND entity_id = :id", ['id' => $id]));
+        assert_false((bool) Database::fetchValue("SELECT 1 FROM notifications WHERE entity_type = 'purchase_order' AND entity_id = :id", ['id' => $id]), 'notifikasi order ikut dibersihkan');
+    }
+    foreach ($schedules as $sid) {
+        assert_false((bool) Database::fetchValue('SELECT 1 FROM deliveries WHERE id = :id', ['id' => $sid]), 'jadwal delivery otomatis ikut terhapus');
+    }
+    assert_true((bool) Database::fetchValue('SELECT 1 FROM purchase_orders WHERE id = :id', ['id' => $ids['OEF-DEL-003']]), 'order dengan surat jalan tetap ada');
+    assert_true((bool) Database::fetchValue('SELECT 1 FROM deliveries WHERE id = :id', ['id' => $sj]));
+    // hanya order yang tidak bisa dihapus → pesan gagal
+    assert_redirect($admin->post('/purchase-orders/bulk-delete', ['ids' => [(string) $ids['OEF-DEL-003']]]), '/purchase-orders');
+    assert_contains('Tidak ada order yang dihapus', $admin->get('/purchase-orders')->body);
+
+    // bersihkan
+    Database::delete('deliveries', 'id = :id', ['id' => $sj]);
+    App\Models\PurchaseOrder::deleteSafely($ids['OEF-DEL-003']);
+    Database::query("DELETE FROM products WHERE name = 'Tutup Hapus Massal'");
+    Database::delete('customers', 'id = :id', ['id' => $customer]);
+});
+
 group('Phase 4 · Delivery, Return & Outstanding');
 
 test('delivery Delivered mengurangi outstanding, Scheduled tidak; status PO → Partial', function () {

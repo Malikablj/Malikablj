@@ -76,6 +76,11 @@
     }
   });
 
+  /* Angka di kartu KPI / ringkasan: jumlah karakter dipakai CSS (--len) agar angka besar mengecil, tidak keluar kartu */
+  document.querySelectorAll('.kpi-value, .stat-value').forEach(function (el) {
+    el.style.setProperty('--len', String(Math.max(4, el.textContent.trim().length)));
+  });
+
   /* Centang semua: <input type="checkbox" data-check-all="ids[]"> (dalam form yang sama) */
   document.querySelectorAll('[data-check-all]').forEach(function (box) {
     box.addEventListener('change', function () {
@@ -88,7 +93,8 @@
   });
 
   /* Aksi massal: <form data-bulk="ids[]"> berisi <span data-bulk-count>; tombol [data-bulk-action] aktif bila ada
-     yang dicentang; [data-bulk-require="#field"] menolak submit bila field itu kosong (mis. alasan penolakan). */
+     yang dicentang ([data-confirm-template] = pesan konfirmasi dengan {n} jumlah yang dicentang);
+     [data-bulk-require="#field"] menolak submit bila field itu kosong (mis. alasan penolakan). */
   document.querySelectorAll('form[data-bulk]').forEach(function (form) {
     var name = form.getAttribute('data-bulk');
     var counter = form.querySelector('[data-bulk-count]');
@@ -98,7 +104,11 @@
       var boxes = Array.prototype.filter.call(form.querySelectorAll('input[type="checkbox"]'), function (c) { return c.name === name; });
       var n = boxes.filter(function (c) { return c.checked; }).length;
       if (counter) { counter.textContent = n; }
-      form.querySelectorAll('[data-bulk-action]').forEach(function (b) { b.disabled = n === 0; });
+      form.querySelectorAll('[data-bulk-action]').forEach(function (b) {
+        b.disabled = n === 0;
+        var template = b.getAttribute('data-confirm-template');
+        if (template && n > 0) { b.setAttribute('data-confirm', template.replace('{n}', n)); }
+      });
       if (all) { all.checked = n > 0 && n === boxes.length; all.indeterminate = n > 0 && n < boxes.length; }
       form.classList.toggle('has-selection', n > 0);
     };

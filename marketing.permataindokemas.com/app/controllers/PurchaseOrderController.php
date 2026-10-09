@@ -28,7 +28,7 @@ final class PurchaseOrderController extends Controller
         'is_subcont', 'supplier', 'requested_date', 'ship_to', 'remark', 'payment_term', 'status',
     ];
 
-    /** Pilihan jumlah order per halaman di daftar OEF (nilai terbesar = batas konfirmasi PPIC massal). */
+    /** Pilihan jumlah order per halaman di daftar OEF (nilai terbesar = batas aksi massal: konfirmasi PPIC & hapus). */
     private const PER_PAGE = [25, 50, 100];
 
     /** @return array<string,mixed> */
@@ -183,19 +183,11 @@ final class PurchaseOrderController extends Controller
     public function ppicBulk(): void
     {
         $back = $this->returnTo('/purchase-orders');
-        $raw = is_array($_POST['ids'] ?? null) ? $_POST['ids'] : [];
-        $ids = array_values(array_unique(array_filter(array_map(static fn ($v) => is_string($v) && ctype_digit($v) ? (int) $v : 0, $raw))));
+        $ids = $this->checkedIds($back);
         $decision = is_string($_POST['decision'] ?? null) ? $_POST['decision'] : '';
         $note = is_string($_POST['ppic_note'] ?? null) ? mb_substr(trim($_POST['ppic_note']), 0, 2000) : '';
-        $limit = self::PER_PAGE[count(self::PER_PAGE) - 1];
-        if ($ids === []) {
-            $this->failure('Centang minimal satu order terlebih dahulu.', $back);
-        }
         if (!in_array($decision, ['approve', 'reject'], true)) {
             $this->failure('Pilih keputusan PPIC: Bisa diproses atau Tidak bisa diproses.', $back);
-        }
-        if (count($ids) > $limit) {
-            $this->failure('Maksimal ' . $limit . ' order sekali proses.', $back);
         }
         if ($decision === 'reject' && $note === '') {
             $this->failure('Isi alasan mengapa order yang dicentang tidak bisa diproses.', $back);
@@ -269,7 +261,65 @@ final class PurchaseOrderController extends Controller
         } catch (DomainException $e) {
             $this->failure($e->getMessage(), '/purchase-orders/' . $id);
         }
-        $this->success('PO ' . ($po['po_number'] ?? $po['code']) . ' dihapus.', '/purchase-orders');
+        $this->success('Order ' . PurchaseOrder::displayNumber($po) . ' dihapus.', '/purchase-orders');
+    }
+
+    /**
+     * Hapus beberapa order sekaligus (khusus Admin; dicentang di daftar OEF, bisa "pilih semua" di halaman).
+     * Aturan sama dengan hapus satu per satu: order yang sudah punya surat jalan, complaint/retur,
+     * lead time, atau inbound tidak dihapus (dilaporkan di pesan hasil).
+     */
+    public function destroyBulk(): void
+    {
+        $back = $this->returnTo('/purchase-orders');
+        $ids = $this->checkedIds($back);
+        $deleted = 0;
+        $missing = 0;
+        $blocked = [];
+        foreach ($ids as $id) {
+            $po = PurchaseOrder::find($id);
+            if ($po === null) {
+                $missing++;
+                continue;
+            }
+            try {
+                PurchaseOrder::deleteSafely($id);
+                $deleted++;
+            } catch (DomainException) {
+                $blocked[] = PurchaseOrder::displayNumber($po);
+            }
+        }
+        $notes = [];
+        if ($blocked !== []) {
+            $notes[] = count($blocked) . ' order tidak dihapus karena sudah memiliki surat jalan, complaint/retur, lead time, atau inbound ('
+                . implode(', ', array_slice($blocked, 0, 5)) . (count($blocked) > 5 ? ', dan ' . (count($blocked) - 5) . ' lainnya' : '')
+                . ') — gunakan status Cancelled.';
+        }
+        if ($missing > 0) {
+            $notes[] = $missing . ' order sudah tidak ada.';
+        }
+        if ($deleted === 0) {
+            $this->failure(trim('Tidak ada order yang dihapus. ' . implode(' ', $notes)), $back);
+        }
+        $this->success(trim($deleted . ' order dihapus. ' . implode(' ', $notes)), $back);
+    }
+
+    /**
+     * ID order yang dicentang di daftar OEF (ids[]); kosong / melebihi batas → kembali dengan pesan.
+     * @return list<int>
+     */
+    private function checkedIds(string $back): array
+    {
+        $raw = is_array($_POST['ids'] ?? null) ? $_POST['ids'] : [];
+        $ids = array_values(array_unique(array_filter(array_map(static fn ($v) => is_string($v) && ctype_digit($v) ? (int) $v : 0, $raw))));
+        $limit = self::PER_PAGE[count(self::PER_PAGE) - 1];
+        if ($ids === []) {
+            $this->failure('Centang minimal satu order terlebih dahulu.', $back);
+        }
+        if (count($ids) > $limit) {
+            $this->failure('Maksimal ' . $limit . ' order sekali proses.', $back);
+        }
+        return $ids;
     }
 
     /** Tambah baris produk: nama produk diketik manual (produk baru dicatat otomatis). */
