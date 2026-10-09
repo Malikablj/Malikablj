@@ -3,7 +3,7 @@
 use App\Helpers\Form;
 
 /**
- * Inbound Supplier — catat / edit (diinput manual oleh Gudang).
+ * Inbound Supplier — catat / edit (diinput manual oleh Produksi).
  *
  * @var array<string,mixed>|null $row
  * @var array<string,string> $errors

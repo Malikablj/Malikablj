@@ -185,7 +185,7 @@ final class Product extends Model
     /** Sumber produk yang dicatat otomatis (kolom products.source). */
     public const SOURCE_LABELS = [
         'OEF'  => 'Dicatat otomatis dari Order Entry Form',
-        'Stok' => 'Dicatat otomatis dari input Stock (Produksi/Gudang)',
+        'Stok' => 'Dicatat otomatis dari input Stock (Produksi)',
     ];
 
     /** Rapikan nama produk yang diketik manual: spasi ganda & spasi di awal/akhir dihapus. */
@@ -256,7 +256,7 @@ final class Product extends Model
     }
 
     /**
-     * Produk untuk input Stock: nama produk diketik manual oleh Produksi/Gudang.
+     * Produk untuk input Stock: nama produk diketik manual oleh Produksi.
      * Nama yang sama (tidak peka huruf besar/kecil & spasi) selalu masuk ke produk
      * yang sama sehingga stok otomatis terkelompok per produk.
      * @return array{id:int,created:bool}

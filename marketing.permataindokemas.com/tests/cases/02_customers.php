@@ -216,9 +216,9 @@ test('search menemukan customer, kontak, dan PO sesuai hak akses', function () {
     $po = $admin->get('/search', ['q' => 'PO/UJI']);
     assert_contains('Order Entry Form', $po->body);
     assert_contains('PO/UJI/001', $po->body);
-    $gudang = client_as('Gudang')->get('/search', ['q' => 'PO/UJI']);
-    assert_status(200, $gudang);
-    assert_not_contains('PO/UJI/001', $gudang->body, 'Gudang tidak melihat order');
+    $produksi = client_as('Produksi')->get('/search', ['q' => 'PO/UJI']);
+    assert_status(200, $produksi);
+    assert_not_contains('PO/UJI/001', $produksi->body, 'Produksi tidak melihat order');
     assert_status(200, $admin->get('/search', ['q' => "%' UNION SELECT password_hash FROM users -- "]));
     assert_status(200, $admin->get('/search', ['q' => 'x']));
 });

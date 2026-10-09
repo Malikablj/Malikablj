@@ -18,7 +18,7 @@ $keep = array_filter(['q' => $filters['q'], 'supplier' => $filters['supplier'], 
     <div>
         <div class="page-eyebrow">Inventory</div>
         <h1 class="page-title">Inbound Supplier</h1>
-        <p class="page-subtitle">Penerimaan barang dari supplier (bahan baku, kemasan, label, dll.), diinput manual oleh Gudang. Total masuk = Qty diterima − Qty reject.</p>
+        <p class="page-subtitle">Penerimaan barang dari supplier (bahan baku, kemasan, label, dll.), diinput manual oleh Produksi. Total masuk = Qty diterima − Qty reject.</p>
     </div>
     <?php if (can('inbound_supplier.create')): ?>
         <div class="page-actions"><a href="<?= e(url('/inbound-supplier/create')) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Catat Inbound</a></div>

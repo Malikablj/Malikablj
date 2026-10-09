@@ -42,7 +42,7 @@ $tiles = [
     ['perm' => 'inbound_supplier.view', 'href' => url('/inbound-supplier'), 'tone' => 'kpi-success', 'icon' => 'bi-truck-flatbed', 'label' => 'Inbound supplier',
      'value' => fmt_qty($kpi['inbound_supplier_month'], '0'), 'meta' => 'penerimaan bulan ini', 'alert' => false],
 ];
-// Subjudul mengikuti modul yang boleh dibuka role (mis. Gudang: stok & barang masuk)
+// Subjudul mengikuti modul yang boleh dibuka role (mis. Produksi: stok & barang masuk)
 $focus = array_keys(array_filter([
     'customer'                   => can('customers.view'),
     'pipeline'                   => can('leads.view'),

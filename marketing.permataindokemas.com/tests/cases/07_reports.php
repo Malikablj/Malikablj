@@ -83,7 +83,7 @@ group('Phase 7 · Reports');
 
 test('akses laporan per role (PRD): Management semua + export, Viewer tanpa export', function () use ($repSetup) {
     $repSetup();
-    foreach (['Marketing', 'Sales', 'PPIC', 'Produksi', 'Gudang'] as $role) {
+    foreach (['Marketing', 'Sales', 'PPIC', 'Produksi'] as $role) {
         $c = client_as($role);
         assert_status(403, $c->get('/reports'), $role);
         assert_status(403, $c->get('/reports/po'), $role);

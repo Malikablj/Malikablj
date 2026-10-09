@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
   name                  VARCHAR(120) NOT NULL,
   email                 VARCHAR(190) NOT NULL,
   password_hash         VARCHAR(255) NOT NULL,
-  role                  ENUM('Admin','Marketing','Sales','Management','PPIC','Produksi','Gudang','Viewer') NOT NULL DEFAULT 'Viewer',
+  role                  ENUM('Admin','Marketing','Sales','Management','PPIC','Produksi','Viewer') NOT NULL DEFAULT 'Viewer',
   is_active             TINYINT(1)   NOT NULL DEFAULT 1,
   must_change_password  TINYINT(1)   NOT NULL DEFAULT 0,
   last_login_at         DATETIME     NULL,
@@ -534,7 +534,7 @@ CREATE TABLE IF NOT EXISTS inbound_maklon (
   CONSTRAINT fk_inbound_updated FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Penerimaan barang dari supplier (bahan baku, kemasan, dll.) — diinput Gudang
+-- Penerimaan barang dari supplier (bahan baku, kemasan, dll.) — diinput Produksi
 CREATE TABLE IF NOT EXISTS inbound_supplier (
   id             INT UNSIGNED  NOT NULL AUTO_INCREMENT,
   code           VARCHAR(20)   NOT NULL,

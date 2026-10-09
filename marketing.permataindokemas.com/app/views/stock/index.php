@@ -28,7 +28,7 @@ $masterLink = static function (?int $productId) use ($canProduct): string {
     <div>
         <div class="page-eyebrow">Inventory</div>
         <h1 class="page-title">Stock</h1>
-        <p class="page-subtitle">Diisi Produksi &amp; Gudang. Nama produk diketik manual lalu otomatis dikelompokkan per produk: FG (barang jadi), WIP (dalam produksi), Ready (siap kirim), Reserved (dialokasikan).</p>
+        <p class="page-subtitle">Diisi Produksi. Nama produk diketik manual lalu otomatis dikelompokkan per produk: FG (barang jadi), WIP (dalam produksi), Ready (siap kirim), Reserved (dialokasikan).</p>
     </div>
     <?php if (can('stock.create')): ?>
         <div class="page-actions"><a href="<?= e(url('/stock/create', $group ? ['product_id' => $group['id']] : [])) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Catat Stok</a></div>

@@ -133,7 +133,7 @@ test('lock mencegah dua otomasi berjalan bersamaan', function () {
 group('Phase 8 · Settings');
 
 test('pengaturan: hanya Admin, validasi, tersimpan & dipakai; jalankan otomasi manual', function () {
-    foreach (['Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Gudang', 'Viewer'] as $role) {
+    foreach (['Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Viewer'] as $role) {
         assert_status(403, client_as($role)->get('/settings'), $role);
     }
     $c = client_as('Admin');

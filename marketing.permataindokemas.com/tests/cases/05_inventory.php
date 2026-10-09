@@ -131,7 +131,7 @@ test('stok: validasi, qty otomatis dari box × isi, selisih wajib dikonfirmasi (
     assert_status(302, $conf);
     // nama diketik beda huruf/spasi → tetap masuk kelompok produk yang sama
     $products = (int) Database::fetchValue('SELECT COUNT(*) FROM products');
-    assert_status(302, client_as('Gudang')->post('/stock', ['product_name' => '  jar   INVENTORI 30GR ', 'stock_type' => 'FG', 'quantity' => '300']));
+    assert_status(302, client_as('Admin')->post('/stock', ['product_name' => '  jar   INVENTORI 30GR ', 'stock_type' => 'FG', 'quantity' => '300']), 'user lain');
     assert_same($products, (int) Database::fetchValue('SELECT COUNT(*) FROM products'), 'tidak ada produk ganda');
     $pivot = $c->get('/stock');
     assert_status(200, $pivot);
@@ -189,7 +189,7 @@ test('stok legacy: hubungkan ke produk menyelesaikan issue; hapus baris judul me
     assert_true(array_key_exists('stock', Product::dependents($ids['p1'])));
 });
 
-test('otorisasi stok: hanya Produksi & Gudang (dan Admin) yang mengisi; Management & Viewer hanya lihat', function () use ($invSetup) {
+test('otorisasi stok: hanya Produksi (dan Admin) yang mengisi; Management & Viewer hanya lihat', function () use ($invSetup) {
     $ids = $invSetup();
     assert_status(403, client_as('Marketing')->get('/stock'));
     assert_status(403, client_as('Sales')->get('/stock'));
@@ -202,7 +202,7 @@ test('otorisasi stok: hanya Produksi & Gudang (dan Admin) yang mengisi; Manageme
         assert_status(403, $v->post('/stock', ['product_name' => 'Jar Inventori 30gr', 'stock_type' => 'FG', 'quantity' => '1']), $role);
         assert_status(403, $v->post('/stock/' . $sid . '/delete'), $role);
     }
-    foreach (['Produksi', 'Gudang'] as $role) {
+    foreach (['Produksi'] as $role) {
         $c = client_as($role);
         assert_status(200, $c->get('/stock/create'), $role);
         assert_status(200, $c->get('/stock/' . $sid . '/edit'), $role);
@@ -213,7 +213,7 @@ test('otorisasi stok: hanya Produksi & Gudang (dan Admin) yang mengisi; Manageme
         assert_contains('Stok FG', $home->body, $role . ' KPI stok di dashboard');
         assert_contains('href="/stock"', $home->body);
     }
-    assert_status(403, client_as('Produksi')->get('/inbound'), 'Produksi tanpa Inbound');
+    assert_status(200, client_as('Produksi')->get('/inbound'), 'Produksi juga mengisi Inbound (role Gudang digabung ke Produksi)');
 });
 
 group('Phase 5 · Lead Time & Inbound Maklon');
@@ -262,9 +262,9 @@ test('lead time legacy tanpa PO: boleh diedit, menghubungkan ke PO menyelesaikan
     assert_false((bool) Database::fetchValue('SELECT 1 FROM leadtime WHERE id = :id', ['id' => $lt]));
 });
 
-test('inbound maklon: diinput manual oleh Gudang, total masuk = qty − reject, relasi otomatis', function () use ($invSetup) {
+test('inbound maklon: diinput manual oleh Produksi, total masuk = qty − reject, relasi otomatis', function () use ($invSetup) {
     $ids = $invSetup();
-    $c = client_as('Gudang');
+    $c = client_as('Produksi');
     $form = $c->get('/inbound/create');
     assert_status(200, $form);
     assert_not_contains('name="po_id"', $form->body, 'tanpa dropdown order');
@@ -287,7 +287,7 @@ test('inbound maklon: diinput manual oleh Gudang, total masuk = qty − reject, 
     assert_status(200, $detail);
     assert_contains('975', $detail->body);
     assert_contains('PO/INV/001', $detail->body);
-    assert_not_contains('/purchase-orders/' . $ids['po'], $detail->body, 'Gudang tanpa akses OEF → tanpa link');
+    assert_not_contains('/purchase-orders/' . $ids['po'], $detail->body, 'Produksi tanpa akses OEF → tanpa link');
     assert_status(302, $c->post('/inbound/' . $row['id'], ['vendor' => 'PIK', 'receiver' => 'ALAMANDA', 'actual_inbound_date' => today(), 'sj_number' => 'SJ-MKL-01',
         'component_name' => 'jar inventori 30GR', 'quantity' => '1000', 'reject_qty' => '']));
     $row = Database::fetch('SELECT * FROM inbound_maklon WHERE id = :id', ['id' => $row['id']]);
@@ -301,7 +301,7 @@ test('inbound maklon: diinput manual oleh Gudang, total masuk = qty − reject, 
     assert_status(403, client_as('Marketing')->get('/inbound'));
     $m = client_as('Management');
     assert_status(200, $m->get('/inbound/' . $row['id']));
-    assert_status(403, $m->get('/inbound/create'), 'inbound diinput Gudang');
+    assert_status(403, $m->get('/inbound/create'), 'inbound diinput Produksi');
     $v = client_as('Viewer');
     assert_status(200, $v->get('/inbound/' . $row['id']));
     assert_status(403, $v->get('/inbound/' . $row['id'] . '/edit'));
@@ -311,10 +311,10 @@ test('inbound maklon: diinput manual oleh Gudang, total masuk = qty − reject, 
 group('Phase 5 · Inbound Supplier');
 
 test('inbound supplier: validasi, qty desimal, total masuk, rekap per barang', function () {
-    $c = client_as('Gudang');
+    $c = client_as('Produksi');
     $form = $c->get('/inbound-supplier/create');
     assert_status(200, $form);
-    assert_contains('value="Gudang Tester"', $form->body, 'penerima default = user login');
+    assert_contains('value="Produksi Tester"', $form->body, 'penerima default = user login');
     $bad = $c->post('/inbound-supplier', ['supplier' => '', 'inbound_date' => '', 'item_name' => '', 'unit' => '', 'quantity' => '0', 'reject_qty' => '-1']);
     assert_status(422, $bad);
     foreach (['Supplier wajib diisi', 'Tanggal barang masuk wajib diisi', 'Nama barang wajib diisi', 'Satuan wajib diisi', 'Qty diterima minimal 0.01', 'Qty reject minimal 0'] as $msg) {
@@ -325,7 +325,7 @@ test('inbound supplier: validasi, qty desimal, total masuk, rekap per barang', f
     assert_contains('Tanggal surat jalan tidak boleh setelah tanggal barang masuk', $bad2->body);
     $ok = $c->post('/inbound-supplier', ['supplier' => 'PT Resin Nusantara', 'inbound_date' => today(), 'sj_number' => 'SJ-RSN-77', 'po_reference' => 'PO-BELI-001',
         'item_name' => 'Biji Plastik PET', 'item_code' => 'RM-PET', 'category' => 'Bahan baku', 'unit' => 'kg', 'quantity' => '1.250,5', 'reject_qty' => '0,5',
-        'receiver' => 'Gudang Tester', 'location' => 'Gudang A', 'notes' => 'Karung sobek 1']);
+        'receiver' => 'Produksi Tester', 'location' => 'Gudang A', 'notes' => 'Karung sobek 1']);
     assert_redirect($ok, '/inbound-supplier/');
     $row = Database::fetch("SELECT * FROM inbound_supplier WHERE sj_number = 'SJ-RSN-77'");
     assert_same('1250.50', $row['quantity']);
@@ -352,7 +352,7 @@ test('inbound supplier: validasi, qty desimal, total masuk, rekap per barang', f
     assert_status(200, $edit);
     assert_status(302, $c->post('/inbound-supplier/' . $row['id'], ['supplier' => 'PT Resin Nusantara', 'inbound_date' => $row['inbound_date'], 'sj_number' => 'SJ-RSN-77', 'po_reference' => 'PO-BELI-001',
         'item_name' => 'Biji Plastik PET', 'item_code' => 'RM-PET', 'category' => 'Bahan baku', 'unit' => 'kg', 'quantity' => '1250.50', 'reject_qty' => '0.50',
-        'receiver' => 'Gudang Tester', 'location' => 'Gudang A', 'notes' => 'Karung sobek 1']));
+        'receiver' => 'Produksi Tester', 'location' => 'Gudang A', 'notes' => 'Karung sobek 1']));
     assert_same($logs, (int) Database::fetchValue("SELECT COUNT(*) FROM audit_logs WHERE entity_type = 'inbound_supplier' AND entity_id = :id", ['id' => $row['id']]));
     $search = $c->get('/search', ['q' => 'Resin']);
     assert_contains('Inbound Supplier', $search->body);
@@ -361,9 +361,9 @@ test('inbound supplier: validasi, qty desimal, total masuk, rekap per barang', f
     assert_false((bool) Database::fetchValue('SELECT 1 FROM inbound_supplier WHERE id = :id', ['id' => $row['id']]));
 });
 
-test('otorisasi inbound supplier: hanya Gudang & Admin mengisi; Management & Viewer lihat', function () {
+test('otorisasi inbound supplier: hanya Produksi & Admin mengisi; Management & Viewer lihat', function () {
     $id = (int) Database::fetchValue("SELECT id FROM inbound_supplier WHERE item_name = 'Label 50x30'");
-    foreach (['Marketing', 'Sales', 'PPIC', 'Produksi'] as $role) {
+    foreach (['Marketing', 'Sales', 'PPIC'] as $role) {
         assert_status(403, client_as($role)->get('/inbound-supplier'), $role);
     }
     foreach (['Management', 'Viewer'] as $role) {
@@ -373,10 +373,15 @@ test('otorisasi inbound supplier: hanya Gudang & Admin mengisi; Management & Vie
         assert_status(403, $c->get('/inbound-supplier/create'), $role);
         assert_status(403, $c->post('/inbound-supplier/' . $id . '/delete'), $role);
     }
-    $gudang = client_as('Gudang')->get('/');
-    assert_contains('href="/inbound-supplier"', $gudang->body, 'menu Inbound Supplier tampil');
-    assert_contains('Barang masuk terbaru', $gudang->body);
-    assert_contains('Label 50x30', $gudang->body);
+    $produksi = client_as('Produksi');
+    $home = $produksi->get('/');
+    assert_contains('href="/inbound-supplier"', $home->body, 'menu Inbound Supplier tampil untuk Produksi');
+    assert_contains('href="/inbound"', $home->body, 'menu Inbound Maklon tampil untuk Produksi');
+    assert_contains('href="/stock"', $home->body);
+    assert_contains('Barang masuk terbaru', $home->body);
+    assert_contains('Label 50x30', $home->body);
+    assert_status(200, $produksi->get('/inbound-supplier/create'));
+    assert_status(200, $produksi->get('/inbound/create'));
     assert_status(200, client_as('Admin')->get('/inbound-supplier/create'));
 });
 

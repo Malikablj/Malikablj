@@ -32,6 +32,7 @@ Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (l
 18. [Pembagian tugas per divisi, Stock & Inbound Supplier (update Oktober 2026 — 2)](#18-pembagian-tugas-per-divisi-stock--inbound-supplier-update-oktober-2026--2)
 19. [Konfirmasi PPIC massal, hapus user & buka blokir (update Oktober 2026 — 3)](#19-konfirmasi-ppic-massal-hapus-user--buka-blokir-update-oktober-2026--3)
 20. [Hapus OEF massal & perbaikan tampilan angka besar (update Oktober 2026 — 4)](#20-hapus-oef-massal--perbaikan-tampilan-angka-besar-update-oktober-2026--4)
+21. [Role Gudang digabung ke Produksi (update Oktober 2026 — 5)](#21-role-gudang-digabung-ke-produksi-update-oktober-2026--5)
 
 ---
 
@@ -163,7 +164,6 @@ php -S 127.0.0.1:8080 -t public public/index.php
 | management@pik.test | Management |
 | ppic@pik.test | PPIC |
 | produksi@pik.test | Produksi |
-| gudang@pik.test | Gudang |
 | viewer@pik.test | Viewer |
 
 Password semua akun: nilai variabel `DEV_PASSWORD`, atau default `PikDev2026!`. Script hanya mau berjalan bila `APP_ENV` = `development`, `local`, atau `testing`.
@@ -258,29 +258,29 @@ Yang perlu dibackup: **database** dan file **`.env`** (simpan terpisah dan aman)
 
 Otorisasi dicek di **backend** pada setiap route (lihat `app/routes.php` + `config/permissions.php`); menu & tombol hanya disembunyikan sebagai kenyamanan tampilan.
 
-| Modul | Admin | Marketing | Sales | PPIC | Produksi | Gudang | Management | Viewer |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Dashboard | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Customers & Contacts | ✔ | ✔ | ✔ | — | — | — | ✔ | lihat |
-| Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | — | — | — | lihat |
-| Order Entry Form (buat / edit) | ✔ | ✔ | buat & edit | lihat | — | — | ✔ | lihat |
-| Hapus OEF massal (centang / pilih semua di daftar) | ✔ | — | — | — | — | — | — | — |
-| Konfirmasi PPIC (Bisa / Tidak bisa diproses, satu per satu atau massal) | ✔ | — | — | ✔ | — | — | — | — |
-| Deliveries / Surat Jalan (catat, edit, ubah jadwal) | ✔ | lihat | lihat | ✔ | — | — | lihat | lihat |
-| Complaint & Return | ✔ | ✔ | lihat & catat | — | — | — | ✔ | lihat |
-| Tombol Selesai / Tidak selesai complaint | ✔ | ✔ | — | — | — | — | ✔ | — |
-| Products | ✔ | ✔ | lihat | — | — | — | — | lihat |
-| Stock | ✔ | — | — | — | ✔ | ✔ | lihat | lihat |
-| Inbound Maklon | ✔ | — | — | — | — | ✔ | lihat | lihat |
-| Inbound Supplier | ✔ | — | — | — | — | ✔ | lihat | lihat |
-| Lead Time | ✔ | ✔ | — | — | — | — | ✔ | lihat |
-| Reports | ✔ | — | — | — | — | — | semua + export | tanpa export |
-| Users (termasuk hapus user & buka blokir login), Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — | — | — | — |
+| Modul | Admin | Marketing | Sales | PPIC | Produksi | Management | Viewer |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Dashboard | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Customers & Contacts | ✔ | ✔ | ✔ | — | — | ✔ | lihat |
+| Leads, Activities, Follow Up | ✔ | ✔ | ✔ | — | — | — | lihat |
+| Order Entry Form (buat / edit) | ✔ | ✔ | buat & edit | lihat | — | ✔ | lihat |
+| Hapus OEF massal (centang / pilih semua di daftar) | ✔ | — | — | — | — | — | — |
+| Konfirmasi PPIC (Bisa / Tidak bisa diproses, satu per satu atau massal) | ✔ | — | — | ✔ | — | — | — |
+| Deliveries / Surat Jalan (catat, edit, ubah jadwal) | ✔ | lihat | lihat | ✔ | — | lihat | lihat |
+| Complaint & Return | ✔ | ✔ | lihat & catat | — | — | ✔ | lihat |
+| Tombol Selesai / Tidak selesai complaint | ✔ | ✔ | — | — | — | ✔ | — |
+| Products | ✔ | ✔ | lihat | — | — | — | lihat |
+| Stock | ✔ | — | — | — | ✔ | lihat | lihat |
+| Inbound Maklon | ✔ | — | — | — | ✔ | lihat | lihat |
+| Inbound Supplier | ✔ | — | — | — | ✔ | lihat | lihat |
+| Lead Time | ✔ | ✔ | — | — | — | ✔ | lihat |
+| Reports | ✔ | — | — | — | — | semua + export | tanpa export |
+| Users (termasuk hapus user & buka blokir login), Settings, Import, Migration Issues, Audit Log | ✔ | — | — | — | — | — | — |
 
 Catatan (bisa diubah di `config/permissions.php`):
 - **Surat Jalan hanya diisi PPIC** (Admin tetap bisa untuk koreksi data). Jadwal delivery otomatis dari OEF tetap dibuat sistem saat Sales/Marketing menyimpan OEF.
 - **PPIC** hanya meninjau OEF (Bisa / Tidak bisa diproses) dan mengelola menu Deliveries; nama customer tetap terlihat di halaman order, tanpa akses ke menu Customers.
-- **Produksi & Gudang** mengisi Stock; **Gudang** juga mengisi Inbound Maklon & Inbound Supplier. Management & Viewer hanya melihat.
+- **Produksi** (termasuk tim gudang — role Gudang sudah digabung ke Produksi) mengisi Stock, Inbound Maklon & Inbound Supplier. Management & Viewer hanya melihat.
 - Menu **Finance** (Invoice & Payment, PO Financials) dan laporan Financial sudah dihapus — ranah divisi Keuangan.
 
 ## 12. Aturan bisnis
@@ -472,12 +472,12 @@ Bila folder aplikasi atau PHP tidak terdeteksi otomatis, tulis misalnya `APP_DIR
    `app/controllers/InvoiceController.php`, `app/controllers/PoFinancialController.php`, `app/models/Invoice.php`, `app/models/PoFinancial.php`,
    folder `app/views/invoices/`, `app/views/po_financials/`, dan `app/views/customers/tabs/invoices.php`.
 4. Buka aplikasi sekali (atau jalankan `php database/migrate.php`). Migrasi skema **2026.10.2** berjalan otomatis:
-   - role `Produksi` & `Gudang` ditambahkan ke kolom `users.role`;
+   - role `Produksi` & `Gudang` ditambahkan ke kolom `users.role` (Gudang digabung ke Produksi pada skema 2026.10.3);
    - `purchase_orders.order_number` diperbesar menjadi 60 karakter (No. order diisi manual);
    - kolom `products.qty` ditambahkan dan langsung diisi dengan qty Order Entry Form terakhir setiap produk;
    - tabel `inbound_supplier` dibuat.
    Data lama tidak dihapus (termasuk `capacity_per_day`, invoice, dan PO financials).
-5. Buat akun untuk divisi PPIC, Produksi, dan Gudang di **Settings › Users**.
+5. Buat akun untuk divisi PPIC dan Produksi di **Settings › Users** (role Gudang kini digabung ke Produksi — lihat bagian 21).
 
 ### 1 · Order Entry Form: No. order, customer & produk diketik manual
 
@@ -492,9 +492,9 @@ Bila folder aplikasi atau PHP tidak terdeteksi otomatis, tulis misalnya `APP_DIR
 - **Surat Jalan hanya diisi PPIC.** Marketing, Sales, dan Management kini hanya *melihat* Deliveries (tombol *Catat delivery* & *Ubah jadwal* tidak tampil dan ditolak di backend). Admin tetap bisa untuk koreksi.
 - Dashboard PPIC: *Menunggu PPIC*, *Surat jalan mendatang*, order terbaru, dan pengiriman mendatang. PPIC juga menerima notifikasi pengingat delivery.
 
-### 3 · Produksi & Gudang: Stock dengan nama produk manual
+### 3 · Produksi: Stock dengan nama produk manual
 
-- Role baru **Produksi** (Stock) dan **Gudang** (Stock, Inbound Maklon, Inbound Supplier).
+- Role baru **Produksi** (Stock, Inbound Maklon, Inbound Supplier). *Semula ada role Gudang terpisah; sejak update bagian 21 digabung ke Produksi.*
 - Form stok: **nama produk diketik manual** (dengan saran). Nama yang sama otomatis masuk ke **kelompok produk** yang sama; nama baru dicatat sebagai produk baru (sumber "Stok").
 - Menu Stock: tab **Kelompok per produk** (total FG / WIP / Ready / Reserved per produk, filter kategori), klik nama produk untuk melihat semua entri dalam kelompok tersebut, dan tab *Semua entri* (dengan pencatat & waktu update).
 - Entri stok legacy yang belum terhubung bisa dikelompokkan cukup dengan mengetik nama produknya.
@@ -503,14 +503,14 @@ Bila folder aplikasi atau PHP tidak terdeteksi otomatis, tulis misalnya `APP_DIR
 
 Menu **Invoice & Payment** dan **PO Financials** (beserta laporan Financial, kartu piutang di dashboard, tab Invoice & ringkasan piutang di customer, bagian Finance di halaman order, pencarian invoice, pengaturan jatuh tempo/PPN, dan notifikasi invoice overdue) dihapus karena ranah divisi Keuangan. **Data lama tetap ada di database** (tabel `invoices_payments` & `po_financials`), tetap ikut import workbook, dan tetap mencegah order terkait terhapus.
 
-### 5 · Inbound Maklon diinput manual oleh Gudang
+### 5 · Inbound Maklon diinput manual oleh Produksi
 
-- Hanya **Gudang** (dan Admin) yang mencatat/mengubah; Management & Viewer melihat.
+- Hanya **Produksi** (dan Admin) yang mencatat/mengubah; Management & Viewer melihat.
 - Dropdown order & produk diganti isian manual: **Nama barang / komponen** (wajib) dan **No. order / PO terkait** (opsional). Bila No. order sama dengan No. order OEF atau No. PO customer, atau nama barang sama dengan produk di master, data otomatis terhubung (tanpa membuat data baru).
 
 ### 6 · Menu baru: Inbound Supplier
 
-Menu **Inventory › Inbound Supplier** (`/inbound-supplier`) untuk penerimaan barang dari supplier (bahan baku, kemasan, label, karton, dll.), diinput manual oleh **Gudang**:
+Menu **Inventory › Inbound Supplier** (`/inbound-supplier`) untuk penerimaan barang dari supplier (bahan baku, kemasan, label, karton, dll.), diinput manual oleh **Produksi**:
 
 | Kolom | Keterangan |
 |---|---|
@@ -520,7 +520,7 @@ Menu **Inventory › Inbound Supplier** (`/inbound-supplier`) untuk penerimaan b
 | Qty diterima, Qty reject, Satuan | Qty boleh desimal (format `1.250,5` atau `1250.5`); reject ≤ diterima. **Total masuk = diterima − reject** (otomatis). |
 | Penerima, link lampiran, catatan | Penerima default = user yang login. |
 
-Tersedia tab **Rekap per barang** (total diterima, reject, dan masuk per nama barang + satuan), filter supplier/jenis/periode/ada reject, pencarian global, kartu di dashboard Gudang, dan riwayat perubahan (audit log).
+Tersedia tab **Rekap per barang** (total diterima, reject, dan masuk per nama barang + satuan), filter supplier/jenis/periode/ada reject, pencarian global, kartu di dashboard Produksi, dan riwayat perubahan (audit log).
 
 ## 19. Konfirmasi PPIC massal, hapus user & buka blokir (update Oktober 2026 — 3)
 
@@ -562,3 +562,11 @@ Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-se
 - Teks panjang tanpa spasi (No. order, kode, nama) di tabel turun baris di tempat yang wajar (No. order dipotong setelah tanda `/`), sehingga tabel tidak melebar dan teks di HP tidak terpotong.
 - Daftar OEF: di layar laptop (< 1400px) badge **Status** ditampilkan di bawah badge **PPIC** dan kolom *Progres* disembunyikan, sehingga seluruh kolom muat tanpa digeser; di tablet status order kini juga terlihat. Judul kolom yang panjang boleh turun baris.
 - Diperiksa otomatis untuk 8 role di lebar layar 1440, 1280, 1024, 768, dan 390 px dengan data berangka sangat besar.
+
+## 21. Role Gudang digabung ke Produksi (update Oktober 2026 — 5)
+
+Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-setiap-update).
+
+- Role **Gudang dihapus sepenuhnya**. Role **Produksi** kini satu-satunya divisi (selain Admin) yang mengisi **Stock, Inbound Maklon, dan Inbound Supplier**; Management & Viewer tetap hanya melihat.
+- Migrasi skema **2026.10.3** berjalan otomatis saat update: semua user yang sebelumnya ber-role Gudang **otomatis menjadi Produksi** (akun, password, dan riwayatnya tetap; perubahan role tercatat di Audit Log), lalu pilihan `Gudang` dihapus dari kolom `users.role`. Tidak ada data yang dihapus. Server yang masih memakai skema 2026.10.1 (belum pernah punya role Gudang) langsung mendapat role Produksi.
+- Pilihan role di **Settings › Users** tidak lagi memuat Gudang. User Produksi melihat menu Stock, Inbound Maklon, dan Inbound Supplier serta kartu stok & barang masuk di dashboard.

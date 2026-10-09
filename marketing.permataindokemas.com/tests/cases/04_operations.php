@@ -533,7 +533,7 @@ test('otorisasi operations per role', function () {
     assert_status(403, $viewer->post('/purchase-orders/' . $po . '/lines', ['product_id' => '1', 'order_qty' => '1']));
     assert_status(403, $viewer->post('/deliveries', ['po_line_id' => '1', 'delivery_date' => today(), 'delivered_qty' => '1', 'status' => 'Delivered']));
     assert_status(200, client_as('Management')->get('/purchase-orders/create'), 'Management punya akses PO');
-    foreach (['Produksi', 'Gudang'] as $role) {
+    foreach (['Produksi'] as $role) {
         assert_status(403, client_as($role)->get('/purchase-orders'), $role . ' tanpa OEF');
         assert_status(403, client_as($role)->get('/deliveries'), $role . ' tanpa Delivery');
     }

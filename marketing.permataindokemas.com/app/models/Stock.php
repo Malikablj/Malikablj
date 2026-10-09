@@ -10,7 +10,7 @@ use DomainException;
 
 /**
  * Posisi stok per produk & tipe stok.
- * Nama produk diketik manual oleh Produksi/Gudang; nama yang sama (tidak peka huruf
+ * Nama produk diketik manual oleh Produksi; nama yang sama (tidak peka huruf
  * besar/kecil & spasi) otomatis masuk ke produk yang sama sehingga stok terkelompok
  * per produk. Satu produk boleh memiliki beberapa entri (mis. beberapa batch / lokasi);
  * total per tipe = jumlah seluruh entri tipe tersebut.

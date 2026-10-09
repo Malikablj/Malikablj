@@ -107,20 +107,20 @@ test('permission: matriks role sesuai PRD', function () {
     foreach (['customers.view', 'products.view', 'stock.view', 'inbound.view', 'returns.view', 'leadtime.view', 'reports.view'] as $perm) {
         assert_false(Permission::allows('PPIC', $perm), 'PPIC tidak punya ' . $perm);
     }
-    // Produksi & Gudang
+    // Produksi (role Gudang digabung ke Produksi): Stock, Inbound Maklon, Inbound Supplier
     assert_true(Permission::allows('Produksi', 'stock.create'));
-    assert_false(Permission::allows('Produksi', 'inbound.view'));
+    assert_true(Permission::allows('Produksi', 'stock.edit'));
+    assert_true(Permission::allows('Produksi', 'inbound.create'));
+    assert_true(Permission::allows('Produksi', 'inbound_supplier.create'));
     assert_false(Permission::allows('Produksi', 'purchase_orders.view'));
-    assert_true(Permission::allows('Gudang', 'stock.edit'));
-    assert_true(Permission::allows('Gudang', 'inbound.create'));
-    assert_true(Permission::allows('Gudang', 'inbound_supplier.create'));
-    assert_false(Permission::allows('Gudang', 'deliveries.view'));
-    assert_false(Permission::allows('Gudang', 'customers.view'));
+    assert_false(Permission::allows('Produksi', 'deliveries.view'));
+    assert_false(Permission::allows('Produksi', 'customers.view'));
+    assert_false(Permission::allows('Gudang', 'stock.view'), 'role Gudang sudah dihapus');
     // Management & Viewer
     assert_true(Permission::allows('Management', 'reports.export'));
     assert_true(Permission::allows('Management', 'stock.view'));
-    assert_false(Permission::allows('Management', 'stock.create'), 'stok diinput Produksi/Gudang');
-    assert_false(Permission::allows('Management', 'inbound.create'), 'inbound diinput Gudang');
+    assert_false(Permission::allows('Management', 'stock.create'), 'stok diinput Produksi');
+    assert_false(Permission::allows('Management', 'inbound.create'), 'inbound diinput Produksi');
     assert_true(Permission::allows('Management', 'inbound_supplier.view'));
     assert_false(Permission::allows('Management', 'deliveries.create'));
     assert_false(Permission::allows('Management', 'leads.view'));
@@ -135,7 +135,7 @@ test('permission: matriks role sesuai PRD', function () {
             assert_false(Permission::allows($role, 'finance.view'), $role . ' tanpa finance');
         }
     }
-    assert_same(['Admin', 'Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Gudang', 'Viewer'], Permission::ROLES);
+    assert_same(['Admin', 'Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Viewer'], Permission::ROLES);
     assert_false(Permission::allows(null, 'dashboard.view'));
 });
 
@@ -377,7 +377,7 @@ test('user baru wajib ganti password sebelum memakai aplikasi', function () {
 });
 
 test('otorisasi backend: non-admin ditolak 403 di area admin (GET & POST)', function () {
-    foreach (['Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Gudang', 'Viewer'] as $role) {
+    foreach (['Marketing', 'Sales', 'Management', 'PPIC', 'Produksi', 'Viewer'] as $role) {
         $c = client_as($role);
         assert_status(403, $c->get('/users'), "{$role} GET /users");
         assert_status(403, $c->get('/audit-log'), "{$role} GET /audit-log");

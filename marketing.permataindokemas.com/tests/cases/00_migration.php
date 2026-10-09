@@ -9,7 +9,7 @@ group('Phase 0 · Migrasi skema database yang sudah berjalan');
 
 /*
  * Mensimulasikan database produksi versi sebelumnya (skema 2026.10.1: tanpa role
- * Produksi/Gudang, No. order VARCHAR(30), tanpa products.qty & tabel inbound_supplier)
+ * Produksi, No. order VARCHAR(30), tanpa products.qty & tabel inbound_supplier)
  * lalu memastikan Migrator memperbarui strukturnya tanpa menghapus data.
  * Dijalankan paling awal karena mengubah struktur tabel (database test masih kosong).
  */
@@ -33,24 +33,24 @@ test('update dari skema 2026.10.1: role baru, No. order manual, qty produk dari 
     Database::insert('po_lines', ['code' => 'POL-MIG000003', 'po_id' => $legacy, 'product_id' => $p2, 'order_qty' => 999]);
 
     $steps = Migrator::run();
-    foreach (['users.role: PPIC, Produksi, Gudang', 'purchase_orders: No. order diisi manual', 'products: kolom qty (arsip OEF)', 'products: qty diisi dari OEF terakhir', 'tabel inbound_supplier'] as $label) {
+    foreach (['users.role: PPIC, Produksi', 'purchase_orders: No. order diisi manual', 'products: kolom qty (arsip OEF)', 'products: qty diisi dari OEF terakhir', 'tabel inbound_supplier'] as $label) {
         assert_true(in_array($label, $steps, true), 'langkah migrasi dijalankan: ' . $label . ' (' . implode('; ', $steps) . ')');
     }
     $role = (string) Database::fetchValue("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'");
     assert_contains("'Produksi'", $role);
-    assert_contains("'Gudang'", $role);
+    assert_not_contains("'Gudang'", $role, 'role Gudang tidak dipakai lagi');
     assert_same(60, (int) Database::fetchValue("SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'purchase_orders' AND COLUMN_NAME = 'order_number'"));
     assert_same(750, (int) Database::fetchValue('SELECT qty FROM products WHERE id = :id', ['id' => $p1]), 'qty = OEF terakhir');
     assert_same(null, Database::fetchValue('SELECT qty FROM products WHERE id = :id', ['id' => $p2]), 'PO lama (tanpa PPIC) tidak dipakai');
     assert_same(5000, (int) Database::fetchValue('SELECT capacity_per_day FROM products WHERE id = :id', ['id' => $p1]), 'data kapasitas lama tidak dihapus');
     assert_true(Migrator::tableExists('inbound_supplier'));
-    assert_same('2026.10.2', Database::fetchValue("SELECT setting_value FROM settings WHERE setting_key = 'schema_version'"));
+    assert_same(Migrator::VERSION, Database::fetchValue("SELECT setting_value FROM settings WHERE setting_key = 'schema_version'"));
     // aman dijalankan ulang
     assert_same([], Migrator::run(), 'tidak ada perubahan pada run kedua');
     // nomor order panjang & role baru bisa disimpan
     Database::update('purchase_orders', ['order_number' => str_repeat('A', 60)], 'id = :id', ['id' => $new]);
-    $uid = create_user('Gudang', 'gudang.migrasi@pik.test');
-    assert_same('Gudang', Database::fetchValue('SELECT role FROM users WHERE id = :id', ['id' => $uid]));
+    $uid = create_user('Produksi', 'produksi.migrasi@pik.test');
+    assert_same('Produksi', Database::fetchValue('SELECT role FROM users WHERE id = :id', ['id' => $uid]));
 
     // bersihkan agar test lain mulai dari data kosong
     Database::query("DELETE FROM po_lines WHERE code LIKE 'POL-MIG%'");
@@ -59,4 +59,29 @@ test('update dari skema 2026.10.1: role baru, No. order manual, qty produk dari 
     Database::query("DELETE FROM customers WHERE code LIKE 'CUS-MIG%'");
     Database::query('DELETE FROM audit_logs');
     Database::query('DELETE FROM users WHERE id = :id', ['id' => $uid]);
+});
+
+test('update dari skema 2026.10.2: user role Gudang otomatis menjadi Produksi, role Gudang dihapus', function () {
+    Database::query("ALTER TABLE users MODIFY role ENUM('Admin','Marketing','Sales','Management','PPIC','Produksi','Gudang','Viewer') NOT NULL DEFAULT 'Viewer'");
+    Database::query("INSERT INTO settings (setting_key, setting_value) VALUES ('schema_version', '2026.10.2') ON DUPLICATE KEY UPDATE setting_value = '2026.10.2'");
+    $g1 = create_user('Viewer', 'gudang1.migrasi@pik.test');
+    $g2 = create_user('Viewer', 'gudang2.migrasi@pik.test');
+    $other = create_user('PPIC', 'ppic.migrasi@pik.test');
+    Database::query("UPDATE users SET role = 'Gudang' WHERE id IN ({$g1}, {$g2})");
+
+    $steps = Migrator::run();
+    assert_true(in_array('users.role: Gudang digabung ke Produksi', $steps, true), implode('; ', $steps));
+    assert_false(in_array('users.role: PPIC, Produksi', $steps, true), 'role lain tidak diubah');
+    foreach ([$g1, $g2] as $id) {
+        assert_same('Produksi', Database::fetchValue('SELECT role FROM users WHERE id = :id', ['id' => $id]));
+        assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'update' AND entity_type = 'user' AND entity_id = :id AND changes LIKE '%Gudang%'", ['id' => $id]), 'tercatat di audit');
+    }
+    assert_same('PPIC', Database::fetchValue('SELECT role FROM users WHERE id = :id', ['id' => $other]));
+    $role = (string) Database::fetchValue("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'");
+    assert_not_contains("'Gudang'", $role);
+    assert_same(Migrator::VERSION, Database::fetchValue("SELECT setting_value FROM settings WHERE setting_key = 'schema_version'"));
+    assert_same([], Migrator::run(), 'aman dijalankan ulang');
+
+    Database::query("DELETE FROM users WHERE id IN ({$g1}, {$g2}, {$other})");
+    Database::query('DELETE FROM audit_logs');
 });

@@ -17,7 +17,7 @@ $cancel = $isEdit ? url('/inbound/' . $row['id']) : url('/inbound');
 ?>
 <div class="breadcrumb-lite"><a href="<?= e(url('/inbound')) ?>">Inbound Maklon</a><i class="bi bi-chevron-right"></i><span><?= $isEdit ? e($row['sj_number'] ?? $row['code']) : 'Catat' ?></span></div>
 <div class="page-header"><div><h1 class="page-title"><?= $isEdit ? 'Edit Inbound Maklon' : 'Catat Inbound Maklon' ?></h1>
-    <p class="page-subtitle">Diinput manual oleh Gudang. Total masuk dihitung otomatis: Qty diterima − Qty reject.</p></div></div>
+    <p class="page-subtitle">Diinput manual oleh Produksi. Total masuk dihitung otomatis: Qty diterima − Qty reject.</p></div></div>
 
 <div class="row">
     <div class="col-xl-9">

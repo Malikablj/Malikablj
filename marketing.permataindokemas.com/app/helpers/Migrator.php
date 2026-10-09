@@ -20,7 +20,7 @@ use Throwable;
 final class Migrator
 {
     /** Naikkan setiap kali ada migrasi baru. */
-    public const VERSION = '2026.10.2';
+    public const VERSION = '2026.10.3';
     private const SETTING_KEY = 'schema_version';
 
     /** true bila kolom complaint baru saja ditambahkan pada run ini (data lama perlu disesuaikan). */
@@ -111,16 +111,33 @@ final class Migrator
     private static function steps(): array
     {
         return [
-            // ---------------------------------------------------------- role PPIC, Produksi, Gudang
-            'users.role: PPIC, Produksi, Gudang' => static function (): bool {
-                $type = (string) Database::fetchValue(
-                    "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'"
-                );
+            // ---------------------------------------------------------- role PPIC & Produksi
+            'users.role: PPIC, Produksi' => static function (): bool {
+                $type = self::roleColumnType();
                 $missing = array_filter(Permission::ROLES, static fn (string $role): bool => !str_contains($type, "'" . $role . "'"));
                 if ($missing === []) {
                     return false;
                 }
+                // 'Gudang' (bila ada) dipertahankan dulu; digabung ke Produksi di langkah berikutnya
+                $roles = str_contains($type, "'Gudang'") ? [...Permission::ROLES, 'Gudang'] : Permission::ROLES;
+                Database::query("ALTER TABLE users MODIFY role ENUM('" . implode("','", $roles) . "') NOT NULL DEFAULT 'Viewer'");
+                return true;
+            },
+
+            // ---------------------------------------------------------- role Gudang digabung ke Produksi
+            'users.role: Gudang digabung ke Produksi' => static function (): bool {
+                if (!str_contains(self::roleColumnType(), "'Gudang'")) {
+                    return false;
+                }
+                $users = Database::fetchAll("SELECT id, email FROM users WHERE role = 'Gudang'");
+                Database::query("UPDATE users SET role = 'Produksi' WHERE role = 'Gudang'");
+                foreach ($users as $u) {
+                    Audit::log('update', 'user', (int) $u['id'], (string) $u['email'], ['role' => ['old' => 'Gudang', 'new' => 'Produksi']]);
+                }
                 Database::query("ALTER TABLE users MODIFY role ENUM('" . implode("','", Permission::ROLES) . "') NOT NULL DEFAULT 'Viewer'");
+                if ($users !== []) {
+                    Logger::info(count($users) . ' user role Gudang dipindahkan ke Produksi: ' . implode(', ', array_column($users, 'email')));
+                }
                 return true;
             },
 
@@ -248,7 +265,7 @@ final class Migrator
                 return true;
             },
 
-            // ---------------------------------------------------------- Inbound Supplier (Gudang)
+            // ---------------------------------------------------------- Inbound Supplier (Produksi)
             'tabel inbound_supplier' => static function (): bool {
                 if (self::tableExists('inbound_supplier')) {
                     return false;
@@ -260,6 +277,14 @@ final class Migrator
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** Definisi kolom users.role saat ini, mis. "enum('Admin',...,'Viewer')". */
+    private static function roleColumnType(): string
+    {
+        return (string) Database::fetchValue(
+            "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'"
+        );
+    }
 
     public static function tableExists(string $table): bool
     {

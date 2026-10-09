@@ -10,7 +10,7 @@ use App\Helpers\Paginator;
 use DomainException;
 
 /**
- * Penerimaan barang dari supplier (bahan baku, kemasan, label, dll.) — diinput manual oleh Gudang.
+ * Penerimaan barang dari supplier (bahan baku, kemasan, label, dll.) — diinput manual oleh Produksi.
  * Qty boleh desimal (mis. kg / liter). Total masuk = Qty diterima − Qty reject (dihitung otomatis).
  */
 final class InboundSupplier extends Model

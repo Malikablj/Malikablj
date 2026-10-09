@@ -27,8 +27,8 @@ declare(strict_types=1);
  *     otomatis tercatat di menu Customers & Products).
  *   - PPIC hanya meninjau OEF (Bisa / Tidak bisa diproses) dan satu-satunya divisi
  *     yang mengisi Surat Jalan di menu Deliveries.
- *   - Produksi & Gudang mengisi Stock (nama produk diketik manual, dikelompokkan otomatis).
- *   - Gudang mengisi Inbound Maklon & Inbound Supplier.
+ *   - Produksi (termasuk tim gudang; role Gudang sudah digabung ke Produksi) mengisi Stock
+ *     (nama produk diketik manual, dikelompokkan otomatis), Inbound Maklon & Inbound Supplier.
  *   - Invoice & pembayaran dikelola divisi Keuangan di luar aplikasi ini.
  *
  * Permission ini dicek di BACKEND pada setiap route (lihat app/routes.php)
@@ -62,14 +62,8 @@ return [
         'deliveries.*',
     ],
 
-    // Produksi: mengisi stok (nama produk diketik manual)
+    // Produksi (role Gudang digabung ke sini): stok, inbound maklon, inbound supplier
     'Produksi' => [
-        'dashboard.view',
-        'stock.*',
-    ],
-
-    // Gudang: stok, inbound maklon, inbound supplier
-    'Gudang' => [
         'dashboard.view',
         'stock.*', 'inbound.*', 'inbound_supplier.*',
     ],

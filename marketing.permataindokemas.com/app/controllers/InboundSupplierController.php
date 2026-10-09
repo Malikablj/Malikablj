@@ -11,7 +11,7 @@ use App\Models\AuditLog;
 use App\Models\InboundSupplier;
 use DomainException;
 
-/** Inbound Supplier: penerimaan barang dari supplier, diinput manual oleh Gudang. */
+/** Inbound Supplier: penerimaan barang dari supplier, diinput manual oleh Produksi. */
 final class InboundSupplierController extends Controller
 {
     private const FIELDS = [

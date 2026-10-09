@@ -1,9 +1,12 @@
 1. Buka aplikasi di browser, login sebagai Admin, lalu tekan Ctrl+F5 (muat ulang tampilan baru).
-2. Bila belum: Settings › Users → buat akun untuk divisi PPIC, Produksi, dan Gudang.
-3. Yang baru di update ini (detail: README.md bagian 20):
+2. Settings › Users: periksa akun divisi PPIC & Produksi (buat bila belum ada).
+   Role Gudang sudah dihapus — user yang tadinya Gudang otomatis menjadi Produksi.
+3. Yang baru di update ini:
+   - Role Gudang digabung ke Produksi: Produksi mengisi Stock, Inbound Maklon, Inbound Supplier
+     (README.md bagian 21).
    - Order Entry Form: Admin bisa mencentang beberapa OEF (atau "pilih semua" di halaman) lalu
      menekan Hapus. Order yang sudah punya surat jalan/complaint/lead time/inbound tidak dihapus.
    - Tampilan: angka besar di kartu dashboard & ringkasan tidak lagi keluar dari kotak; tabel
-     lebih rapi di laptop & HP (teks panjang turun baris, Status tampil di bawah PPIC).
+     lebih rapi di laptop & HP (README.md bagian 20).
    Update sebelumnya (tetap termasuk): konfirmasi PPIC massal, hapus user & buka blokir +
-   notifikasi Admin (README 19); OEF manual, role PPIC/Produksi/Gudang, Stock, Inbound (README 18).
+   notifikasi Admin (README 19); OEF manual, role PPIC/Produksi, Stock, Inbound (README 18).

@@ -9,7 +9,7 @@ use App\Helpers\Paginator;
 use DomainException;
 
 /**
- * Penerimaan barang/komponen maklon dari vendor — diinput manual oleh Gudang.
+ * Penerimaan barang/komponen maklon dari vendor — diinput manual oleh Produksi.
  * Total masuk = Qty diterima − Qty reject (dihitung otomatis saat disimpan).
  * No. order/PO dan nama barang diketik manual; bila cocok persis dengan order /
  * produk yang ada, record otomatis terhubung (tanpa membuat data baru).

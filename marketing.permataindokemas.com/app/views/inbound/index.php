@@ -16,7 +16,7 @@ $hasFilter = $filters['q'] !== '' || $filters['vendor'] !== '' || $filters['rece
     <div>
         <div class="page-eyebrow">Inventory</div>
         <h1 class="page-title">Inbound Maklon</h1>
-        <p class="page-subtitle">Penerimaan barang/komponen dari vendor maklon, diinput manual oleh Gudang. Total masuk = Qty diterima − Qty reject.</p>
+        <p class="page-subtitle">Penerimaan barang/komponen dari vendor maklon, diinput manual oleh Produksi. Total masuk = Qty diterima − Qty reject.</p>
     </div>
     <?php if (can('inbound.create')): ?>
         <div class="page-actions"><a href="<?= e(url('/inbound/create')) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Catat Inbound</a></div>

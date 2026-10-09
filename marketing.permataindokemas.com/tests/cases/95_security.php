@@ -73,7 +73,7 @@ test('XSS: data berbahaya di semua field teks selalu di-escape di seluruh halama
         assert_not_contains('href="javascript:', strtolower($res->body), 'link javascript: di ' . $path);
     }
     // role baru melihat halaman miliknya tanpa XSS
-    foreach (['PPIC' => ['/', '/purchase-orders/' . $po, '/deliveries/' . $del], 'Gudang' => ['/', '/stock', '/inbound/' . $inb, '/inbound-supplier/' . $ins], 'Produksi' => ['/', '/stock?view=entries']] as $role => $paths) {
+    foreach (['PPIC' => ['/', '/purchase-orders/' . $po, '/deliveries/' . $del], 'Produksi' => ['/', '/stock', '/stock?view=entries', '/inbound/' . $inb, '/inbound-supplier/' . $ins]] as $role => $paths) {
         $rc = client_as($role);
         foreach ($paths as $path) {
             $res = $rc->get($path);

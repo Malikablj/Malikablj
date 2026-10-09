@@ -14,7 +14,7 @@ use DomainException;
 
 final class InboundController extends Controller
 {
-    /** Semua field diisi manual oleh Gudang (tanpa pilihan dropdown order/produk). */
+    /** Semua field diisi manual oleh Produksi (tanpa pilihan dropdown order/produk). */
     private const FIELDS = [
         'vendor', 'receiver', 'actual_inbound_date', 'sj_date', 'sj_number', 'po_number_legacy', 'internal_component_code',
         'type', 'component_name', 'factory_component_code', 'quantity', 'reject_qty', 'attachment', 'odoo_checklist', 'notes',
