@@ -92,10 +92,12 @@ test('permission: matriks role sesuai PRD', function () {
     assert_true(Permission::allows('Sales', 'leads.edit'));
     assert_true(Permission::allows('Sales', 'purchase_orders.create'), 'Sales menginput OEF');
     assert_false(Permission::allows('Sales', 'purchase_orders.delete'));
-    // hapus OEF massal khusus Admin (role dengan purchase_orders.* tidak ikut mendapatkannya)
+    // hapus OEF & delivery massal khusus Admin (role dengan purchase_orders.* / deliveries.* tidak ikut mendapatkannya)
     assert_true(Permission::allows('Admin', 'purchase_orders_bulk.delete'));
-    foreach (['Marketing', 'Management', 'Sales', 'PPIC', 'Viewer'] as $role) {
-        assert_false(Permission::allows($role, 'purchase_orders_bulk.delete'), $role . ' tanpa hapus massal');
+    assert_true(Permission::allows('Admin', 'deliveries_bulk.delete'));
+    foreach (['Marketing', 'Management', 'Sales', 'PPIC', 'Produksi', 'Viewer'] as $role) {
+        assert_false(Permission::allows($role, 'purchase_orders_bulk.delete'), $role . ' tanpa hapus OEF massal');
+        assert_false(Permission::allows($role, 'deliveries_bulk.delete'), $role . ' tanpa hapus delivery massal');
     }
     assert_false(Permission::allows('Sales', 'deliveries.edit'));
     // PPIC: hanya tinjau OEF + menu Delivery (mengisi surat jalan)
@@ -309,6 +311,22 @@ test('blokir login: Admin dapat notifikasi, user tampil Terblokir, Admin bisa me
     assert_same(1, (int) Database::fetchValue("SELECT COUNT(*) FROM login_attempts WHERE ip_address = '10.8.8.8'"), 'IP lain tidak tersentuh');
     Database::query("DELETE FROM login_attempts WHERE email IN ('tidak.ada@pik.test', 'lain@pik.test')");
     App\Models\User::deleteUser($uid);
+});
+
+test('logo: ikon berlian + tulisan MARKETING / PERMATA INDO KEMAS di login & sidebar, favicon tersedia', function () {
+    $home = client_as('Viewer')->get('/');
+    $login = (new HttpClient(TEST_BASE_URL))->get('/login');
+    assert_contains('<div class="auth-brand-name">MARKETING</div>', $login->body);
+    assert_contains('PERMATA INDO KEMAS', $login->body);
+    assert_contains('<span class="brand-name">MARKETING</span>', $home->body);
+    assert_contains('rel="apple-touch-icon"', $home->body);
+    foreach (['logo.svg', 'favicon.svg'] as $f) {
+        $svg = (string) file_get_contents(APP_ROOT . '/public/assets/img/' . $f);
+        assert_contains('#FFD302', $svg, $f . ': berlian emas');
+        assert_contains('#1A4BC5', $svg, $f . ': titik biru');
+    }
+    assert_same([180, 180], array_slice((array) getimagesize(APP_ROOT . '/public/assets/img/apple-touch-icon.png'), 0, 2));
+    assert_same([32, 32], array_slice((array) getimagesize(APP_ROOT . '/public/assets/img/favicon-32.png'), 0, 2));
 });
 
 test('route tidak dikenal → 404, method salah → 405', function () {

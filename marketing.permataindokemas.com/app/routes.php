@@ -117,6 +117,7 @@ return static function (Router $r): void {
     $r->get('/deliveries', [DeliveryController::class, 'index'], 'deliveries.view');
     $r->get('/deliveries/create', [DeliveryController::class, 'create'], 'deliveries.create');
     $r->post('/deliveries', [DeliveryController::class, 'store'], 'deliveries.create');
+    $r->post('/deliveries/bulk-delete', [DeliveryController::class, 'destroyBulk'], 'deliveries_bulk.delete');
     $r->get('/deliveries/{id}', [DeliveryController::class, 'show'], 'deliveries.view');
     $r->get('/deliveries/{id}/edit', [DeliveryController::class, 'edit'], 'deliveries.edit');
     $r->post('/deliveries/{id}', [DeliveryController::class, 'update'], 'deliveries.edit');

@@ -74,10 +74,10 @@ final class Delivery extends Model
         return [implode(' AND ', $where), $params];
     }
 
-    public static function paginate(array $f, int $page): Paginator
+    public static function paginate(array $f, int $page, ?int $perPage = null): Paginator
     {
         [$where, $params] = self::filters($f);
-        return Paginator::query(self::SELECT . ' WHERE ' . $where, $params, 'd.delivery_date IS NULL, d.delivery_date DESC, d.id DESC', $page);
+        return Paginator::query(self::SELECT . ' WHERE ' . $where, $params, 'd.delivery_date IS NULL, d.delivery_date DESC, d.id DESC', $page, $perPage);
     }
 
     /** @return array<string,mixed> */
@@ -151,6 +151,8 @@ final class Delivery extends Model
         Database::transaction(function () use ($id, $d): void {
             self::delete($id, $d);
             PurchaseOrder::syncStatus($d['po_id'] !== null ? (int) $d['po_id'] : null);
+            // notifikasi pengingat delivery ini tidak lagi bisa dibuka
+            Database::delete('notifications', 'entity_type = :t AND entity_id = :id', ['t' => self::ENTITY, 'id' => $id]);
         });
     }
 

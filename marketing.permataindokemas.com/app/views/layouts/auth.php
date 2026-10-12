@@ -14,6 +14,8 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
     <meta name="theme-color" content="#F5F5F7">
     <title><?= e($pageTitle) ?></title>
     <link rel="icon" href="<?= e(asset('assets/img/favicon.svg')) ?>" type="image/svg+xml">
+    <link rel="icon" href="<?= e(asset('assets/img/favicon-32.png')) ?>" type="image/png" sizes="32x32">
+    <link rel="apple-touch-icon" href="<?= e(asset('assets/img/apple-touch-icon.png')) ?>">
     <link rel="stylesheet" href="<?= e(asset('assets/vendor/bootstrap/bootstrap.min.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset('assets/vendor/bootstrap-icons/bootstrap-icons.min.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
@@ -21,10 +23,10 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
 <body class="auth-body">
 <main class="auth-wrap">
     <div class="auth-brand">
-        <img src="<?= e(asset('assets/img/logo.svg')) ?>" alt="" width="44" height="44">
+        <img src="<?= e(asset('assets/img/logo.svg')) ?>" alt="" width="56" height="56">
         <div>
-            <div class="auth-brand-name">PIK Marketing Control</div>
-            <div class="auth-brand-sub">PT Permata Indo Kemas</div>
+            <div class="auth-brand-name">MARKETING</div>
+            <div class="auth-brand-sub">PERMATA INDO KEMAS</div>
         </div>
     </div>
     <?php foreach ($flashes as $flash): ?>

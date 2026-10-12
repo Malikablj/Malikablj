@@ -21,6 +21,8 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
     <meta name="theme-color" content="#F5F5F7">
     <title><?= e($pageTitle) ?></title>
     <link rel="icon" href="<?= e(asset('assets/img/favicon.svg')) ?>" type="image/svg+xml">
+    <link rel="icon" href="<?= e(asset('assets/img/favicon-32.png')) ?>" type="image/png" sizes="32x32">
+    <link rel="apple-touch-icon" href="<?= e(asset('assets/img/apple-touch-icon.png')) ?>">
     <link rel="stylesheet" href="<?= e(asset('assets/vendor/bootstrap/bootstrap.min.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset('assets/vendor/bootstrap-icons/bootstrap-icons.min.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
@@ -31,10 +33,10 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
 <aside class="sidebar d-none d-lg-flex" aria-label="Navigasi utama">
     <div class="sidebar-brand">
         <a href="<?= e(url('/')) ?>" class="brand-link">
-            <img src="<?= e(asset('assets/img/logo.svg')) ?>" alt="" width="34" height="34" class="brand-mark">
+            <img src="<?= e(asset('assets/img/logo.svg')) ?>" alt="" width="36" height="36" class="brand-mark">
             <span class="brand-text">
-                <span class="brand-name">PIK Marketing</span>
-                <span class="brand-sub">Control</span>
+                <span class="brand-name">MARKETING</span>
+                <span class="brand-sub">PERMATA INDO KEMAS</span>
             </span>
         </a>
     </div>
@@ -51,8 +53,8 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
 <div class="offcanvas offcanvas-start mobile-nav" tabindex="-1" id="mobileNav" aria-labelledby="mobileNavLabel">
     <div class="offcanvas-header">
         <div class="brand-link" id="mobileNavLabel">
-            <img src="<?= e(asset('assets/img/logo.svg')) ?>" alt="" width="32" height="32" class="brand-mark">
-            <span class="brand-text"><span class="brand-name">PIK Marketing</span><span class="brand-sub">Control</span></span>
+            <img src="<?= e(asset('assets/img/logo.svg')) ?>" alt="" width="34" height="34" class="brand-mark">
+            <span class="brand-text"><span class="brand-name">MARKETING</span><span class="brand-sub">PERMATA INDO KEMAS</span></span>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Tutup"></button>
     </div>

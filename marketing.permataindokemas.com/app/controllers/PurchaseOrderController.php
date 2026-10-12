@@ -183,7 +183,7 @@ final class PurchaseOrderController extends Controller
     public function ppicBulk(): void
     {
         $back = $this->returnTo('/purchase-orders');
-        $ids = $this->checkedIds($back);
+        $ids = $this->checkedIds($back, self::PER_PAGE[count(self::PER_PAGE) - 1], 'order');
         $decision = is_string($_POST['decision'] ?? null) ? $_POST['decision'] : '';
         $note = is_string($_POST['ppic_note'] ?? null) ? mb_substr(trim($_POST['ppic_note']), 0, 2000) : '';
         if (!in_array($decision, ['approve', 'reject'], true)) {
@@ -272,7 +272,7 @@ final class PurchaseOrderController extends Controller
     public function destroyBulk(): void
     {
         $back = $this->returnTo('/purchase-orders');
-        $ids = $this->checkedIds($back);
+        $ids = $this->checkedIds($back, self::PER_PAGE[count(self::PER_PAGE) - 1], 'order');
         $deleted = 0;
         $missing = 0;
         $blocked = [];
@@ -304,23 +304,6 @@ final class PurchaseOrderController extends Controller
         $this->success(trim($deleted . ' order dihapus. ' . implode(' ', $notes)), $back);
     }
 
-    /**
-     * ID order yang dicentang di daftar OEF (ids[]); kosong / melebihi batas → kembali dengan pesan.
-     * @return list<int>
-     */
-    private function checkedIds(string $back): array
-    {
-        $raw = is_array($_POST['ids'] ?? null) ? $_POST['ids'] : [];
-        $ids = array_values(array_unique(array_filter(array_map(static fn ($v) => is_string($v) && ctype_digit($v) ? (int) $v : 0, $raw))));
-        $limit = self::PER_PAGE[count(self::PER_PAGE) - 1];
-        if ($ids === []) {
-            $this->failure('Centang minimal satu order terlebih dahulu.', $back);
-        }
-        if (count($ids) > $limit) {
-            $this->failure('Maksimal ' . $limit . ' order sekali proses.', $back);
-        }
-        return $ids;
-    }
 
     /** Tambah baris produk: nama produk diketik manual (produk baru dicatat otomatis). */
     public function addLine(int $id): void

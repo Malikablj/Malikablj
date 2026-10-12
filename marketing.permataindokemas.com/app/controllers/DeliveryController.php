@@ -17,6 +17,9 @@ use DomainException;
 
 final class DeliveryController extends Controller
 {
+    /** Pilihan jumlah delivery per halaman (nilai terbesar = batas hapus massal). */
+    private const PER_PAGE = [25, 50, 100];
+
     private const FIELDS = ['po_line_id', 'delivery_date', 'sj_number', 'destination', 'delivered_qty', 'status', 'note', 'attachment', 'confirm_over_delivery'];
 
     public function index(): void
@@ -29,11 +32,15 @@ final class DeliveryController extends Controller
             'to'          => Validator::parseDate(Request::queryString('to')) ?? '',
             'link'        => Request::queryString('link'),
         ];
+        $perPage = in_array(Request::queryInt('per_page'), self::PER_PAGE, true) ? Request::queryInt('per_page') : self::PER_PAGE[0];
         $this->view('deliveries/index', [
             'title'      => 'Deliveries',
-            'deliveries' => Delivery::paginate($filters, $this->page()),
+            'deliveries' => Delivery::paginate($filters, $this->page(), $perPage),
             'summary'    => Delivery::summary($filters),
             'filters'    => $filters,
+            'perPage'    => $perPage,
+            'pageSizes'  => self::PER_PAGE,
+            'returnPath' => Request::fullPath(),
             'customers'  => Customer::selectOptions(),
         ]);
     }
@@ -134,6 +141,44 @@ final class DeliveryController extends Controller
             $this->failure($e->getMessage(), '/deliveries/' . $id);
         }
         $this->success('Delivery ' . ($d['sj_number'] ?? $d['code']) . ' dihapus.', $d['po_id'] ? '/purchase-orders/' . $d['po_id'] : '/deliveries');
+    }
+
+    /**
+     * Hapus beberapa delivery sekaligus (khusus Admin; dicentang di daftar, bisa "pilih semua" di halaman).
+     * Aturan sama dengan hapus satu per satu: delivery yang direferensikan retur tidak dihapus.
+     */
+    public function destroyBulk(): void
+    {
+        $back = $this->returnTo('/deliveries');
+        $ids = $this->checkedIds($back, self::PER_PAGE[count(self::PER_PAGE) - 1], 'delivery');
+        $deleted = 0;
+        $missing = 0;
+        $blocked = [];
+        foreach ($ids as $id) {
+            $d = Delivery::find($id);
+            if ($d === null) {
+                $missing++;
+                continue;
+            }
+            try {
+                Delivery::remove($id);
+                $deleted++;
+            } catch (DomainException) {
+                $blocked[] = (string) ($d['sj_number'] ?? $d['code']);
+            }
+        }
+        $notes = [];
+        if ($blocked !== []) {
+            $notes[] = count($blocked) . ' delivery tidak dihapus karena masih direferensikan complaint/retur ('
+                . implode(', ', array_slice($blocked, 0, 5)) . (count($blocked) > 5 ? ', dan ' . (count($blocked) - 5) . ' lainnya' : '') . ').';
+        }
+        if ($missing > 0) {
+            $notes[] = $missing . ' delivery sudah tidak ada.';
+        }
+        if ($deleted === 0) {
+            $this->failure(trim('Tidak ada delivery yang dihapus. ' . implode(' ', $notes)), $back);
+        }
+        $this->success(trim($deleted . ' delivery dihapus; outstanding & status order terkait dihitung ulang. ' . implode(' ', $notes)), $back);
     }
 
     /** @return array<string,array<int,string>> baris PO yang boleh dipilih untuk delivery legacy */

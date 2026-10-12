@@ -15,6 +15,8 @@ declare(strict_types=1);
  *   purchase_orders (= Order Entry Form, termasuk PO line), deliveries (= Surat Jalan),
  *   purchase_orders_bulk (purchase_orders_bulk.delete = hapus banyak OEF sekaligus dari daftar;
  *     sengaja modul terpisah agar "purchase_orders.*" tidak ikut memberinya — default khusus Admin),
+ *   deliveries_bulk (deliveries_bulk.delete = hapus banyak delivery sekaligus dari daftar; khusus Admin,
+ *     "deliveries.*" milik PPIC tidak ikut memberinya),
  *   returns (= Complaint & Return; returns.resolve = tombol Selesai / Tidak selesai),
  *   ppic (ppic.approve = tombol "Bisa diproses" / "Tidak bisa diproses" di OEF),
  *   products, stock, leadtime, inbound (= Inbound Maklon), inbound_supplier,

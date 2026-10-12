@@ -76,6 +76,23 @@ abstract class Controller
         return $record;
     }
 
+    /**
+     * ID baris yang dicentang di daftar (ids[]) untuk aksi massal; kosong / melebihi batas → kembali dengan pesan.
+     * @return list<int>
+     */
+    protected function checkedIds(string $back, int $limit, string $unit): array
+    {
+        $raw = is_array($_POST['ids'] ?? null) ? $_POST['ids'] : [];
+        $ids = array_values(array_unique(array_filter(array_map(static fn ($v) => is_string($v) && ctype_digit($v) ? (int) $v : 0, $raw))));
+        if ($ids === []) {
+            $this->failure('Centang minimal satu ' . $unit . ' terlebih dahulu.', $back);
+        }
+        if (count($ids) > $limit) {
+            $this->failure('Maksimal ' . $limit . ' ' . $unit . ' sekali proses.', $back);
+        }
+        return $ids;
+    }
+
     protected function page(): int
     {
         return max(1, Request::queryInt('page', 1));

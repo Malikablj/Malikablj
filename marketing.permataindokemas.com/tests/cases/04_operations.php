@@ -347,6 +347,74 @@ test('hapus OEF massal (khusus Admin): centang beberapa / semua di halaman; orde
     Database::delete('customers', 'id = :id', ['id' => $customer]);
 });
 
+test('hapus delivery massal (khusus Admin): centang beberapa / semua di halaman; delivery yang direferensikan retur tidak terhapus', function () {
+    $mkt = client_as('Marketing');
+    assert_redirect($mkt->post('/purchase-orders', ['order_number' => 'OEF-DLV-BULK', 'customer_name' => 'PT Delivery Massal', 'sales_name' => 'Sales Uji', 'po_date' => today(),
+        'product_name' => 'Botol Delivery Massal', 'product_spec' => 'PET', 'order_qty' => '1000', 'requested_date' => date('Y-m-d', strtotime('+5 days'))]), '/purchase-orders/');
+    $po = Database::fetch("SELECT * FROM purchase_orders WHERE order_number = 'OEF-DLV-BULK'");
+    $poId = (int) $po['id'];
+    $schedule = (int) $po['schedule_delivery_id'];
+    $line = (int) Database::fetchValue('SELECT id FROM po_lines WHERE po_id = :p', ['p' => $poId]);
+    $mk = static fn (string $sj, string $status, int $qty): int => Database::insert('deliveries', ['code' => 'DLV-' . str_replace('/', '', $sj), 'po_id' => $poId, 'po_line_id' => $line,
+        'delivery_date' => today(), 'sj_number' => $sj, 'delivered_qty' => $qty, 'status' => $status]);
+    $d1 = $mk('SJ/BLK/001', 'Delivered', 300);
+    $d2 = $mk('SJ/BLK/002', 'On Delivery', 200);
+    $d3 = $mk('SJ/BLK/003', 'Delivered', 100);
+    $ret = Database::insert('returns', ['code' => 'RET-BLK000001', 'record_type' => 'Return', 'customer_id' => $po['customer_id'], 'po_id' => $poId, 'po_line_id' => $line, 'delivery_id' => $d3,
+        'return_date' => today(), 'return_qty' => 5, 'reason' => 'Damage', 'complaint_status' => 'Open']);
+    App\Models\Notification::send((int) Database::fetchValue("SELECT id FROM users WHERE email = 'admin.qa@pik.test'"), 'delivery_upcoming', 'Delivery SJ/BLK/002', null, '/deliveries/' . $d2, 'delivery', $d2);
+    $outstanding = static fn (): int => (int) Database::fetchValue('SELECT outstanding_qty FROM (' . PoLine::poTotalsSql() . ') t WHERE t.po_id = :p', ['p' => $poId]);
+    assert_same(1000 - 300 - 100 + 5, $outstanding());
+
+    // hanya Admin: PPIC (pengisi surat jalan, boleh hapus satu per satu) pun ditolak untuk hapus massal
+    foreach (['PPIC', 'Marketing', 'Management', 'Viewer'] as $role) {
+        assert_status(403, client_as($role)->post('/deliveries/bulk-delete', ['ids' => [(string) $d1]]), $role);
+    }
+    $ppicPage = client_as('PPIC')->get('/deliveries', ['q' => 'BLK']);
+    assert_status(200, $ppicPage);
+    assert_not_contains('bulk-delete', $ppicPage->body);
+    assert_not_contains('name="ids[]"', $ppicPage->body);
+
+    $admin = client_as('Admin');
+    $page = $admin->get('/deliveries', ['customer_id' => (string) $po['customer_id'], 'per_page' => '50']);
+    assert_contains('action="/deliveries/bulk-delete"', $page->body);
+    assert_contains('data-check-all="ids[]"', $page->body, 'pilih semua di halaman ini');
+    foreach ([$schedule, $d1, $d2, $d3] as $id) {
+        assert_contains('name="ids[]" value="' . $id . '"', $page->body);
+    }
+    assert_contains('<option value="50" selected', $page->body);
+
+    assert_redirect($admin->post('/deliveries/bulk-delete', ['return' => '/deliveries?q=BLK']), '/deliveries?q=BLK');
+    assert_contains('Centang minimal satu delivery', $admin->get('/deliveries')->body);
+    assert_redirect($admin->post('/deliveries/bulk-delete', ['ids' => array_map('strval', range(1, 101))]), '/deliveries');
+    assert_contains('Maksimal 100 delivery', $admin->get('/deliveries')->body);
+
+    $res = $admin->post('/deliveries/bulk-delete', ['ids' => array_map('strval', [$schedule, $d1, $d2, $d3]), 'return' => '/deliveries?q=BLK&per_page=50']);
+    assert_redirect($res, '/deliveries?q=BLK&per_page=50', 'kembali ke filter yang sama');
+    $flash = $admin->get('/deliveries', ['q' => 'BLK', 'per_page' => '50'])->body;
+    assert_contains('3 delivery dihapus', $flash);
+    assert_contains('1 delivery tidak dihapus', $flash);
+    assert_contains('SJ/BLK/003', $flash);
+    foreach ([$schedule, $d1, $d2] as $id) {
+        assert_false((bool) Database::fetchValue('SELECT 1 FROM deliveries WHERE id = :id', ['id' => $id]), 'terhapus: ' . $id);
+        assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'delete' AND entity_type = 'delivery' AND entity_id = :id", ['id' => $id]));
+    }
+    assert_true((bool) Database::fetchValue('SELECT 1 FROM deliveries WHERE id = :id', ['id' => $d3]), 'delivery dengan retur tetap ada');
+    assert_same(null, Database::fetchValue('SELECT schedule_delivery_id FROM purchase_orders WHERE id = :id', ['id' => $poId]), 'jadwal OEF terlepas dari order');
+    assert_false((bool) Database::fetchValue("SELECT 1 FROM notifications WHERE entity_type = 'delivery' AND entity_id = :id", ['id' => $d2]), 'notifikasi delivery ikut dibersihkan');
+    assert_same(1000 - 100 + 5, $outstanding(), 'outstanding dihitung ulang');
+    // hanya delivery yang tidak bisa dihapus → pesan gagal
+    assert_redirect($admin->post('/deliveries/bulk-delete', ['ids' => [(string) $d3]]), '/deliveries');
+    assert_contains('Tidak ada delivery yang dihapus', $admin->get('/deliveries')->body);
+
+    // bersihkan
+    Database::delete('returns', 'id = :id', ['id' => $ret]);
+    Database::delete('deliveries', 'id = :id', ['id' => $d3]);
+    App\Models\PurchaseOrder::deleteSafely($poId);
+    Database::query("DELETE FROM products WHERE name = 'Botol Delivery Massal'");
+    Database::delete('customers', 'id = :id', ['id' => (int) $po['customer_id']]);
+});
+
 group('Phase 4 · Delivery, Return & Outstanding');
 
 test('delivery Delivered mengurangi outstanding, Scheduled tidak; status PO → Partial', function () {

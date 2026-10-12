@@ -33,6 +33,7 @@ Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (l
 19. [Konfirmasi PPIC massal, hapus user & buka blokir (update Oktober 2026 — 3)](#19-konfirmasi-ppic-massal-hapus-user--buka-blokir-update-oktober-2026--3)
 20. [Hapus OEF massal & perbaikan tampilan angka besar (update Oktober 2026 — 4)](#20-hapus-oef-massal--perbaikan-tampilan-angka-besar-update-oktober-2026--4)
 21. [Role Gudang digabung ke Produksi (update Oktober 2026 — 5)](#21-role-gudang-digabung-ke-produksi-update-oktober-2026--5)
+22. [Hapus delivery massal & logo baru (update Oktober 2026 — 6)](#22-hapus-delivery-massal--logo-baru-update-oktober-2026--6)
 
 ---
 
@@ -267,6 +268,7 @@ Otorisasi dicek di **backend** pada setiap route (lihat `app/routes.php` + `conf
 | Hapus OEF massal (centang / pilih semua di daftar) | ✔ | — | — | — | — | — | — |
 | Konfirmasi PPIC (Bisa / Tidak bisa diproses, satu per satu atau massal) | ✔ | — | — | ✔ | — | — | — |
 | Deliveries / Surat Jalan (catat, edit, ubah jadwal) | ✔ | lihat | lihat | ✔ | — | lihat | lihat |
+| Hapus delivery massal (centang / pilih semua di daftar) | ✔ | — | — | — | — | — | — |
 | Complaint & Return | ✔ | ✔ | lihat & catat | — | — | ✔ | lihat |
 | Tombol Selesai / Tidak selesai complaint | ✔ | ✔ | — | — | — | ✔ | — |
 | Products | ✔ | ✔ | lihat | — | — | — | lihat |
@@ -570,3 +572,17 @@ Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-se
 - Role **Gudang dihapus sepenuhnya**. Role **Produksi** kini satu-satunya divisi (selain Admin) yang mengisi **Stock, Inbound Maklon, dan Inbound Supplier**; Management & Viewer tetap hanya melihat.
 - Migrasi skema **2026.10.3** berjalan otomatis saat update: semua user yang sebelumnya ber-role Gudang **otomatis menjadi Produksi** (akun, password, dan riwayatnya tetap; perubahan role tercatat di Audit Log), lalu pilihan `Gudang` dihapus dari kolom `users.role`. Tidak ada data yang dihapus. Server yang masih memakai skema 2026.10.1 (belum pernah punya role Gudang) langsung mendapat role Produksi.
 - Pilihan role di **Settings › Users** tidak lagi memuat Gudang. User Produksi melihat menu Stock, Inbound Maklon, dan Inbound Supplier serta kartu stok & barang masuk di dashboard.
+
+## 22. Hapus delivery massal & logo baru (update Oktober 2026 — 6)
+
+Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-setiap-update). Tidak ada perubahan struktur database.
+
+### Hapus delivery massal (khusus Admin)
+
+- Di daftar **Deliveries**, Admin bisa mencentang beberapa delivery — atau kotak di judul kolom untuk **memilih semua delivery di halaman itu** (pilihan 25 / 50 / 100 per halaman) — lalu menekan **Hapus**. Konfirmasi menyebutkan jumlah delivery yang akan dihapus.
+- Aturannya sama dengan hapus satu per satu: outstanding & status order terkait dihitung ulang, tercatat di Audit Log, dan notifikasi pengingat delivery tersebut ikut dibersihkan. Jadwal delivery otomatis dari OEF juga bisa dihapus (order-nya tetap ada). Delivery yang **masih direferensikan complaint/retur tidak dihapus** — nomornya disebutkan di pesan hasil.
+- Hak akses memakai permission terpisah `deliveries_bulk.delete` (default hanya Admin). PPIC tetap bisa menghapus delivery satu per satu dari halaman detail seperti sebelumnya, tetapi tidak bisa menghapus massal.
+
+### Logo baru
+
+- Logo aplikasi diganti dengan logo **MARKETING · PERMATA INDO KEMAS** (ikon berlian & mahkota emas). Ikon dibuat ulang sebagai gambar vektor (`public/assets/img/logo.svg`) agar tetap tajam di semua ukuran, dan tampil di sidebar, menu HP, halaman login, serta ikon tab browser (`favicon.svg`, `favicon-32.png`) dan ikon layar utama HP (`apple-touch-icon.png`).
