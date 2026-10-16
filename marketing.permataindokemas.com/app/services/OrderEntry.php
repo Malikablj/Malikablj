@@ -127,6 +127,9 @@ final class OrderEntry
                     }
                 }
             }
+            if (array_key_exists('status', $header) && (string) $header['status'] !== (string) $before['status']) {
+                $header['status_auto'] = 0; // status dipilih user → tidak diubah otomatis bila Closed
+            }
             try {
                 PurchaseOrder::update($id, $header, $before);
             } catch (PDOException $e) {
@@ -165,8 +168,10 @@ final class OrderEntry
             ];
             if ($decision === 'approve' && in_array($po['status'], ['Open', 'Cancelled'], true)) {
                 $data['status'] = 'On Process';
+                $data['status_auto'] = 0;
             } elseif ($decision === 'reject' && in_array($po['status'], ['Open', 'On Process'], true)) {
                 $data['status'] = 'Cancelled';
+                $data['status_auto'] = 0;
             }
             PurchaseOrder::update($id, $data, $po);
             Audit::log($decision === 'approve' ? 'ppic_approve' : 'ppic_reject', PurchaseOrder::ENTITY, $id, PurchaseOrder::displayNumber($po), [

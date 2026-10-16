@@ -40,7 +40,7 @@ $cancel = $return !== '' ? to($return) : ($isEdit ? url('/deliveries/' . $delive
                     <?= Form::input('delivery_date', 'Tanggal delivery', old('delivery_date', $record), $errors, ['type' => 'date', 'required' => true, 'col' => 'col-md-4']) ?>
                     <?= Form::input('sj_number', 'Nomor surat jalan', old('sj_number', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-4', 'placeholder' => 'mis. PIK-SJ-03698']) ?>
                     <?= Form::input('delivered_qty', 'Qty (pcs)', old('delivered_qty', $record), $errors, ['type' => 'number', 'min' => 1, 'step' => 1, 'required' => true, 'col' => 'col-md-4', 'inputmode' => 'numeric']) ?>
-                    <?= Form::select('status', 'Status', $statusOptions, old('status', $record, 'Delivered'), $errors, ['required' => true, 'col' => 'col-md-6']) ?>
+                    <?= Form::select('status', 'Status', $statusOptions, old('status', $record, 'Delivered'), $errors, ['required' => true, 'col' => 'col-md-6', 'help' => 'Partial: isi Qty dengan jumlah yang benar-benar diterima customer; sisanya tetap outstanding dan order tidak Closed.']) ?>
                     <?= Form::input('destination', 'Tujuan pengiriman', old('destination', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-6']) ?>
                     <?= Form::input('attachment', 'Link BAST / QC (opsional)', old('attachment', $record), $errors, ['type' => 'url', 'maxlength' => 500, 'placeholder' => 'https://…']) ?>
                     <?= Form::textarea('note', 'Catatan', old('note', $record), $errors, ['rows' => 2, 'maxlength' => 2000]) ?>

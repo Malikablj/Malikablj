@@ -272,6 +272,7 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   requested_date        DATE         NULL COMMENT 'Permintaan selesai / kirim',
   ship_to               VARCHAR(255) NULL COMMENT 'Tujuan kirim',
   status                ENUM('Open','On Process','Partial','Closed','Cancelled') NOT NULL DEFAULT 'Open',
+  status_auto           TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '1 = status terakhir diatur otomatis oleh sistem (Closed/Partial otomatis boleh dibuka kembali)',
   ppic_status           ENUM('Pending','Approved','Rejected') NULL COMMENT 'NULL = data lama (tanpa konfirmasi PPIC)',
   ppic_note             TEXT         NULL,
   ppic_by               INT UNSIGNED NULL,

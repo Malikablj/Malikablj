@@ -2,9 +2,11 @@
 2. Settings › Users: periksa akun divisi PPIC & Produksi (buat bila belum ada).
    Role Gudang sudah dihapus — user yang tadinya Gudang otomatis menjadi Produksi.
 3. Yang baru di update ini:
-   - Deliveries: Admin bisa mencentang beberapa delivery (atau "pilih semua" di halaman) lalu
-     menekan Hapus. Delivery yang masih dipakai complaint/retur tidak dihapus (README bagian 22).
-   - Logo baru MARKETING · PERMATA INDO KEMAS di sidebar, halaman login, dan ikon tab browser.
-   Termasuk update yang belum terpasang sebelumnya: role Gudang digabung ke Produksi
-   (README 21); hapus OEF massal & perbaikan tampilan angka besar (README 20); konfirmasi PPIC
-   massal, hapus user & buka blokir (README 19); OEF manual, Stock, Inbound (README 18).
+   - Perbaikan status order: order yang Closed otomatis kini dibuka kembali bila delivery dikoreksi
+     (Delivered → Partial / qty dikurangi / dihapus) atau ada retur, selama masih ada outstanding.
+     Order yang saat ini "terkunci" Closed padahal masih ada outstanding langsung diperbaiki saat
+     update dipasang. Closed yang dipilih manual tetap Closed (README bagian 23).
+   - Delivery status Partial: isi Qty dengan jumlah yang benar-benar diterima customer.
+   Termasuk update yang belum terpasang sebelumnya: hapus delivery massal & logo baru (README 22),
+   role Gudang digabung ke Produksi (README 21), hapus OEF massal & perbaikan tampilan (README 20),
+   konfirmasi PPIC massal, hapus user & buka blokir (README 19).

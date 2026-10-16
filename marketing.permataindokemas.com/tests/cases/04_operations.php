@@ -415,6 +415,54 @@ test('hapus delivery massal (khusus Admin): centang beberapa / semua di halaman;
     Database::delete('customers', 'id = :id', ['id' => (int) $po['customer_id']]);
 });
 
+test('status order mengikuti koreksi delivery: Closed otomatis dibuka kembali (Delivered → Partial / Scheduled / dihapus)', function () {
+    assert_redirect(client_as('Marketing')->post('/purchase-orders', ['order_number' => 'OEF-STS-001', 'customer_name' => 'PT Status Order', 'sales_name' => 'Sales Uji', 'po_date' => today(),
+        'product_name' => 'Botol Status Order', 'product_spec' => 'PET', 'order_qty' => '1000', 'requested_date' => date('Y-m-d', strtotime('+5 days'))]), '/purchase-orders/');
+    $po = Database::fetch("SELECT * FROM purchase_orders WHERE order_number = 'OEF-STS-001'");
+    $id = (int) $po['id'];
+    $ppic = client_as('PPIC');
+    $ppic->post('/purchase-orders/' . $id . '/ppic', ['decision' => 'approve']);
+    $line = (int) Database::fetchValue('SELECT id FROM po_lines WHERE po_id = :p', ['p' => $id]);
+    $sched = (int) $po['schedule_delivery_id'];
+    $status = static fn (): array => array_values(Database::fetch('SELECT status, status_auto FROM purchase_orders WHERE id = :id', ['id' => $id]));
+    $outstanding = static fn (): int => (int) PoLine::totals($line)['outstanding_qty'];
+    $edit = static fn (string $st, string $qty) => $ppic->post('/deliveries/' . $sched, ['po_line_id' => (string) $line, 'delivery_date' => today(), 'sj_number' => 'SJ/STS/001',
+        'destination' => 'Gudang Customer', 'delivered_qty' => $qty, 'status' => $st, 'note' => '', 'attachment' => '']);
+    assert_same(['On Process', 0], $status());
+
+    // jadwal otomatis → Delivered (diterima customer) → Closed otomatis
+    assert_redirect($edit('Delivered', '1000'), '/deliveries/' . $sched);
+    assert_same(['Closed', 1], $status());
+    assert_same(0, $outstanding());
+    // Partial tetapi qty masih menutup seluruh sisa order → ditolak dengan petunjuk
+    $bad = $edit('Partial', '1000');
+    assert_status(422, $bad);
+    assert_contains('Status Partial berarti barang baru diterima sebagian', $bad->body);
+    assert_contains('kurang dari sisa order 1.000 pcs', $bad->body);
+    assert_not_contains('Konfirmasi kelebihan kirim', $bad->body, 'bukan kasus over delivery');
+    assert_same(['Closed', 1], $status());
+    // Partial 600 → masih ada outstanding 400 → order kembali Partial (bukan Closed)
+    assert_redirect($edit('Partial', '600'), '/deliveries/' . $sched);
+    assert_same(['Partial', 1], $status(), 'Closed otomatis dibuka kembali');
+    assert_same(400, $outstanding());
+    assert_true((bool) Database::fetchValue("SELECT 1 FROM audit_logs WHERE action = 'auto_status' AND entity_id = :id AND changes LIKE '%\"old\":\"Closed\"%'", ['id' => $id]), 'tercatat di audit');
+    // diterima semua → Closed lagi; dikembalikan ke Scheduled (belum diterima) → On Process
+    assert_redirect($edit('Delivered', '1000'), '/deliveries/' . $sched);
+    assert_same(['Closed', 1], $status());
+    assert_redirect($edit('Scheduled', '1000'), '/deliveries/' . $sched);
+    assert_same(['On Process', 1], $status(), 'belum ada kiriman → kembali On Process');
+    // Delivered lalu delivery dihapus → On Process
+    assert_redirect($edit('Delivered', '1000'), '/deliveries/' . $sched);
+    assert_same('Closed', $status()[0]);
+    client_as('Admin')->post('/deliveries/' . $sched . '/delete');
+    assert_same('On Process', $status()[0], 'delivery dihapus → order dibuka kembali');
+    assert_same(1000, $outstanding());
+
+    App\Models\PurchaseOrder::deleteSafely($id);
+    Database::query("DELETE FROM products WHERE name = 'Botol Status Order'");
+    Database::query("DELETE FROM customers WHERE name = 'PT Status Order'");
+});
+
 group('Phase 4 · Delivery, Return & Outstanding');
 
 test('delivery Delivered mengurangi outstanding, Scheduled tidak; status PO → Partial', function () {
@@ -476,7 +524,19 @@ test('PO otomatis Closed saat seluruh baris terpenuhi; retur menambah outstandin
     assert_same('Open', $ret['complaint_status']);
     assert_same((int) $po['customer_id'], (int) $ret['customer_id'], 'customer diturunkan dari order');
     assert_same(['order_qty' => 1000, 'delivered_qty' => 1000, 'return_qty' => 150, 'outstanding_qty' => 150], PoLine::totals((int) $lines[0]));
-    assert_same('Closed', Database::fetchValue('SELECT status FROM purchase_orders WHERE id = :id', ['id' => $po['id']]), 'status Closed tidak diubah otomatis');
+    assert_same('Partial', Database::fetchValue('SELECT status FROM purchase_orders WHERE id = :id', ['id' => $po['id']]), 'Closed otomatis dibuka kembali: retur menambah outstanding');
+    // Closed yang dipilih MANUAL oleh user tetap Closed walau masih ada outstanding
+    $now = Database::fetch('SELECT p.*, c.name AS customer_name FROM purchase_orders p JOIN customers c ON c.id = p.customer_id WHERE p.id = :id', ['id' => $po['id']]);
+    $manual = $c->post('/purchase-orders/' . $po['id'], ['order_number' => $now['order_number'], 'customer_name' => $now['customer_name'], 'sales_name' => $now['sales_name'],
+        'po_number' => $now['po_number'] ?? '', 'po_date' => $now['po_date'], 'is_subcont' => (string) $now['is_subcont'], 'supplier' => $now['supplier'] ?? '',
+        'requested_date' => $now['requested_date'], 'ship_to' => $now['ship_to'] ?? '', 'remark' => $now['remark'] ?? '', 'payment_term' => $now['payment_term'] ?? '',
+        'product_spec' => $now['product_spec'] ?? '', 'status' => 'Closed']);
+    assert_redirect($manual, '/purchase-orders/' . $po['id']);
+    $row = Database::fetch('SELECT status, status_auto, ppic_status FROM purchase_orders WHERE id = :id', ['id' => $po['id']]);
+    assert_same(['Closed', 0], [$row['status'], (int) $row['status_auto']], 'ditutup manual');
+    assert_same($now['ppic_status'], $row['ppic_status'], 'hanya status yang berubah, tidak dikirim ulang ke PPIC');
+    App\Models\PurchaseOrder::syncStatus((int) $po['id']);
+    assert_same('Closed', Database::fetchValue('SELECT status FROM purchase_orders WHERE id = :id', ['id' => $po['id']]), 'Closed manual tidak dibuka otomatis');
     // retur dari surat jalan PO lain ditolak
     $otherPo = Database::insert('purchase_orders', ['code' => 'PO-OPS0000002', 'po_number' => 'PO/OPS/002', 'customer_id' => Database::fetchValue("SELECT id FROM customers WHERE name='PT Operasi Uji'"), 'po_date' => today(), 'status' => 'Open']);
     $otherLine = Database::insert('po_lines', ['code' => 'POL-OPS0000002', 'po_id' => $otherPo, 'product_id' => Database::fetchValue("SELECT id FROM products WHERE code='PRD-OPS0000001'"), 'order_qty' => 10]);

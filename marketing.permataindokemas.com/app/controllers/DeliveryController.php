@@ -204,14 +204,18 @@ final class DeliveryController extends Controller
             'delivered_qty' => 'Qty', 'status' => 'Status', 'note' => 'Catatan', 'attachment' => 'Link lampiran',
         ]);
         $data = $v->validated();
-        if (!$v->fails() && $data['po_line_id'] !== null && in_array($data['status'], Delivery::COUNTED_STATUSES, true) && (int) $data['confirm_over_delivery'] !== 1) {
+        if (!$v->fails() && $data['po_line_id'] !== null && in_array($data['status'], Delivery::COUNTED_STATUSES, true)) {
             $totals = PoLine::totals((int) $data['po_line_id']);
             $available = (int) ($totals['outstanding_qty'] ?? 0);
             // saat edit, qty lama milik delivery ini dikembalikan dulu ke outstanding
             if ($existing !== null && (int) $existing['po_line_id'] === (int) $data['po_line_id'] && in_array($existing['status'], Delivery::COUNTED_STATUSES, true)) {
                 $available += (int) $existing['delivered_qty'];
             }
-            if ((int) $data['delivered_qty'] > $available) {
+            if ($data['status'] === 'Partial' && $available > 0 && (int) $data['delivered_qty'] >= $available) {
+                // "Partial" tetapi qty-nya menutup seluruh sisa order → order akan Closed; minta qty yang benar-benar diterima
+                $v->addError('delivered_qty', 'Status Partial berarti barang baru diterima sebagian: isi Qty dengan jumlah yang benar-benar diterima customer (kurang dari sisa order '
+                    . number_format($available, 0, ',', '.') . ' pcs). Bila seluruh sisa sudah diterima, pilih status Delivered.');
+            } elseif ((int) $data['confirm_over_delivery'] !== 1 && (int) $data['delivered_qty'] > $available) {
                 $v->addError('delivered_qty', 'Qty melebihi outstanding baris PO (' . number_format(max(0, $available), 0, ',', '.') . ' pcs). Centang "Konfirmasi kelebihan kirim" bila memang over delivery.');
             }
         }

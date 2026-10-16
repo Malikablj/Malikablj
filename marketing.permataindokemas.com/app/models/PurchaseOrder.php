@@ -269,10 +269,15 @@ final class PurchaseOrder extends Model
     }
 
     /**
-     * Sesuaikan status PO otomatis dari data delivery & retur:
-     *  - Open / On Process → Partial   bila sudah ada kiriman tetapi masih outstanding
-     *  - Open / On Process / Partial → Closed  bila seluruh line outstanding ≤ 0
-     *  - Closed dan Cancelled tidak pernah diubah otomatis (keputusan manual).
+     * Sesuaikan status order otomatis dari data delivery & retur (dipanggil setiap kali delivery,
+     * retur, atau baris order berubah):
+     *  - ada kiriman & masih ada outstanding                → Partial
+     *  - ada kiriman & seluruh baris outstanding ≤ 0         → Closed (otomatis)
+     *  - Partial / Closed hasil OTOMATIS dibuka kembali bila datanya berubah: outstanding bertambah
+     *    (koreksi qty / status delivery, delivery dihapus, retur) → Partial; belum ada kiriman sama
+     *    sekali → kembali ke On Process (OEF sudah dikonfirmasi PPIC) / Open.
+     *  - Cancelled, serta Closed / Partial yang dipilih MANUAL oleh user, tidak pernah diubah otomatis.
+     * Kolom status_auto = 1 menandai status terakhir diatur sistem.
      * @return string|null status baru bila berubah
      */
     public static function syncStatus(?int $poId): ?string
@@ -281,8 +286,12 @@ final class PurchaseOrder extends Model
             return null;
         }
         $po = self::findFull($poId);
-        if ($po === null || !in_array($po['status'], self::OPEN_STATUSES, true)) {
+        if ($po === null || $po['status'] === 'Cancelled') {
             return null;
+        }
+        $auto = (int) ($po['status_auto'] ?? 0) === 1;
+        if ($po['status'] === 'Closed' && !$auto) {
+            return null; // ditutup manual oleh user
         }
         $total = (int) $po['total_qty'];
         $delivered = (int) $po['delivered_qty'];
@@ -290,14 +299,16 @@ final class PurchaseOrder extends Model
         $new = $po['status'];
         if ($total > 0 && $delivered > 0 && $maxOutstanding <= 0) {
             $new = 'Closed';
-        } elseif ($delivered > 0 && $maxOutstanding > 0 && in_array($po['status'], ['Open', 'On Process'], true)) {
+        } elseif ($delivered > 0 && $maxOutstanding > 0) {
             $new = 'Partial';
+        } elseif ($delivered <= 0 && $auto && in_array($po['status'], ['Partial', 'Closed'], true)) {
+            $new = $po['ppic_status'] === 'Approved' ? 'On Process' : 'Open';
         }
         if ($new === $po['status']) {
             return null;
         }
-        Database::update('purchase_orders', ['status' => $new], 'id = :id', ['id' => $poId]);
-        Audit::log('auto_status', self::ENTITY, $poId, (string) ($po['po_number'] ?? $po['code']), ['status' => ['old' => $po['status'], 'new' => $new]]);
+        Database::update('purchase_orders', ['status' => $new, 'status_auto' => 1], 'id = :id', ['id' => $poId]);
+        Audit::log('auto_status', self::ENTITY, $poId, self::displayNumber($po), ['status' => ['old' => $po['status'], 'new' => $new]]);
         return $new;
     }
 

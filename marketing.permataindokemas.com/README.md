@@ -34,6 +34,7 @@ Aplikasi web internal **PT Permata Indo Kemas** untuk mengelola customer, CRM (l
 20. [Hapus OEF massal & perbaikan tampilan angka besar (update Oktober 2026 — 4)](#20-hapus-oef-massal--perbaikan-tampilan-angka-besar-update-oktober-2026--4)
 21. [Role Gudang digabung ke Produksi (update Oktober 2026 — 5)](#21-role-gudang-digabung-ke-produksi-update-oktober-2026--5)
 22. [Hapus delivery massal & logo baru (update Oktober 2026 — 6)](#22-hapus-delivery-massal--logo-baru-update-oktober-2026--6)
+23. [Status order mengikuti koreksi delivery (update Oktober 2026 — 7)](#23-status-order-mengikuti-koreksi-delivery-update-oktober-2026--7)
 
 ---
 
@@ -288,7 +289,7 @@ Catatan (bisa diubah di `config/permissions.php`):
 ## 12. Aturan bisnis
 
 - **Outstanding Quantity = Order Quantity − Delivered Quantity + Return Quantity** (per baris PO). Delivered hanya menghitung delivery berstatus *Delivered*/*Partial*. Nilai negatif = kelebihan kirim (harus dikonfirmasi saat input).
-- **Status PO otomatis:** Open/On Process → *Partial* saat ada kiriman; → *Closed* saat semua baris outstanding ≤ 0. Status *Closed* dan *Cancelled* tidak pernah diubah otomatis. Setiap perubahan otomatis tercatat di audit log.
+- **Status PO otomatis:** Open/On Process → *Partial* saat ada kiriman; → *Closed* saat semua baris outstanding ≤ 0. Status *Partial/Closed* hasil otomatis **dihitung ulang** bila data berubah (koreksi qty/status delivery, delivery dihapus, retur): masih ada outstanding → *Partial*; belum ada kiriman → kembali *On Process*/*Open*. *Cancelled* dan *Closed* yang dipilih **manual** oleh user tidak pernah diubah otomatis. Setiap perubahan otomatis tercatat di audit log.
 - **Follow up overdue:** tanggal < hari ini dan status bukan *Done* (status *Cancelled* juga dianggap selesai).
 - **Order Entry Form:** No. order, nama customer, dan nama produk diketik manual. No. order wajib unik (tidak peka huruf besar/kecil). Customer & produk dicocokkan dengan nama yang sama (tidak peka huruf besar/kecil & spasi; customer juga "PT." = "PT"); bila belum ada, dicatat otomatis di menu Customers / Products. Qty & spesifikasi OEF terakhir disimpan di produk sebagai arsip.
 - **Stok:** nama produk diketik manual dan dikelompokkan otomatis per produk (nama sama = kelompok sama; nama baru = produk baru bersumber "Stok"). Qty = jumlah box × isi per box bila Qty dikosongkan; Qty yang berbeda harus dikonfirmasi. Entri tanpa qty ditandai, tidak dihitung sebagai 0.
@@ -586,3 +587,16 @@ Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-se
 ### Logo baru
 
 - Logo aplikasi diganti dengan logo **MARKETING · PERMATA INDO KEMAS** (ikon berlian & mahkota emas). Ikon dibuat ulang sebagai gambar vektor (`public/assets/img/logo.svg`) agar tetap tajam di semua ukuran, dan tampil di sidebar, menu HP, halaman login, serta ikon tab browser (`favicon.svg`, `favicon-32.png`) dan ikon layar utama HP (`apple-touch-icon.png`).
+
+## 23. Status order mengikuti koreksi delivery (update Oktober 2026 — 7)
+
+Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-setiap-update).
+
+**Masalah sebelumnya:** delivery (mis. jadwal otomatis dari OEF) diubah menjadi *Delivered* → order otomatis **Closed**; ketika delivery dikoreksi menjadi *Partial* (qty dikurangi), dihapus, atau ada retur, order tetap Closed walau masih ada outstanding — karena aturan lama tidak pernah mengubah status Closed.
+
+**Sekarang:**
+- Sistem membedakan **Closed otomatis** (ditutup sistem karena outstanding habis) dan **Closed manual** (dipilih user di form order). Kolom baru `purchase_orders.status_auto` mencatatnya.
+- Closed/Partial otomatis dihitung ulang setiap kali delivery atau retur berubah: masih ada outstanding → **Partial**; belum ada kiriman sama sekali (delivery dihapus atau dikembalikan ke *Scheduled*/*Cancelled*) → **On Process** (OEF sudah dikonfirmasi PPIC) atau **Open**; outstanding habis lagi → **Closed**. Setiap perubahan tercatat di Audit Log (`auto_status`).
+- Closed yang dipilih manual oleh user dan status *Cancelled* tetap tidak diubah otomatis.
+- Form delivery: status **Partial** berarti diterima sebagian, jadi **Qty wajib jumlah yang benar-benar diterima** dan harus kurang dari sisa order. Bila qty menutup seluruh sisa, form menolak dengan petunjuk untuk memilih *Delivered*.
+- Migrasi skema **2026.10.4** (otomatis saat update): kolom `status_auto` ditambahkan; order yang terakhir di-Closed oleh sistem (menurut Audit Log) ditandai otomatis lalu **langsung dihitung ulang**, sehingga order yang sekarang "terkunci" Closed padahal masih ada outstanding otomatis kembali ke *Partial*. Order Closed hasil import / tanpa riwayat dianggap manual (tidak diubah).

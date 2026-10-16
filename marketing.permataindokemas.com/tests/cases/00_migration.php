@@ -85,3 +85,43 @@ test('update dari skema 2026.10.2: user role Gudang otomatis menjadi Produksi, r
     Database::query("DELETE FROM users WHERE id IN ({$g1}, {$g2}, {$other})");
     Database::query('DELETE FROM audit_logs');
 });
+
+test('update dari skema 2026.10.3: order yang Closed otomatis padahal masih ada outstanding dibuka kembali', function () {
+    Database::query('ALTER TABLE purchase_orders DROP COLUMN status_auto');
+    Database::query("INSERT INTO settings (setting_key, setting_value) VALUES ('schema_version', '2026.10.3') ON DUPLICATE KEY UPDATE setting_value = '2026.10.3'");
+    $cust = Database::insert('customers', ['code' => 'CUS-STA0000001', 'name' => 'PT Status Migrasi', 'status' => 'Active']);
+    $prod = Database::insert('products', ['code' => 'PRD-STA0000001', 'name' => 'Botol Status Migrasi', 'unit' => 'pcs']);
+    $mk = static function (string $code, string $ppic) use ($cust, $prod): array {
+        $po = Database::insert('purchase_orders', ['code' => $code, 'order_number' => $code, 'customer_id' => $cust, 'po_date' => today(), 'status' => 'Closed', 'ppic_status' => $ppic]);
+        $line = Database::insert('po_lines', ['code' => 'POL-' . substr($code, 3), 'po_id' => $po, 'product_id' => $prod, 'order_qty' => 1000]);
+        Database::insert('deliveries', ['code' => 'DLV-' . substr($code, 3), 'po_id' => $po, 'po_line_id' => $line, 'delivery_date' => today(), 'delivered_qty' => 600, 'status' => 'Partial']);
+        return [$po, $line];
+    };
+    $audit = static fn (int $po, string $action, string $old, string $new) => Database::insert('audit_logs', ['action' => $action, 'entity_type' => 'purchase_order', 'entity_id' => $po,
+        'changes' => json_encode(['status' => ['old' => $old, 'new' => $new]])]);
+    [$auto] = $mk('PO-STA0000001', 'Approved');      // Closed oleh sistem (delivery sempat Delivered penuh, lalu dikoreksi)
+    $audit($auto, 'auto_status', 'On Process', 'Partial');
+    $audit($auto, 'auto_status', 'Partial', 'Closed');
+    [$manual] = $mk('PO-STA0000002', 'Approved');    // ditutup manual oleh user
+    $audit($manual, 'auto_status', 'On Process', 'Partial');
+    $audit($manual, 'update', 'Partial', 'Closed');
+    [$legacy] = $mk('PO-STA0000003', 'Approved');    // data lama tanpa riwayat → dianggap manual
+
+    $steps = Migrator::run();
+    foreach (['purchase_orders: kolom status_auto', 'purchase_orders: order Closed otomatis dihitung ulang'] as $label) {
+        assert_true(in_array($label, $steps, true), $label . ' (' . implode('; ', $steps) . ')');
+    }
+    $row = static fn (int $id): array => array_values(Database::fetch('SELECT status, status_auto FROM purchase_orders WHERE id = :id', ['id' => $id]));
+    assert_same(['Partial', 1], $row($auto), 'Closed otomatis + outstanding 400 → Partial');
+    assert_same(['Closed', 0], $row($manual), 'Closed manual tetap');
+    assert_same(['Closed', 0], $row($legacy), 'tanpa riwayat → tetap');
+    assert_same(Migrator::VERSION, Database::fetchValue("SELECT setting_value FROM settings WHERE setting_key = 'schema_version'"));
+    assert_same([], Migrator::run(), 'aman dijalankan ulang');
+
+    Database::query("DELETE FROM deliveries WHERE code LIKE 'DLV-STA%'");
+    Database::query("DELETE FROM po_lines WHERE code LIKE 'POL-STA%'");
+    Database::query("DELETE FROM purchase_orders WHERE code LIKE 'PO-STA%'");
+    Database::delete('products', 'id = :id', ['id' => $prod]);
+    Database::delete('customers', 'id = :id', ['id' => $cust]);
+    Database::query('DELETE FROM audit_logs');
+});

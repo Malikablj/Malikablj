@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Models\PurchaseOrder;
 use Throwable;
 
 /**
@@ -20,11 +21,14 @@ use Throwable;
 final class Migrator
 {
     /** Naikkan setiap kali ada migrasi baru. */
-    public const VERSION = '2026.10.3';
+    public const VERSION = '2026.10.4';
     private const SETTING_KEY = 'schema_version';
 
     /** true bila kolom complaint baru saja ditambahkan pada run ini (data lama perlu disesuaikan). */
     private static bool $complaintColumnsAdded = false;
+
+    /** true bila kolom purchase_orders.status_auto baru saja ditambahkan pada run ini (Closed otomatis dihitung ulang). */
+    private static bool $statusAutoAdded = false;
 
     /** true bila kolom products.qty baru saja ditambahkan pada run ini (diisi dari OEF terakhir). */
     private static bool $productQtyAdded = false;
@@ -272,6 +276,34 @@ final class Migrator
                 }
                 Database::query(self::INBOUND_SUPPLIER_DDL);
                 return true;
+            },
+
+            // ---------------------------------------------------------- status order: otomatis vs dipilih user
+            'purchase_orders: kolom status_auto' => static function (): bool {
+                self::$statusAutoAdded = !self::columnExists('purchase_orders', 'status_auto');
+                return self::addColumns('purchase_orders', [
+                    'status_auto' => "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = status terakhir diatur otomatis oleh sistem (Closed/Partial otomatis boleh dibuka kembali)' AFTER status",
+                ]);
+            },
+            'purchase_orders: order Closed otomatis dihitung ulang' => static function (): bool {
+                if (!self::$statusAutoAdded) {
+                    return false;
+                }
+                // Partial / Closed yang perubahan status terakhirnya (audit log) dilakukan sistem = otomatis
+                $last = [];
+                foreach (Database::fetchAll(
+                    "SELECT a.entity_id, a.action FROM audit_logs a JOIN purchase_orders p ON p.id = a.entity_id
+                     WHERE a.entity_type = 'purchase_order' AND p.status IN ('Partial','Closed') AND a.changes LIKE '%\"status\"%'
+                     ORDER BY a.id"
+                ) as $row) {
+                    $last[(int) $row['entity_id']] = (string) $row['action'];
+                }
+                $auto = array_keys(array_filter($last, static fn (string $action): bool => $action === 'auto_status'));
+                foreach ($auto as $id) {
+                    Database::update('purchase_orders', ['status_auto' => 1], 'id = :id', ['id' => $id]);
+                    PurchaseOrder::syncStatus($id); // mis. Closed padahal masih ada outstanding → Partial
+                }
+                return $auto !== [];
             },
         ];
     }
