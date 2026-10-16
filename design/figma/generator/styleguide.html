@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<link rel="stylesheet" href="http://127.0.0.1:18788/assets/vendor/bootstrap/bootstrap.min.css">
+<link rel="stylesheet" href="http://127.0.0.1:18788/assets/vendor/bootstrap-icons/bootstrap-icons.min.css">
+<link rel="stylesheet" href="http://127.0.0.1:18788/css/app.css">
+<style>
+ body{background:var(--pik-bg);padding:48px 56px}
+ .sg-h{font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--pik-muted);margin:0 0 14px}
+ .sg-sec{margin-bottom:40px}
+ .sg-row{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+ .sw{width:150px;border-radius:14px;overflow:hidden;border:1px solid var(--pik-border);background:#fff}
+ .sw .c{height:64px}.sw .t{padding:8px 10px;font-size:.75rem;line-height:1.35}.sw .t b{display:block;font-size:.8125rem}
+ .ty div{margin-bottom:6px}
+</style></head><body>
+<div class="d-flex align-items-center gap-3 mb-4">
+ <img src="http://127.0.0.1:18788/assets/img/logo.svg" width="56" height="56" alt="">
+ <div><div class="auth-brand-name">MARKETING</div><div class="auth-brand-sub">PERMATA INDO KEMAS</div></div>
+ <div class="ms-auto text-end"><div class="page-title" style="font-size:1.6rem">Style Guide</div><div class="text-secondary small">Warna, tipografi & komponen UI — PIK Marketing Control</div></div>
+</div>
+
+<div class="sg-sec"><p class="sg-h">Warna utama</p><div class="sg-row">
+ <div class="sw"><div class="c" style="background:#0071E3"></div><div class="t"><b>Accent</b>#0071E3</div></div>
+ <div class="sw"><div class="c" style="background:#D1AF1D"></div><div class="t"><b>Brand gold</b>#D1AF1D</div></div>
+ <div class="sw"><div class="c" style="background:#111111"></div><div class="t"><b>Text</b>#111111</div></div>
+ <div class="sw"><div class="c" style="background:#6E6E73"></div><div class="t"><b>Muted</b>#6E6E73</div></div>
+ <div class="sw"><div class="c" style="background:#F5F5F7"></div><div class="t"><b>Background</b>#F5F5F7</div></div>
+ <div class="sw"><div class="c" style="background:#FFFFFF"></div><div class="t"><b>Surface</b>#FFFFFF</div></div>
+ <div class="sw"><div class="c" style="background:#E5E5E7"></div><div class="t"><b>Border</b>#E5E5E7</div></div>
+</div><div class="sg-row mt-3">
+ <div class="sw"><div class="c" style="background:#34C759"></div><div class="t"><b>Success</b>#34C759 · ink #1B7A36</div></div>
+ <div class="sw"><div class="c" style="background:#FF9F0A"></div><div class="t"><b>Warning</b>#FF9F0A · ink #8F5200</div></div>
+ <div class="sw"><div class="c" style="background:#FF3B30"></div><div class="t"><b>Danger</b>#FF3B30 · ink #C11F16</div></div>
+ <div class="sw"><div class="c" style="background:#5AC8FA"></div><div class="t"><b>Info</b>#5AC8FA · ink #0A6488</div></div>
+</div></div>
+
+<div class="sg-sec ty"><p class="sg-h">Tipografi — Inter</p>
+ <div class="page-eyebrow">Eyebrow · 12 / Semibold / uppercase</div>
+ <div class="page-title">Judul halaman · 34 / Bold</div>
+ <div class="surface-title" style="font-size:1.0625rem">Judul kartu · 17 / Semibold</div>
+ <div style="font-size:.9375rem">Teks isi · 15 / Regular — Order dari customer, dikonfirmasi PPIC.</div>
+ <div class="small text-secondary">Teks kecil · 13 / Regular / muted</div>
+</div>
+
+<div class="sg-sec"><p class="sg-h">Tombol</p><div class="sg-row">
+ <button class="btn btn-primary"><i class="bi bi-plus-lg"></i> Buat OEF</button>
+ <button class="btn btn-light">Terapkan</button>
+ <button class="btn btn-dark">Set password sementara</button>
+ <button class="btn btn-success btn-sm"><i class="bi bi-check2-circle"></i> Bisa diproses</button>
+ <button class="btn btn-danger btn-sm"><i class="bi bi-x-circle"></i> Tidak bisa diproses</button>
+ <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Hapus</button>
+ <button class="btn btn-warning btn-sm"><i class="bi bi-unlock"></i> Buka blokir</button>
+ <a class="btn btn-link-plain small" href="#">Reset</a>
+</div></div>
+
+<div class="sg-sec"><p class="sg-h">Badge status</p><div class="sg-row">
+ <span class="badge-soft badge-soft-info">Open</span><span class="badge-soft badge-soft-warning">On Process</span><span class="badge-soft badge-soft-warning">Partial</span>
+ <span class="badge-soft badge-soft-success">Closed</span><span class="badge-soft badge-soft-danger">Cancelled</span><span class="badge-soft badge-soft-warning">Menunggu PPIC</span>
+ <span class="badge-soft badge-soft-success">Bisa diproses</span><span class="badge-soft badge-soft-danger">Tidak bisa diproses</span><span class="badge-soft badge-soft-info">Scheduled</span>
+ <span class="badge-soft badge-soft-success">Delivered</span><span class="badge-soft badge-soft-neutral">Nonaktif</span><span class="chip">Admin</span><span class="code-chip">OEF-2610-0118</span>
+</div></div>
+
+<div class="sg-sec"><p class="sg-h">Form</p><div class="row g-3" style="max-width:980px">
+ <div class="col-md-4"><label class="form-label">No. order <span class="text-danger">*</span></label><input class="form-control" value="OEF-2610-0119"></div>
+ <div class="col-md-4"><label class="form-label">Customer</label><input class="form-control" placeholder="Ketik nama customer"></div>
+ <div class="col-md-4"><label class="form-label">Status</label><select class="form-select"><option>Delivered — Diterima customer</option></select></div>
+ <div class="col-md-4"><label class="form-label">Tanggal</label><input type="date" class="form-control" value="2026-10-16"></div>
+ <div class="col-md-4"><label class="form-label">Qty (pcs)</label><input class="form-control is-invalid" value="1000"><div class="invalid-feedback d-block">Qty melebihi sisa order.</div></div>
+ <div class="col-md-4 d-flex align-items-end gap-3 pb-2"><div class="form-check"><input class="form-check-input" type="checkbox" checked id="c1"><label class="form-check-label" for="c1">Dicentang</label></div><div class="form-check"><input class="form-check-input" type="checkbox" id="c2"><label class="form-check-label" for="c2">Tidak</label></div></div>
+</div></div>
+
+<div class="sg-sec"><p class="sg-h">Kartu & ringkasan</p>
+ <div class="kpi-grid" style="grid-template-columns:repeat(4,220px)">
+  <a class="kpi kpi-accent" href="#"><div class="kpi-label"><span class="kpi-icon"><i class="bi bi-buildings"></i></span>Customer aktif</div><div class="kpi-value">8</div><div class="kpi-meta">dari 9 customer</div></a>
+  <a class="kpi kpi-warning" href="#"><div class="kpi-label"><span class="kpi-icon"><i class="bi bi-receipt"></i></span>Order berjalan</div><div class="kpi-value">8</div><div class="kpi-meta">Open · On Process · Partial</div></a>
+  <a class="kpi" href="#"><div class="kpi-label"><span class="kpi-icon"><i class="bi bi-box-seam"></i></span>Outstanding</div><div class="kpi-value">129.300</div><div class="kpi-meta">pcs belum terkirim</div></a>
+  <a class="kpi kpi-danger" href="#"><div class="kpi-label"><span class="kpi-icon"><i class="bi bi-alarm"></i></span>Overdue</div><div class="kpi-value is-alert">2</div><div class="kpi-meta">Follow up terlewat</div></a>
+ </div>
+ <div class="stat-strip mt-3" style="max-width:920px"><div><div class="stat-label">Order</div><div class="stat-value">12</div></div><div><div class="stat-label">Total order</div><div class="stat-value">217.000</div><div class="x-small text-secondary">pcs</div></div><div><div class="stat-label">Terkirim</div><div class="stat-value">58.000</div></div><div><div class="stat-label">Outstanding</div><div class="stat-value">159.300</div></div></div>
+ <div class="callout callout-warning mt-3 d-flex gap-2 align-items-center" style="max-width:920px"><i class="bi bi-hourglass-split"></i><span><strong>2 order</strong> menunggu konfirmasi PPIC — klik untuk meninjau.</span></div>
+ <div class="callout callout-info mt-2 d-flex gap-2 align-items-center" style="max-width:920px"><i class="bi bi-info-circle"></i><span>Informasi: jadwal delivery otomatis dibuat dari Order Entry Form.</span></div>
+</div>
+
+<div class="sg-sec"><p class="sg-h">Tabel & aksi massal</p>
+ <div class="surface" style="max-width:920px"><div class="bulk-bar"><div class="bulk-bar-info"><i class="bi bi-ui-checks"></i><span><strong>2</strong> order dipilih</span></div><button class="btn btn-success btn-sm"><i class="bi bi-check2-circle"></i> Bisa diproses</button><button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Hapus</button></div>
+ <div class="table-wrap"><table class="table-pik"><thead><tr><th class="col-check"><input class="form-check-input" type="checkbox"></th><th>No. order</th><th>Customer · Produk</th><th>PPIC · Status</th><th class="num">Outstanding</th></tr></thead><tbody>
+  <tr><td class="col-check"><input class="form-check-input" type="checkbox" checked></td><td><a class="cell-title" href="#">OEF-2610-0118</a><div class="cell-sub">15 Okt 2026 · Budi Santoso</div></td><td><a href="#">PT Cantik Mandiri</a><div class="cell-sub">Botol PET 100ml Bening</div></td><td><span class="badge-soft badge-soft-warning">Menunggu PPIC</span></td><td class="num fw-semibold">24.000</td></tr>
+  <tr><td class="col-check"><input class="form-check-input" type="checkbox" checked></td><td><a class="cell-title" href="#">OEF-2610-0117</a><div class="cell-sub">14 Okt 2026 · Rina Wulandari</div></td><td><a href="#">CV Glow Beauty</a><div class="cell-sub">Jar PP 30gr Putih</div></td><td><span class="badge-soft badge-soft-warning">Menunggu PPIC</span></td><td class="num fw-semibold">12.000</td></tr>
+ </tbody></table></div></div>
+</div>
+</body></html>
