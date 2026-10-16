@@ -53,7 +53,7 @@ final class FollowUpController extends Controller
             'status'         => 'Planned',
             'reminder'       => '1',
         ];
-        $this->view('followups/form', $this->formData(null) + ['errors' => [], 'preset' => $preset]);
+        $this->view('followups/form', $this->formData(null, $preset) + ['errors' => [], 'preset' => $preset]);
     }
 
     public function store(): void
@@ -180,14 +180,15 @@ final class FollowUpController extends Controller
     }
 
     /** @return array<string,mixed> */
-    private function formData(?array $fu): array
+    private function formData(?array $fu, array $preset = []): array
     {
+        $selected = $fu ?? $preset;
         return [
             'title'     => $fu ? 'Follow Up' : 'Jadwalkan Follow Up',
             'followup'  => $fu,
             'customers' => Customer::selectOptions(),
-            'leads'     => Lead::selectOptions(),
-            'pics'      => User::picOptions(),
+            'leads'     => Lead::selectOptions(null, !empty($selected['lead_id']) ? (int) $selected['lead_id'] : null),
+            'pics'      => User::picOptions(!empty($selected['pic_user_id']) ? (int) $selected['pic_user_id'] : null),
             'return'    => $this->returnTo(''),
             'today'     => today(),
         ];

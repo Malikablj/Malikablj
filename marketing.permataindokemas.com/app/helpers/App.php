@@ -112,6 +112,7 @@ final class App
             403 => 'Akses ditolak',
             404 => 'Tidak ditemukan',
             405 => 'Metode tidak diizinkan',
+            413 => 'Upload terlalu besar',
             419 => 'Sesi kedaluwarsa',
             429 => 'Terlalu banyak percobaan',
             503 => 'Layanan tidak tersedia',

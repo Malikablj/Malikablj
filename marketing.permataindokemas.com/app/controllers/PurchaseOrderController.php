@@ -319,13 +319,20 @@ final class PurchaseOrderController extends Controller
         }
         $data = $v->validated();
         $label = PurchaseOrder::displayNumber($po);
-        $created = Database::transaction(function () use ($id, $data, $label): bool {
+        [$created, $resubmitted] = Database::transaction(function () use ($id, $data, $label): array {
             $product = Product::findOrCreateForOrder((string) $data['product_name'], null, $label, (int) $data['order_qty']);
             PoLine::create(['po_id' => $id, 'product_id' => $product['id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark']]);
-            PurchaseOrder::syncStatus($id);
-            return $product['created'];
+            return [$product['created'], OrderEntry::linesChanged($id)];
         });
-        $this->success('Baris produk ditambahkan ke order ' . $label . '.' . ($created ? ' Produk baru dicatat otomatis di menu Products.' : ''), '/purchase-orders/' . $id);
+        $this->success('Baris produk ditambahkan ke order ' . $label . '.' . ($created ? ' Produk baru dicatat otomatis di menu Products.' : '')
+            . ($resubmitted ? ' Order dikirim ulang ke PPIC untuk dikonfirmasi.' : ''), '/purchase-orders/' . $id);
+    }
+
+    /** Baris dikunci (produk tidak bisa diganti, baris tidak bisa dihapus) bila sudah ada pengiriman/retur. */
+    private function lineLocked(array $line): bool
+    {
+        $po = PurchaseOrder::find((int) $line['po_id']);
+        return $po !== null && $po['ppic_status'] !== null ? OrderEntry::lineLocked($po, (int) $line['id']) : PoLine::dependents((int) $line['id']) > 0;
     }
 
     public function editLine(int $id): void
@@ -336,14 +343,14 @@ final class PurchaseOrderController extends Controller
             'line'     => $line,
             'products' => Product::selectOptions(true, (int) $line['product_id']),
             'errors'   => [],
-            'locked'   => PoLine::dependents($id) > 0,
+            'locked'   => $this->lineLocked($line),
         ]);
     }
 
     public function updateLine(int $id): void
     {
         $line = $this->found(PoLine::findFull($id));
-        $locked = PoLine::dependents($id) > 0;
+        $locked = $this->lineLocked($line);
         $v = $this->validateLine($_POST);
         $data = $v->validated();
         if (!$v->fails() && $locked && (int) $data['product_id'] !== (int) $line['product_id']) {
@@ -355,22 +362,27 @@ final class PurchaseOrderController extends Controller
             ], $v->errors(), ['product_id' => $_POST['product_id'] ?? '', 'order_qty' => $_POST['order_qty'] ?? '', 'remark' => $_POST['remark'] ?? '']);
             return;
         }
-        Database::transaction(function () use ($id, $data, $line): void {
+        $resubmitted = Database::transaction(function () use ($id, $data, $line): bool {
             PoLine::update($id, ['product_id' => $data['product_id'], 'order_qty' => $data['order_qty'], 'remark' => $data['remark']]);
+            // produk / qty berubah = isi order berubah → PPIC konfirmasi ulang & jadwal kirim ikut diperbarui
+            if ((int) $data['product_id'] !== (int) $line['product_id'] || (int) $data['order_qty'] !== (int) $line['order_qty']) {
+                return OrderEntry::linesChanged((int) $line['po_id']);
+            }
             PurchaseOrder::syncStatus((int) $line['po_id']);
+            return false;
         });
-        $this->success('Baris PO diperbarui.', '/purchase-orders/' . $line['po_id']);
+        $this->success('Baris PO diperbarui.' . ($resubmitted ? ' Order dikirim ulang ke PPIC untuk dikonfirmasi.' : ''), '/purchase-orders/' . $line['po_id']);
     }
 
     public function destroyLine(int $id): void
     {
         $line = $this->found(PoLine::find($id));
         try {
-            PoLine::removeLine($id);
+            $resubmitted = OrderEntry::removeLine($id);
         } catch (DomainException $e) {
             $this->failure($e->getMessage(), '/purchase-orders/' . $line['po_id']);
         }
-        $this->success('Baris PO dihapus.', '/purchase-orders/' . $line['po_id']);
+        $this->success('Baris PO dihapus.' . ($resubmitted ? ' Order dikirim ulang ke PPIC untuk dikonfirmasi.' : ''), '/purchase-orders/' . $line['po_id']);
     }
 
     /** Produk OEF bisa diubah dari form bila order hanya punya satu baris produk. */

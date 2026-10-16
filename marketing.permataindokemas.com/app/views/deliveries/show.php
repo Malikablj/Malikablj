@@ -50,10 +50,13 @@ $id = (int) $d['id'];
         </section>
         <?php if ($returns): ?>
             <section class="surface section-gap">
-                <div class="surface-header"><h2 class="surface-title">Retur dari surat jalan ini</h2></div>
+                <div class="surface-header"><h2 class="surface-title">Complaint &amp; retur dari surat jalan ini</h2></div>
                 <ul class="list-lite">
-                    <?php foreach ($returns as $r): ?>
-                        <li><div class="li-main"><span class="li-title"><?= e(fmt_qty($r['return_qty'])) ?> pcs · <?= e($r['reason'] ?? '—') ?></span><div class="li-sub"><?= e(fmt_date($r['return_date'])) ?></div></div></li>
+                    <?php foreach ($returns as $r): $reason = $r['reason'] ? (App\Models\ProductReturn::REASON_LABELS[$r['reason']] ?? $r['reason']) : '—'; ?>
+                        <li><div class="li-main">
+                            <?php $label = ($r['record_type'] === 'Return' ? fmt_qty($r['return_qty']) . ' pcs retur' : 'Complaint') . ' · ' . $reason; ?>
+                            <?php if (can('returns.view')): ?><a class="li-title" href="<?= e(url('/returns/' . $r['id'])) ?>"><?= e($label) ?></a><?php else: ?><span class="li-title"><?= e($label) ?></span><?php endif; ?>
+                            <div class="li-sub"><?= e(fmt_date($r['return_date'])) ?> · <?= e(App\Models\ProductReturn::STATUS_LABELS[$r['complaint_status']] ?? $r['complaint_status']) ?></div></div></li>
                     <?php endforeach; ?>
                 </ul>
             </section>

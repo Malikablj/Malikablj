@@ -64,7 +64,7 @@ $postMax = (string) ini_get('post_max_size');
                 <?php endif; ?>
                 <?php if ($slotsLeft > 0): ?>
                     <input type="file" class="form-control<?= invalid($errors, 'evidence') ?>" id="f_evidence" name="evidence[]" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,image/jpeg,image/png,image/gif,image/webp,application/pdf"
-                           data-max-bytes="<?= (int) $maxBytes ?>" data-file-list="#evidence-list" aria-describedby="evidence-help">
+                           data-max-bytes="<?= (int) $maxBytes ?>" data-max-total="<?= max(0, ComplaintAttachment::postMaxBytes() - 65536) ?>" data-file-list="#evidence-list" aria-describedby="evidence-help">
                     <?= field_error($errors, 'evidence') ?>
                     <ul class="file-list" id="evidence-list"></ul>
                     <div class="form-text" id="evidence-help">Bisa memilih beberapa file sekaligus.<?= isset($errors['evidence']) || ($errors !== [] && !$isEdit) ? ' File perlu dipilih ulang bila form dikirim ulang.' : '' ?></div>
@@ -79,6 +79,8 @@ $postMax = (string) ini_get('post_max_size');
                     <?= Form::input('return_qty', 'Qty retur (pcs)', old('return_qty', $record), $errors, ['type' => 'number', 'min' => 1, 'step' => 1, 'col' => 'col-md-4', 'help' => 'Menambah outstanding order.']) ?>
                     <?php if ($deliveries): ?>
                         <?= Form::select('delivery_id', 'Surat jalan asal (opsional)', $deliveries, old('delivery_id', $record), $errors, ['placeholder' => '— Tidak dipilih —', 'col' => 'col-md-8']) ?>
+                    <?php elseif (isset($errors['delivery_id'])): ?>
+                        <div class="col-12"><div class="invalid-feedback d-block"><?= e($errors['delivery_id']) ?></div></div>
                     <?php endif; ?>
                     <?= Form::input('sj_number', 'Nomor dokumen retur', old('sj_number', $record), $errors, ['maxlength' => 60, 'col' => 'col-md-6']) ?>
                     <?= Form::input('destination', 'Asal / lokasi barang', old('destination', $record), $errors, ['maxlength' => 255, 'col' => 'col-md-6']) ?>

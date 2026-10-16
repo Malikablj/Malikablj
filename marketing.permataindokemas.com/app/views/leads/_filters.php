@@ -24,6 +24,9 @@ $hasFilter = $filters['q'] !== '' || $filters['pic'] > 0 || $filters['priority']
     </select>
     <input type="date" class="form-control filter-date" name="from" value="<?= e($filters['from']) ?>" aria-label="Dibuat dari tanggal" title="Dibuat dari">
     <input type="date" class="form-control filter-date" name="to" value="<?= e($filters['to']) ?>" aria-label="Dibuat sampai tanggal" title="Dibuat sampai">
+    <?php foreach (['sort', 'dir'] as $k): if (isset($_GET[$k]) && is_string($_GET[$k]) && $_GET[$k] !== ''): ?>
+        <input type="hidden" name="<?= e($k) ?>" value="<?= e($_GET[$k]) ?>">
+    <?php endif; endforeach; ?>
     <button class="btn btn-light" type="submit">Terapkan</button>
     <?php if ($hasFilter): ?><a class="btn btn-link-plain small" href="<?= e(url($action)) ?>">Reset</a><?php endif; ?>
 </form>

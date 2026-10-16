@@ -155,7 +155,7 @@ test('hapus customer: diblokir bila ada PO, boleh bila hanya kontak (kontak ikut
     assert_redirect($res, '/customers/' . $withPo);
     assert_true((bool) Database::fetchValue('SELECT 1 FROM customers WHERE id = :id', ['id' => $withPo]), 'tidak terhapus');
     $flash = $c->get('/customers/' . $withPo);
-    assert_contains('tidak dapat dihapus karena masih memiliki 1 PO', $flash->body);
+    assert_contains('tidak dapat dihapus karena masih memiliki 1 order', $flash->body);
 
     $simple = Customer::create(['name' => 'Customer Sementara', 'status' => 'Potential']);
     Database::insert('contacts', ['code' => 'CON-TEST00001', 'customer_id' => $simple, 'name' => 'Kontak Sementara']);

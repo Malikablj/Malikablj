@@ -220,7 +220,7 @@ final class LeadController extends Controller
             'title'     => $lead ? 'Edit Lead' : 'Buat Lead',
             'lead'      => $lead,
             'customers' => Customer::selectOptions(),
-            'pics'      => User::picOptions(),
+            'pics'      => User::picOptions(isset($lead['pic_user_id']) ? (int) $lead['pic_user_id'] : null),
         ];
     }
 }

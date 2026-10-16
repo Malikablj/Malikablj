@@ -6,12 +6,13 @@ $flashes = Session::pullFlash();
 $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Control' : 'PIK Marketing Control';
 ?>
 <!doctype html>
-<html lang="id">
+<html lang="id" <?= theme_attributes() ?>>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#F5F5F7">
+    <meta name="theme-color" content="<?= e(theme_color()) ?>">
+    <meta name="base-path" content="<?= e(url('/')) ?>">
     <title><?= e($pageTitle) ?></title>
     <link rel="icon" href="<?= e(asset('assets/img/favicon.svg')) ?>" type="image/svg+xml">
     <link rel="icon" href="<?= e(asset('assets/img/favicon-32.png')) ?>" type="image/png" sizes="32x32">
@@ -21,6 +22,10 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
 </head>
 <body class="auth-body">
+<?php $dark = ui_theme() === 'dark'; ?>
+<button type="button" class="icon-btn auth-theme-toggle" data-theme-toggle aria-pressed="<?= $dark ? 'true' : 'false' ?>" aria-label="<?= $dark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap' ?>" title="<?= $dark ? 'Mode terang' : 'Mode gelap' ?>">
+    <i class="bi bi-moon-stars theme-icon-to-dark"></i><i class="bi bi-sun theme-icon-to-light"></i>
+</button>
 <main class="auth-wrap">
     <div class="auth-brand">
         <img src="<?= e(asset('assets/img/logo.svg')) ?>" alt="" width="56" height="56">

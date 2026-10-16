@@ -229,14 +229,70 @@ final class OrderEntry
         return count($lines) === 1 ? $lines[0] : null;
     }
 
-    /** Produk baris tidak boleh diganti bila sudah ada pengiriman (selain jadwal otomatis) atau retur. */
+    /**
+     * Produk baris tidak boleh diganti / baris dihapus bila sudah ada pengiriman atau retur.
+     * Jadwal otomatis yang belum dikirim (Scheduled / Cancelled) tidak dihitung.
+     */
     public static function lineLocked(array $po, int $lineId): bool
     {
         return (int) Database::fetchValue(
-            'SELECT (SELECT COUNT(*) FROM deliveries WHERE po_line_id = :a AND NOT (id <=> :s))
-                  + (SELECT COUNT(*) FROM returns WHERE po_line_id = :b)',
+            "SELECT (SELECT COUNT(*) FROM deliveries WHERE po_line_id = :a AND NOT (id <=> :s AND status IN ('Scheduled','Cancelled')))
+                  + (SELECT COUNT(*) FROM returns WHERE po_line_id = :b)",
             ['a' => $lineId, 'b' => $lineId, 's' => $po['schedule_delivery_id'] !== null ? (int) $po['schedule_delivery_id'] : null]
         ) > 0;
+    }
+
+    /**
+     * Baris produk OEF ditambah / diubah (produk atau qty) / dihapus dari halaman detail:
+     * isi order berubah → PPIC konfirmasi ulang (seperti edit lewat form OEF) dan jadwal
+     * delivery otomatis mengikuti baris pertama. PO lama (tanpa PPIC) hanya dihitung ulang statusnya.
+     * @return bool true bila dikirim ulang ke PPIC
+     */
+    public static function linesChanged(int $poId): bool
+    {
+        $po = PurchaseOrder::find($poId);
+        if ($po === null) {
+            return false;
+        }
+        $resubmit = $po['ppic_status'] !== null;
+        if ($resubmit) {
+            $header = ['ppic_status' => 'Pending', 'ppic_note' => null, 'ppic_by' => null, 'ppic_at' => null];
+            if ($po['status'] === 'Cancelled') {
+                $header['status'] = 'Open';
+                $header['status_auto'] = 0;
+            }
+            PurchaseOrder::update($poId, $header, $po);
+            self::syncSchedule($poId, false);
+        }
+        PurchaseOrder::syncStatus($poId);
+        if ($resubmit) {
+            self::notifyPpic(PurchaseOrder::find($poId) ?? $po, true);
+        }
+        return $resubmit;
+    }
+
+    /**
+     * Hapus baris produk OEF yang belum punya pengiriman/retur. Bila jadwal otomatis
+     * menunjuk baris ini, jadwal dipindah dulu ke baris lain.
+     */
+    public static function removeLine(int $lineId): bool
+    {
+        return Database::transaction(function () use ($lineId): bool {
+            $line = PoLine::find($lineId);
+            $po = $line !== null ? PurchaseOrder::find((int) $line['po_id']) : null;
+            if ($line === null || $po === null) {
+                throw new DomainException('Baris produk tidak ditemukan.');
+            }
+            if ($po['ppic_status'] !== null && !self::lineLocked($po, $lineId) && !empty($po['schedule_delivery_id'])) {
+                $other = Database::fetch('SELECT * FROM po_lines WHERE po_id = :p AND id <> :l ORDER BY id LIMIT 1', ['p' => $po['id'], 'l' => $lineId]);
+                $schedule = Delivery::find((int) $po['schedule_delivery_id']);
+                if ($other !== null && $schedule !== null && (int) $schedule['po_line_id'] === $lineId) {
+                    Delivery::update((int) $schedule['id'], ['po_line_id' => (int) $other['id'], 'product_id' => (int) $other['product_id']], $schedule);
+                }
+            }
+            PoLine::removeLine($lineId);
+            return self::linesChanged((int) $po['id']);
+        });
     }
 
     private static function matchUser(mixed $name): ?int
@@ -280,6 +336,11 @@ final class OrderEntry
         // Tujuan kirim: isian OEF → alamat customer → nama customer
         $destination = $po['ship_to'] ?: (trim((string) ($po['customer_address'] ?? '')) !== '' ? $po['customer_address'] : ($po['customer_name'] ?? null));
         if ($schedule === null) {
+            // jadwal dihapus / belum ada: dibuat lagi hanya bila order belum selesai dan belum ada pengiriman
+            $hasDeliveries = (bool) Database::fetchValue('SELECT 1 FROM deliveries WHERE po_id = :p LIMIT 1', ['p' => $poId]);
+            if ($po['status'] === 'Closed' || $hasDeliveries) {
+                return;
+            }
             $deliveryId = Delivery::create([
                 'po_id'         => $poId,
                 'po_line_id'    => (int) $line['id'],
@@ -295,6 +356,9 @@ final class OrderEntry
         }
         $data = [];
         if ($schedule['status'] === 'Cancelled') {
+            if ($po['status'] === 'Closed' || ((int) $po['open_outstanding_qty'] <= 0 && (int) $po['delivered_qty'] > 0)) {
+                return; // order sudah terpenuhi: jadwal yang dibatalkan tidak diaktifkan lagi
+            }
             $data['status'] = 'Scheduled';
             $data['delivery_date'] = $po['requested_date'];
         }

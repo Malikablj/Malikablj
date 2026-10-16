@@ -47,7 +47,7 @@ final class ActivityController extends Controller
             'pic_user_id'      => Auth::id(),
             'create_follow_up' => '1',
         ];
-        $this->view('activities/form', $this->formData(null) + ['errors' => [], 'preset' => $preset]);
+        $this->view('activities/form', $this->formData(null, $preset) + ['errors' => [], 'preset' => $preset]);
     }
 
     public function store(): void
@@ -166,14 +166,15 @@ final class ActivityController extends Controller
     }
 
     /** @return array<string,mixed> */
-    private function formData(?array $activity): array
+    private function formData(?array $activity, array $preset = []): array
     {
+        $selected = $activity ?? $preset;
         return [
             'title'     => $activity ? 'Edit Aktivitas' : 'Log Aktivitas',
             'activity'  => $activity,
             'customers' => Customer::selectOptions(),
-            'leads'     => Lead::selectOptions(),
-            'pics'      => User::picOptions(),
+            'leads'     => Lead::selectOptions(null, !empty($selected['lead_id']) ? (int) $selected['lead_id'] : null),
+            'pics'      => User::picOptions(!empty($selected['pic_user_id']) ? (int) $selected['pic_user_id'] : null),
             'return'    => $this->returnTo(''),
         ];
     }

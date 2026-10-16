@@ -33,7 +33,7 @@ final class CustomerController extends Controller
             'filters'    => $filters,
             'sort'       => $sort,
             'dir'        => $dir,
-            'pics'       => User::picOptions(),
+            'pics'       => User::picOptions(isset($customer['marketing_pic_id']) ? (int) $customer['marketing_pic_id'] : null),
             'industries' => Customer::industries(),
         ]);
     }
@@ -158,7 +158,7 @@ final class CustomerController extends Controller
         return [
             'title'      => $customer ? 'Edit ' . $customer['name'] : 'Tambah Customer',
             'customer'   => $customer,
-            'pics'       => User::picOptions(),
+            'pics'       => User::picOptions(isset($customer['marketing_pic_id']) ? (int) $customer['marketing_pic_id'] : null),
             'industries' => Customer::industries(),
             'sources'    => Customer::sources(),
             'similar'    => [],

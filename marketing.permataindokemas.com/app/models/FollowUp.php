@@ -161,12 +161,13 @@ final class FollowUp extends Model
         if (!in_array($status, self::CLOSED_STATUSES, true)) {
             $data['status'] = $data['follow_up_date'] < $today ? 'Overdue' : ($status === 'Overdue' ? 'Reschedule' : $status);
         }
+        $before = $id !== null ? self::find($id) : null;
         if ($data['status'] === 'Done') {
-            $data['completed_at'] ??= date('Y-m-d H:i:s');
+            // waktu selesai dipertahankan saat follow up yang sudah Done diedit
+            $data['completed_at'] ??= ($before !== null && $before['status'] === 'Done' && !empty($before['completed_at']) ? $before['completed_at'] : date('Y-m-d H:i:s'));
         } else {
             $data['completed_at'] = null;
         }
-        $before = $id !== null ? self::find($id) : null;
         if ($id === null) {
             $id = self::create($data);
         } else {

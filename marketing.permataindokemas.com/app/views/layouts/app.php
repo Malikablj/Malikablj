@@ -11,14 +11,14 @@ $collapsed = ($_COOKIE['pik_sidebar'] ?? '') === 'collapsed';
 $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Control' : 'PIK Marketing Control';
 ?>
 <!doctype html>
-<html lang="id">
+<html lang="id" <?= theme_attributes() ?>>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="<?= e(csrf_token()) ?>">
     <meta name="base-path" content="<?= e(url('/')) ?>">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="theme-color" content="#F5F5F7">
+    <meta name="theme-color" content="<?= e(theme_color()) ?>">
     <title><?= e($pageTitle) ?></title>
     <link rel="icon" href="<?= e(asset('assets/img/favicon.svg')) ?>" type="image/svg+xml">
     <link rel="icon" href="<?= e(asset('assets/img/favicon-32.png')) ?>" type="image/png" sizes="32x32">
@@ -77,6 +77,10 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
             <div class="flex-grow-1"></div>
         <?php endif; ?>
         <div class="topbar-actions">
+            <?php $dark = ui_theme() === 'dark'; ?>
+            <button type="button" class="icon-btn" data-theme-toggle aria-pressed="<?= $dark ? 'true' : 'false' ?>" aria-label="<?= $dark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap' ?>" title="<?= $dark ? 'Mode terang' : 'Mode gelap' ?>">
+                <i class="bi bi-moon-stars theme-icon-to-dark"></i><i class="bi bi-sun theme-icon-to-light"></i>
+            </button>
             <a class="icon-btn position-relative" href="<?= e(url('/notifications')) ?>" aria-label="Notifikasi<?= $unread ? " ({$unread} belum dibaca)" : '' ?>">
                 <i class="bi bi-bell"></i>
                 <?php if ($unread > 0): ?><span class="notif-dot"><?= $unread > 99 ? '99+' : (int) $unread ?></span><?php endif; ?>
@@ -98,6 +102,9 @@ $pageTitle = isset($title) && $title !== '' ? $title . ' · PIK Marketing Contro
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item" href="<?= e(url('/profile')) ?>"><i class="bi bi-person me-2"></i>Profil saya</a>
                     <a class="dropdown-item" href="<?= e(url('/profile/password')) ?>"><i class="bi bi-key me-2"></i>Ganti password</a>
+                    <button type="button" class="dropdown-item d-flex align-items-center" data-theme-toggle role="menuitemcheckbox" aria-checked="<?= $dark ? 'true' : 'false' ?>">
+                        <i class="bi bi-moon-stars me-2"></i><span class="flex-grow-1 text-start">Mode gelap</span><span class="theme-switch ms-3" aria-hidden="true"></span>
+                    </button>
                     <div class="dropdown-divider"></div>
                     <form action="<?= e(url('/logout')) ?>" method="post" class="px-2">
                         <?= csrf_field() ?>

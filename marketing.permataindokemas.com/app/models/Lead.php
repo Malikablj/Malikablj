@@ -239,13 +239,17 @@ final class Lead extends Model
     }
 
     /** @return array<int,string> lead untuk pilihan di form (opsional per customer) */
-    public static function selectOptions(?int $customerId = null): array
+    public static function selectOptions(?int $customerId = null, ?int $includeId = null): array
     {
+        $sql = 'SELECT l.id, l.lead_name, l.status, COALESCE(c.name, l.company_name) AS who FROM leads l LEFT JOIN customers c ON c.id = l.customer_id';
         $rows = Database::fetchAll(
-            'SELECT l.id, l.lead_name, l.status, COALESCE(c.name, l.company_name) AS who FROM leads l LEFT JOIN customers c ON c.id = l.customer_id'
-            . ($customerId ? ' WHERE l.customer_id = :c' : '') . ' ORDER BY l.created_at DESC LIMIT 500',
+            $sql . ($customerId ? ' WHERE l.customer_id = :c' : '') . ' ORDER BY l.created_at DESC LIMIT 500',
             $customerId ? ['c' => $customerId] : []
         );
+        // lead yang sedang terpilih tetap ada walau di luar 500 lead terbaru (agar tidak terhapus saat edit)
+        if ($includeId !== null && $includeId > 0 && !in_array($includeId, array_map('intval', array_column($rows, 'id')), true)) {
+            $rows = array_merge($rows, Database::fetchAll($sql . ' WHERE l.id = :id', ['id' => $includeId]));
+        }
         $out = [];
         foreach ($rows as $r) {
             $out[(int) $r['id']] = $r['lead_name'] . ($r['who'] ? ' — ' . $r['who'] : '') . ' (' . $r['status'] . ')';

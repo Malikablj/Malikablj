@@ -1,12 +1,18 @@
-1. Buka aplikasi di browser, login sebagai Admin, lalu tekan Ctrl+F5 (muat ulang tampilan & logo baru).
-2. Settings › Users: periksa akun divisi PPIC & Produksi (buat bila belum ada).
-   Role Gudang sudah dihapus — user yang tadinya Gudang otomatis menjadi Produksi.
-3. Yang baru di update ini:
-   - Perbaikan status order: order yang Closed otomatis kini dibuka kembali bila delivery dikoreksi
-     (Delivered → Partial / qty dikurangi / dihapus) atau ada retur, selama masih ada outstanding.
-     Order yang saat ini "terkunci" Closed padahal masih ada outstanding langsung diperbaiki saat
-     update dipasang. Closed yang dipilih manual tetap Closed (README bagian 23).
-   - Delivery status Partial: isi Qty dengan jumlah yang benar-benar diterima customer.
-   Termasuk update yang belum terpasang sebelumnya: hapus delivery massal & logo baru (README 22),
-   role Gudang digabung ke Produksi (README 21), hapus OEF massal & perbaikan tampilan (README 20),
-   konfirmasi PPIC massal, hapus user & buka blokir (README 19).
+1. Buka aplikasi di browser, login, lalu tekan Ctrl+F5 (muat ulang tampilan baru).
+2. Coba mode gelap: klik ikon bulan di kanan atas (sebelah lonceng) atau menu profil › Mode gelap.
+   Pilihan tersimpan per browser; klik ikon matahari untuk kembali ke mode terang.
+3. Yang baru di update ini (README bagian 24):
+   - Mode gelap: Night Black #1A1A1A, Grey #F2F2F2, White #FFFFFF, aksen Real Madrid Gold #FEBE10.
+     Cetak / Save as PDF tetap terang.
+   - Bar progres "Terkirim" di detail OEF selalu terisi bila sudah ada pengiriman (mis. 0,11%),
+     ikut memperhitungkan retur, dan tidak tampil penuh sebelum outstanding habis.
+   - Edit / tambah baris produk OEF → dikirim ulang ke PPIC, jadwal delivery ikut qty baru.
+   - Jadwal delivery otomatis dibatalkan bila order sudah terpenuhi lewat surat jalan lain
+     (migrasi 2026.10.5 merapikan jadwal lama secara otomatis saat update dipasang).
+   - Total Outstanding daftar OEF & laporan PO hanya order berjalan (Cancelled tidak dihitung).
+   - Qty retur tidak boleh melebihi qty terkirim; upload bukti terlalu besar diberi pesan jelas.
+   - No. order OEF tampil di laporan Delivery & Lead Time; PIC nonaktif tidak terhapus saat edit;
+     beberapa filter & navigasi halaman diperbaiki.
+   Termasuk update sebelumnya bila belum terpasang: status order mengikuti koreksi delivery (README 23),
+   hapus delivery massal & logo baru (README 22), role Gudang digabung ke Produksi (README 21),
+   hapus OEF massal (README 20), konfirmasi PPIC massal, hapus user & buka blokir (README 19).

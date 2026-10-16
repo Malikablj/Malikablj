@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Models\PoLine;
 use App\Models\PurchaseOrder;
 use Throwable;
 
@@ -21,7 +22,7 @@ use Throwable;
 final class Migrator
 {
     /** Naikkan setiap kali ada migrasi baru. */
-    public const VERSION = '2026.10.4';
+    public const VERSION = '2026.10.5';
     private const SETTING_KEY = 'schema_version';
 
     /** true bila kolom complaint baru saja ditambahkan pada run ini (data lama perlu disesuaikan). */
@@ -304,6 +305,22 @@ final class Migrator
                     PurchaseOrder::syncStatus($id); // mis. Closed padahal masih ada outstanding → Partial
                 }
                 return $auto !== [];
+            },
+
+            // ---------------------------------------------------------- jadwal delivery otomatis yang basi
+            'deliveries: jadwal otomatis order yang sudah terpenuhi dibatalkan' => static function (): bool {
+                // jadwal "Scheduled" dari OEF padahal order sudah Closed/Cancelled, baris sudah terpenuhi,
+                // atau qty jadwal melebihi sisa order (mis. dikirim lewat surat jalan lain)
+                $ids = Database::fetchColumn(
+                    "SELECT p.id FROM purchase_orders p
+                     JOIN deliveries d ON d.id = p.schedule_delivery_id AND d.status = 'Scheduled'
+                     LEFT JOIN (" . PoLine::totalsSql() . ") t ON t.line_id = d.po_line_id
+                     WHERE p.status IN ('Closed','Cancelled') OR COALESCE(t.outstanding_qty, 0) <= 0 OR d.delivered_qty > COALESCE(t.outstanding_qty, 0)"
+                );
+                foreach ($ids as $id) {
+                    PurchaseOrder::syncStatus((int) $id);
+                }
+                return $ids !== [];
             },
         ];
     }

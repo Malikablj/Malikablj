@@ -4,7 +4,7 @@ use App\Helpers\View;
 use App\Models\Lead;
 
 /** @var App\Helpers\Paginator $leads @var array<string,mixed> $filters @var string $today */
-$keep = array_filter(['q' => $filters['q'], 'pic' => $filters['pic'] ?: null, 'priority' => $filters['priority']]);
+$keep = array_filter(['q' => $filters['q'], 'pic' => $filters['pic'] ?: null, 'priority' => $filters['priority'], 'from' => $filters['from'], 'to' => $filters['to']]);
 ?>
 <div class="page-header">
     <div>

@@ -31,7 +31,7 @@ final class LeadTime extends Model
     /** Issue migrasi yang selesai saat lead time dihubungkan ke PO. */
     public const LINK_ISSUES = ['PO NOT FOUND'];
 
-    private const SELECT = 'SELECT lt.*, p.po_number, p.code AS po_code, p.status AS po_status, p.customer_id, c.name AS customer_name,
+    private const SELECT = 'SELECT lt.*, COALESCE(p.order_number, p.po_number) AS po_number, p.code AS po_code, p.status AS po_status, p.customer_id, c.name AS customer_name,
             pr.name AS product_name, pr.variant
         FROM leadtime lt
         LEFT JOIN purchase_orders p ON p.id = lt.po_id
@@ -46,8 +46,8 @@ final class LeadTime extends Model
         $where = ['1=1'];
         $params = [];
         if (!empty($f['q'])) {
-            $where[] = '(p.po_number LIKE :q1 OR lt.po_number_legacy LIKE :q2 OR pr.name LIKE :q3 OR lt.product_legacy LIKE :q4 OR c.name LIKE :q5 OR lt.code LIKE :q6)';
-            foreach (['q1', 'q2', 'q3', 'q4', 'q5', 'q6'] as $k) {
+            $where[] = '(p.po_number LIKE :q1 OR lt.po_number_legacy LIKE :q2 OR pr.name LIKE :q3 OR lt.product_legacy LIKE :q4 OR c.name LIKE :q5 OR lt.code LIKE :q6 OR p.order_number LIKE :q7)';
+            foreach (['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7'] as $k) {
                 $params[$k] = Database::like((string) $f['q']);
             }
         }

@@ -38,7 +38,7 @@ $icon = static fn (string $type): string => match (true) {
         <ul class="list-lite">
             <?php foreach ($notifications->items as $n): $isUnread = (int) $n['is_read'] === 0; ?>
                 <li>
-                    <span class="kpi-icon<?= $isUnread ? ' bg-primary-subtle text-primary' : '' ?>"><i class="bi <?= e($icon((string) $n['type'])) ?>"></i></span>
+                    <span class="kpi-icon<?= $isUnread ? ' is-accent' : '' ?>"><i class="bi <?= e($icon((string) $n['type'])) ?>"></i></span>
                     <div class="li-main">
                         <a class="li-title" href="<?= e(url('/notifications/' . $n['id'] . '/open')) ?>"><?= $isUnread ? '<span class="badge-soft badge-soft-accent no-dot me-1">Baru</span>' : '' ?><?= e($n['title']) ?></a>
                         <?php if (!empty($n['message'])): ?><div class="li-sub"><?= e($n['message']) ?></div><?php endif; ?>

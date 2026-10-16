@@ -143,7 +143,7 @@ final class CustomerTabs
         if (Auth::can('purchase_orders.view')) {
             $data['openPos'] = Database::fetchAll(
                 "SELECT p.*, COALESCE(t.total_qty, 0) AS total_qty, COALESCE(t.delivered_qty, 0) AS delivered_qty,
-                        COALESCE(t.outstanding_qty, 0) AS outstanding_qty
+                        COALESCE(t.outstanding_qty, 0) AS outstanding_qty, COALESCE(t.open_outstanding_qty, 0) AS open_outstanding_qty
                  FROM purchase_orders p LEFT JOIN (" . PoLine::poTotalsSql() . ") t ON t.po_id = p.id
                  WHERE p.customer_id = :c AND p.status IN ('Open','On Process','Partial')
                  ORDER BY p.po_date DESC, p.id DESC LIMIT 6",

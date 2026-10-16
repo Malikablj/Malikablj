@@ -66,7 +66,7 @@ final class ProductController extends Controller
             'lines'      => Auth::can('purchase_orders.view') ? Product::poLines($id) : [],
             'stock'      => Auth::can('stock.view') ? Stock::forProduct($id) : [],
             'deliveries' => Auth::can('deliveries.view') ? Database::fetchAll(
-                'SELECT d.id, d.code, d.sj_number, d.delivery_date, d.status, d.delivered_qty, p.po_number, p.code AS po_code, d.po_id, c.name AS customer_name
+                'SELECT d.id, d.code, d.sj_number, d.delivery_date, d.status, d.delivered_qty, COALESCE(p.order_number, p.po_number) AS po_number, p.code AS po_code, d.po_id, c.name AS customer_name
                  FROM deliveries d LEFT JOIN purchase_orders p ON p.id = d.po_id LEFT JOIN customers c ON c.id = p.customer_id
                  WHERE d.product_id = :id ORDER BY d.delivery_date DESC, d.id DESC LIMIT 10',
                 ['id' => $id]

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Helpers\Database;
 use App\Helpers\HttpException;
 use App\Helpers\Mailer;
 use App\Helpers\Request;
@@ -250,6 +251,27 @@ final class ReturnController extends Controller
         if (!$v->fails() && empty($data['po_line_id']) && empty($data['customer_id']) && !$legacyUnlinked) {
             $v->addError('customer_id', 'Pilih customer, atau pilih order & produk yang dikomplain.');
         }
+        if (!$v->fails() && $isReturn && !empty($data['po_line_id']) && !empty($data['delivery_id'])
+            && (int) Database::fetchValue('SELECT po_line_id FROM deliveries WHERE id = :id', ['id' => (int) $data['delivery_id']]) !== (int) $data['po_line_id']) {
+            $v->addError('delivery_id', 'Surat jalan asal bukan untuk order & produk yang dipilih. Pilih ulang surat jalan atau kosongkan.');
+        }
+        if (!$v->fails() && !empty($data['po_line_id']) && $isReturn && isset($data['return_qty'])) {
+            // retur tidak boleh melebihi barang yang sudah diterima customer di baris order ini
+            // (data lama yang sudah terlanjur lebih tetap bisa diedit selama qty-nya tidak dinaikkan)
+            $lineId = (int) $data['po_line_id'];
+            $sameAsBefore = $existing !== null && $existing['record_type'] === 'Return' && (int) ($existing['po_line_id'] ?? 0) === $lineId;
+            $totals = PoLine::totals($lineId);
+            if ($totals !== null && !($sameAsBefore && (int) $data['return_qty'] <= (int) $existing['return_qty'])) {
+                $otherReturns = $totals['return_qty'] - ($sameAsBefore ? (int) $existing['return_qty'] : 0);
+                $returnable = max(0, $totals['delivered_qty'] - $otherReturns);
+                if ((int) $data['return_qty'] > $returnable) {
+                    $v->addError('return_qty', $returnable === 0
+                        ? 'Belum ada barang terkirim (Delivered/Partial) yang bisa diretur di order & produk ini. Pilih jenis Complaint bila barang tidak dikembalikan.'
+                        : 'Qty retur melebihi barang yang sudah diterima customer: maks. ' . number_format($returnable, 0, ',', '.') . ' pcs (terkirim '
+                          . number_format($totals['delivered_qty'], 0, ',', '.') . ' − sudah diretur ' . number_format($otherReturns, 0, ',', '.') . ').');
+                }
+            }
+        }
         if (!empty($data['qc_email'])) {
             $list = Mailer::parseList((string) $data['qc_email']);
             if ($list['invalid'] !== []) {
@@ -272,6 +294,12 @@ final class ReturnController extends Controller
         }
         if ($data['record_type'] === 'Complaint') {
             $data['return_qty'] = null;
+        }
+        // jenis Complaint: field surat jalan tersembunyi; bila bukan milik baris order terpilih
+        // (mis. order & produk diganti) diabaikan, bukan menggagalkan simpan
+        if ($data['record_type'] === 'Complaint' && !empty($data['delivery_id']) && !empty($data['po_line_id'])
+            && (int) Database::fetchValue('SELECT po_line_id FROM deliveries WHERE id = :id', ['id' => (int) $data['delivery_id']]) !== (int) $data['po_line_id']) {
+            $data['delivery_id'] = null;
         }
         if ($data['complaint_detail'] === null) {
             unset($data['complaint_detail']);

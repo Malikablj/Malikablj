@@ -214,6 +214,13 @@ final class HttpClient
         return $res;
     }
 
+    /** Pasang cookie seperti yang diset JavaScript di browser (mis. pik_theme). */
+    public function setCookie(string $name, string $value): void
+    {
+        $host = (string) parse_url($this->base, PHP_URL_HOST);
+        file_put_contents($this->jar, implode("\t", [$host, 'FALSE', '/', 'FALSE', (string) (time() + 3600), $name, $value]) . "\n", FILE_APPEND);
+    }
+
     public function login(string $email, string $password): HttpResponse
     {
         $this->get('/login');

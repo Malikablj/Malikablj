@@ -41,7 +41,9 @@ foreach ($cols as $col) {
             }
             $totals[$col['key']] = Number::fromCents($cents);
         } else {
-            $totals[$col['key']] = array_sum(array_map(static fn ($r) => (int) ($r[$col['key']] ?? 0), $rows));
+            // 'total' => 'kolom_lain': total dihitung dari kolom lain (mis. outstanding hanya order berjalan)
+            $totalKey = is_string($col['total']) ? $col['total'] : $col['key'];
+            $totals[$col['key']] = array_sum(array_map(static fn ($r) => (int) ($r[$totalKey] ?? 0), $rows));
         }
     }
 }
@@ -150,7 +152,7 @@ foreach ($cols as $col) {
                 <?php if ($totals): ?>
                     <tfoot><tr>
                         <?php foreach ($cols as $i => $col): $num = in_array($col['type'], ['qty', 'money', 'pct'], true); ?>
-                            <td class="<?= $num ? 'num' : '' ?><?= $hide[$col['hide'] ?? ''] ?? '' ?>"><?= $i === 0 ? 'Total (' . e(Number::qty(count($rows))) . ' baris)' : (array_key_exists($col['key'], $totals) ? $format($col, $totals[$col['key']]) : '') ?></td>
+                            <td class="<?= $num ? 'num' : '' ?><?= $hide[$col['hide'] ?? ''] ?? '' ?>"><?= $i === 0 ? 'Total (' . e(Number::qty(count($rows))) . ' baris)' : (array_key_exists($col['key'], $totals) ? $format($col, $totals[$col['key']]) . (!empty($col['total_note']) ? '<div class="x-small text-secondary fw-normal">' . e($col['total_note']) . '</div>' : '') : '') ?></td>
                         <?php endforeach; ?>
                     </tr></tfoot>
                 <?php endif; ?>

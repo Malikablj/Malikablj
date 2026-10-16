@@ -162,6 +162,33 @@ test('e_wrap: tetap di-escape, titik potong baris hanya setelah "/"', function (
     assert_same('', e_wrap(null));
 });
 
+test('progres order: sekecil apa pun tetap terlihat, belum selesai tidak tampak 100%', function () {
+    assert_same(1, pct(300000, 260100791), 'progres 0,12% minimal 1%');
+    assert_same(99, pct(999, 1000), '99,9% belum selesai → 99');
+    assert_same(100, pct(1000, 1000));
+    assert_same(0, pct(0, 1000));
+    assert_same(0, pct(5, 0));
+    assert_same('0,11%', pct_text(300000, 260100791));
+    assert_same('4,5%', pct_text(45, 1000));
+    assert_same('99%', pct_text(9999, 10000));
+    assert_same('< 0,01%', pct_text(1, 1000000000));
+    assert_same('100%', pct_text(1200, 1000));
+
+    $bar = progress_bar(300000, 260100791, false, 'mt-2');
+    assert_contains('<span style="width: 0.5%"></span>', $bar, 'progres kecil tetap punya isi');
+    assert_contains('class="progress-thin mt-2"', $bar);
+    assert_contains('0,11% terpenuhi', $bar);
+    assert_not_contains('<span', progress_bar(0, 1000), 'belum ada progres → tanpa isi');
+    assert_contains('width: 99%', progress_bar(9999, 10000), 'belum selesai tidak penuh');
+    assert_contains('progress-thin is-done', progress_bar(1000, 1000));
+    assert_contains('progress-thin is-over', progress_bar(1000, 1000, true));
+
+    // retur membuka kembali outstanding: bar mengikuti outstanding, bukan qty terkirim kotor
+    assert_same(800, fulfilled_qty(['total_qty' => 1000, 'outstanding_qty' => 200, 'open_outstanding_qty' => 200]));
+    assert_same(1000, fulfilled_qty(['total_qty' => 1000, 'outstanding_qty' => -50, 'open_outstanding_qty' => 0]));
+    assert_same(900, fulfilled_qty(['total_qty' => 1000, 'outstanding_qty' => 0, 'open_outstanding_qty' => 100]), 'lebih kirim di baris lain tidak menutup baris yang kurang');
+});
+
 test('SqlFile memecah statement dengan benar (komentar & string)', function () {
     $s = SqlFile::statements("-- komentar; tidak dieksekusi\nINSERT INTO t VALUES ('a;b');\n/* blok ; */ SELECT 1;");
     assert_same(["INSERT INTO t VALUES ('a;b')", 'SELECT 1'], $s);
@@ -327,6 +354,38 @@ test('logo: ikon berlian + tulisan MARKETING / PERMATA INDO KEMAS di login & sid
     }
     assert_same([180, 180], array_slice((array) getimagesize(APP_ROOT . '/public/assets/img/apple-touch-icon.png'), 0, 2));
     assert_same([32, 32], array_slice((array) getimagesize(APP_ROOT . '/public/assets/img/favicon-32.png'), 0, 2));
+});
+
+test('mode gelap: tombol di topbar, menu profil & login; tema dari cookie dirender server', function () {
+    $c = client_as('Viewer');
+    $light = $c->get('/');
+    assert_contains('<html lang="id" data-theme="light" data-bs-theme="light">', $light->body, 'bawaan: tema terang');
+    assert_contains('<meta name="theme-color" content="#F5F5F7">', $light->body);
+    assert_contains('aria-label="Aktifkan mode gelap"', $light->body, 'tombol di topbar');
+    assert_contains('role="menuitemcheckbox" aria-checked="false"', $light->body, 'switch di menu profil');
+
+    $c->setCookie('pik_theme', 'dark');
+    $dark = $c->get('/');
+    assert_contains('<html lang="id" data-theme="dark" data-bs-theme="dark">', $dark->body);
+    assert_contains('<meta name="theme-color" content="#1A1A1A">', $dark->body);
+    assert_contains('aria-label="Aktifkan mode terang"', $dark->body);
+    assert_contains('role="menuitemcheckbox" aria-checked="true"', $dark->body);
+
+    $guest = new HttpClient(TEST_BASE_URL);
+    $guest->setCookie('pik_theme', 'dark');
+    $login = $guest->get('/login');
+    assert_contains('data-theme="dark"', $login->body, 'halaman login ikut tema');
+    assert_contains('auth-theme-toggle', $login->body);
+    $odd = new HttpClient(TEST_BASE_URL);
+    $odd->setCookie('pik_theme', '"><script>');
+    assert_contains('data-theme="light"', $odd->get('/login')->body, 'nilai cookie tak dikenal → terang');
+
+    $css = (string) file_get_contents(APP_ROOT . '/public/css/app.css');
+    foreach (['#1A1A1A', '#F2F2F2', '#FEBE10', '#FFFFFF'] as $color) {
+        assert_contains($color, $css, 'palet mode gelap ' . $color);
+    }
+    assert_contains(':root[data-theme="dark"] {', $css);
+    assert_contains('data-theme-toggle', (string) file_get_contents(APP_ROOT . '/public/js/app.js'));
 });
 
 test('route tidak dikenal → 404, method salah → 405', function () {

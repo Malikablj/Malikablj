@@ -45,7 +45,13 @@ final class ComplaintAttachment
         return $ini > 0 ? min(self::MAX_BYTES, $ini) : self::MAX_BYTES;
     }
 
-    private static function iniBytes(string $value): int
+    /** Batas total satu kali kirim form (post_max_size PHP), 0 = tidak dibatasi. */
+    public static function postMaxBytes(): int
+    {
+        return self::iniBytes((string) ini_get('post_max_size'));
+    }
+
+    public static function iniBytes(string $value): int
     {
         $value = trim($value);
         if ($value === '') {

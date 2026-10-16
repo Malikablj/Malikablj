@@ -189,7 +189,7 @@ final class Customer extends Model
         }
         $counts = self::relatedCounts($id);
         $blocking = [];
-        foreach (['leads' => 'lead', 'activities' => 'activity', 'followups' => 'follow up', 'pos' => 'PO', 'invoices' => 'invoice'] as $key => $label) {
+        foreach (['leads' => 'lead', 'activities' => 'activity', 'followups' => 'follow up', 'pos' => 'order', 'returns' => 'complaint/retur', 'invoices' => 'invoice'] as $key => $label) {
             if (($counts[$key] ?? 0) > 0) {
                 $blocking[] = $counts[$key] . ' ' . $label;
             }

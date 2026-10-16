@@ -50,7 +50,7 @@ $id = (int) $customer['id'];
                         <table class="table-pik table-compact">
                             <thead><tr><th>No. order</th><th class="d-none d-md-table-cell">Tanggal</th><th class="d-none d-sm-table-cell">Status</th><th class="num d-none d-sm-table-cell">Order</th><th class="num">Outstanding</th><th class="d-none d-md-table-cell">Progres</th></tr></thead>
                             <tbody>
-                            <?php foreach ($data['openPos'] as $po): $progress = pct((int) $po['delivered_qty'], (int) $po['total_qty']); ?>
+                            <?php foreach ($data['openPos'] as $po): ?>
                                 <tr>
                                     <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e_wrap(App\Models\PurchaseOrder::displayNumber($po)) ?></a>
                                         <div class="cell-sub d-sm-none">Order <?= e(fmt_qty($po['total_qty'])) ?> · <?= status_badge($po['status']) ?></div></td>
@@ -58,7 +58,7 @@ $id = (int) $customer['id'];
                                     <td class="d-none d-sm-table-cell"><?= status_badge($po['status']) ?></td>
                                     <td class="num d-none d-sm-table-cell"><?= e(fmt_qty($po['total_qty'])) ?></td>
                                     <td class="num fw-semibold<?= (int) $po['outstanding_qty'] < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($po['outstanding_qty'])) ?></td>
-                                    <td class="d-none d-md-table-cell"><div class="progress-thin<?= $progress >= 100 ? ' is-done' : '' ?>"><span style="width: <?= $progress ?>%"></span></div></td>
+                                    <td class="d-none d-md-table-cell"><?= progress_bar(fulfilled_qty($po), (int) $po['total_qty'], (int) $po['outstanding_qty'] < 0) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                             </tbody>

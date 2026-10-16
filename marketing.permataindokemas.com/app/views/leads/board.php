@@ -21,8 +21,8 @@ $canEdit = can('leads.edit');
     </div>
     <div class="page-actions">
         <div class="tabs-pik mb-0">
-            <a href="<?= e(url('/leads', array_filter(['q' => $filters['q'], 'pic' => $filters['pic'] ?: null, 'priority' => $filters['priority']]))) ?>" class="active"><i class="bi bi-kanban"></i> Board</a>
-            <a href="<?= e(url('/leads/list', array_filter(['q' => $filters['q'], 'pic' => $filters['pic'] ?: null, 'priority' => $filters['priority']]))) ?>"><i class="bi bi-list-ul"></i> List</a>
+            <a href="<?= e(url('/leads', array_filter(['q' => $filters['q'], 'pic' => $filters['pic'] ?: null, 'priority' => $filters['priority'], 'from' => $filters['from'], 'to' => $filters['to']]))) ?>" class="active"><i class="bi bi-kanban"></i> Board</a>
+            <a href="<?= e(url('/leads/list', array_filter(['q' => $filters['q'], 'pic' => $filters['pic'] ?: null, 'priority' => $filters['priority'], 'from' => $filters['from'], 'to' => $filters['to']]))) ?>"><i class="bi bi-list-ul"></i> List</a>
         </div>
         <?php if (can('leads.create')): ?>
             <a href="<?= e(url('/leads/create')) ?>" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Buat Lead</a>
@@ -67,7 +67,7 @@ $canEdit = can('leads.edit');
                         <?php if ($canEdit): ?>
                             <form method="post" action="<?= e(url('/leads/' . $l['id'] . '/status')) ?>" class="mt-2">
                                 <?= csrf_field() ?>
-                                <input type="hidden" name="return" value="/leads">
+                                <input type="hidden" name="return" value="<?= e(App\Helpers\Request::fullPath()) ?>">
                                 <label class="visually-hidden" for="ls-<?= (int) $l['id'] ?>">Pindahkan status</label>
                                 <select class="form-select form-select-sm" id="ls-<?= (int) $l['id'] ?>" name="status" data-autosubmit data-kanban-select>
                                     <?php foreach (Lead::STATUSES as $s): ?><option value="<?= e($s) ?>"<?= selected($s, $l['status']) ?>><?= e($s) ?></option><?php endforeach; ?>

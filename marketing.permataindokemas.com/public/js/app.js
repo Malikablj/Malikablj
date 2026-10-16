@@ -57,10 +57,44 @@
     });
   });
 
+  /* Mode gelap: tema disimpan di cookie pik_theme agar server langsung merender tema yang sama (tanpa kedip) */
+  var themeToggles = document.querySelectorAll('[data-theme-toggle]');
+  themeToggles.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var root = document.documentElement;
+      var dark = root.getAttribute('data-theme') !== 'dark';
+      var theme = dark ? 'dark' : 'light';
+      root.classList.add('theme-switching');
+      root.setAttribute('data-theme', theme);
+      root.setAttribute('data-bs-theme', theme);
+      var themeMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeMeta) { themeMeta.setAttribute('content', dark ? '#1A1A1A' : '#F5F5F7'); }
+      themeToggles.forEach(function (t) {
+        if (t.getAttribute('role') === 'menuitemcheckbox') {
+          t.setAttribute('aria-checked', dark ? 'true' : 'false');
+        } else {
+          t.setAttribute('aria-pressed', dark ? 'true' : 'false');
+          t.setAttribute('aria-label', dark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap');
+          t.setAttribute('title', dark ? 'Mode terang' : 'Mode gelap');
+        }
+      });
+      var path = basePathMeta ? basePathMeta.getAttribute('content') : '/';
+      document.cookie = 'pik_theme=' + theme + '; path=' + path + '; max-age=31536000; SameSite=Lax';
+      window.setTimeout(function () { root.classList.remove('theme-switching'); }, 60);
+    });
+  });
+
   /* Konfirmasi sebelum aksi berbahaya: <form data-confirm="Yakin?"> atau <button data-confirm="..."> */
   document.addEventListener('submit', function (e) {
     if (e.defaultPrevented) { return; }
     var form = e.target;
+    /* file bukti terlalu besar: jangan kirim (form memakai novalidate, jadi dicek manual) */
+    var badFile = form.querySelector ? form.querySelector('input[type="file"][data-max-bytes]') : null;
+    if (badFile && badFile.validationMessage) {
+      e.preventDefault();
+      badFile.reportValidity();
+      return;
+    }
     var submitter = e.submitter;
     var message = (submitter && submitter.getAttribute && submitter.getAttribute('data-confirm'))
       || (form.matches && form.matches('form[data-confirm]') ? form.getAttribute('data-confirm') : null);
@@ -295,15 +329,30 @@
     typeSelect.addEventListener('change', syncType);
     syncType();
   }
+  /* Pilihan "Surat jalan asal" hanya untuk baris order awal: kosongkan bila order & produk diganti */
+  var lineSelect = document.getElementById('f_po_line_id');
+  var sjSelect = document.getElementById('f_delivery_id');
+  if (lineSelect && sjSelect) {
+    var initialLine = lineSelect.value;
+    lineSelect.addEventListener('change', function () {
+      var same = lineSelect.value === initialLine;
+      if (!same) { sjSelect.value = ''; }
+      sjSelect.disabled = !same;
+      sjSelect.title = same ? '' : 'Surat jalan asal bisa dipilih setelah complaint disimpan (menu Edit).';
+    });
+  }
 
   /* Upload bukti complaint: tampilkan nama file terpilih & validasi ukuran di browser */
   document.querySelectorAll('input[type="file"][data-max-bytes]').forEach(function (input) {
     var list = document.querySelector(input.getAttribute('data-file-list') || '');
     input.addEventListener('change', function () {
       var max = parseInt(input.getAttribute('data-max-bytes'), 10) || 0;
+      var maxTotal = parseInt(input.getAttribute('data-max-total'), 10) || 0;
       var tooBig = [];
+      var total = 0;
       if (list) { list.textContent = ''; }
       Array.prototype.forEach.call(input.files || [], function (f) {
+        total += f.size;
         if (max && f.size > max) { tooBig.push(f.name); }
         if (list) {
           var li = document.createElement('li');
@@ -312,8 +361,11 @@
           list.appendChild(li);
         }
       });
-      input.setCustomValidity(tooBig.length ? 'File terlalu besar: ' + tooBig.join(', ') : '');
-      if (tooBig.length) { input.reportValidity(); }
+      var message = tooBig.length ? 'File terlalu besar: ' + tooBig.join(', ')
+        : (maxTotal && total > maxTotal ? 'Total file terlalu besar (' + Math.round(total / 1048576 * 10) / 10 + ' MB, maks. '
+          + Math.round(maxTotal / 1048576 * 10) / 10 + ' MB sekali kirim). Pilih file lebih sedikit atau lebih kecil.' : '');
+      input.setCustomValidity(message);
+      if (message) { input.reportValidity(); }
     });
   });
 

@@ -265,7 +265,7 @@ final class MigrationIssue
     public static function singleLineDeliveryCandidates(int $limit = 50, int $offset = 0): array
     {
         return Database::fetchAll(
-            "SELECT d.id, d.code, d.sj_number, d.delivery_date, d.delivered_qty, d.status, d.po_id, p.po_number, p.code AS po_code, c.name AS customer_name,
+            "SELECT d.id, d.code, d.sj_number, d.delivery_date, d.delivered_qty, d.status, d.po_id, COALESCE(p.order_number, p.po_number) AS po_number, p.code AS po_code, c.name AS customer_name,
                     one.line_id, pr.name AS line_product, one.order_qty,
                     (SELECT mi.legacy_product FROM migration_issues mi WHERE mi.table_name = 'DELIVERIES' AND mi.record_id = d.id AND mi.legacy_product IS NOT NULL ORDER BY mi.id LIMIT 1) AS legacy_product
              FROM deliveries d

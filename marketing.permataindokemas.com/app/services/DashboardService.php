@@ -44,7 +44,7 @@ final class DashboardService
             "SELECT COUNT(DISTINCT product_id) AS products,
                     COALESCE(SUM(CASE WHEN stock_type = 'FG' THEN quantity END), 0) AS fg,
                     COALESCE(SUM(CASE WHEN stock_type = 'Ready' THEN quantity END), 0) AS ready
-             FROM stock WHERE product_id IS NOT NULL"
+             FROM stock"
         ) ?? [];
         $monthStart = date('Y-m-01', strtotime($today) ?: time());
         $inboundMaklon = (int) Database::fetchValue('SELECT COUNT(*) FROM inbound_maklon WHERE actual_inbound_date BETWEEN :a AND :b', ['a' => $monthStart, 'b' => $today]);

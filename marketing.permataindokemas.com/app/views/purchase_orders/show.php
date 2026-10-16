@@ -14,7 +14,7 @@ use App\Models\PurchaseOrder;
  */
 $id = (int) $po['id'];
 $base = '/purchase-orders/' . $id;
-$progress = pct((int) $po['delivered_qty'], (int) $po['total_qty']);
+$fulfilled = fulfilled_qty($po);
 $hasLegacy = false;
 foreach ($lines as $l) {
     if ($l['legacy_outstanding_qty'] !== null || $l['legacy_delivered_qty'] !== null) {
@@ -152,7 +152,8 @@ $canReschedule = !empty($po['schedule_delivery_id']) && in_array($po['schedule_s
 <div class="stat-strip section-gap">
     <div><div class="stat-label">Total order</div><div class="stat-value"><?= e(fmt_qty($po['total_qty'], '0')) ?></div><div class="x-small text-secondary"><?= (int) $po['line_count'] ?> baris produk</div></div>
     <div><div class="stat-label">Terkirim</div><div class="stat-value"><?= e(fmt_qty($po['delivered_qty'], '0')) ?></div>
-        <div class="progress-thin mt-2<?= $progress >= 100 ? ' is-done' : '' ?>"><span style="width: <?= $progress ?>%"></span></div></div>
+        <?= progress_bar($fulfilled, (int) $po['total_qty'], (int) $po['outstanding_qty'] < 0, 'mt-2') ?>
+        <div class="x-small text-secondary mt-1"><?= e(pct_text($fulfilled, (int) $po['total_qty'])) ?> order terpenuhi</div></div>
     <div><div class="stat-label">Retur</div><div class="stat-value"><?= e(fmt_qty($po['return_qty'], '0')) ?></div></div>
     <div><div class="stat-label">Outstanding</div><div class="stat-value<?= (int) $po['outstanding_qty'] < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($po['outstanding_qty'], '0')) ?></div>
         <div class="x-small text-secondary">Order − Terkirim + Retur</div></div>

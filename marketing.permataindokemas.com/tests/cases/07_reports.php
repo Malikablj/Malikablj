@@ -118,7 +118,7 @@ test('laporan PO: angka sesuai database, filter periode/customer/PIC', function 
     assert_contains('1.500', $res->body, 'qty order 1000 + 500');
     assert_contains('600', $res->body, 'terkirim hanya status Delivered');
     assert_contains('900', $res->body, 'outstanding 1500 − 600');
-    assert_contains('40,0% dari order', $res->body);
+    assert_contains('40% dari order', $res->body);
     $byPic = $c->get('/reports/po', ['pic' => $ids['pic']]);
     assert_contains('PO/REP/001', $byPic->body);
     assert_contains('PO/REP/LUAR', $byPic->body);
@@ -129,7 +129,7 @@ test('laporan lead (win rate), delivery, customer', function () use ($repSetup) 
     $ids = $repSetup();
     $c = client_as('Management');
     $lead = $c->get('/reports/lead', ['from' => '2026-03-01', 'to' => '2026-03-31']);
-    assert_contains('50,0%', $lead->body, 'win rate = 1 won / (1 won + 1 lost)');
+    assert_contains('50%', $lead->body, 'win rate = 1 won / (1 won + 1 lost)');
     assert_contains('Rp 2.500.000', $lead->body, 'pipeline lead berjalan');
     $del = $c->get('/reports/delivery', ['from' => '2026-03-01', 'to' => '2026-03-31', 'customer_id' => $ids['customer']]);
     assert_contains('Qty diterima customer', $del->body);

@@ -600,3 +600,38 @@ Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-se
 - Closed yang dipilih manual oleh user dan status *Cancelled* tetap tidak diubah otomatis.
 - Form delivery: status **Partial** berarti diterima sebagian, jadi **Qty wajib jumlah yang benar-benar diterima** dan harus kurang dari sisa order. Bila qty menutup seluruh sisa, form menolak dengan petunjuk untuk memilih *Delivered*.
 - Migrasi skema **2026.10.4** (otomatis saat update): kolom `status_auto` ditambahkan; order yang terakhir di-Closed oleh sistem (menurut Audit Log) ditandai otomatis lalu **langsung dihitung ulang**, sehingga order yang sekarang "terkunci" Closed padahal masih ada outstanding otomatis kembali ke *Partial*. Order Closed hasil import / tanpa riwayat dianggap manual (tidak diubah).
+
+## 24. Mode gelap & perbaikan progres order (update Oktober 2026 — 8)
+
+Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-setiap-update). Struktur tabel tidak berubah; migrasi **2026.10.5** hanya merapikan data jadwal delivery otomatis (lihat "Perbaikan bug lain").
+
+### Mode gelap
+
+- Tombol **bulan / matahari** di topbar (sebelah lonceng notifikasi), switch **Mode gelap** di menu profil (klik nama di kanan atas), dan tombol di pojok kanan atas halaman login. Sekali klik seluruh tampilan berganti tanpa memuat ulang halaman.
+- Palet mode gelap: **Night Black `#1A1A1A`** (latar), **Grey `#F2F2F2`** (teks), **White `#FFFFFF`** (judul), dan **Real Madrid Gold `#FEBE10`** (aksen: tombol utama, link, menu aktif, centang, progres). Kartu, tabel, form, dan menu memakai lapisan abu gelap yang diturunkan dari Night Black — bersih dan rapi ala Apple. Warna status (hijau / oranye / merah / biru) memakai varian gelap agar tetap terbaca.
+- Pilihan tersimpan di browser (cookie `pik_theme`, 1 tahun) dan dirender langsung oleh server, jadi tidak ada kedipan putih saat pindah halaman. Setiap perangkat/browser menyimpan pilihannya sendiri; bawaan tetap mode terang.
+- **Cetak / Save as PDF** selalu memakai tema terang agar hemat tinta dan terbaca.
+- Semua warna di `public/css/app.css` kini berupa token (`--pik-*`); tema gelap hanya mengganti token di blok `:root[data-theme="dark"]`.
+
+### Perbaikan progres order
+
+- **Bar progres "Terkirim"** di detail OEF (dan di daftar OEF serta tab Overview customer) kini selalu terisi bila sudah ada pengiriman, sekecil apa pun — mis. 300.000 dari 260.100.791 pcs (0,11%) sebelumnya dibulatkan menjadi 0% sehingga bar kosong. Di bawah bar tertulis persentasenya (mis. "0,11% order terpenuhi").
+- Progres dihitung dari **Order − outstanding terbuka**, sehingga **retur ikut mengurangi progres** (sebelumnya bar bisa hijau "selesai" padahal retur membuat outstanding muncul lagi), dan kelebihan kirim di satu baris produk tidak menutupi baris lain yang masih kurang. Bar hijau hanya bila outstanding benar-benar habis; yang belum selesai tidak pernah tampil 100%.
+- Persentase di ringkasan laporan (win rate, % terkirim, % complaint selesai) memakai aturan pembulatan yang sama (dibulatkan ke bawah, mis. 99,96% tampil 99%, bukan 100%).
+- Daftar OEF: bar progres dipindah ke bawah angka Outstanding sehingga tabel tidak lagi melebar keluar layar di laptop 1440 px.
+- Tabel yang berada di tepi bawah kartu (mis. baris Total di laporan) kini mengikuti sudut kartu yang membulat.
+
+### Perbaikan bug lain (hasil pemeriksaan menyeluruh)
+
+- **Edit / tambah / hapus baris produk OEF** dari halaman detail kini diperlakukan sama seperti mengedit lewat form OEF: bila produk atau qty berubah, order **dikirim ulang ke PPIC** (status *Menunggu PPIC* + notifikasi revisi) dan **jadwal delivery otomatis ikut qty/produk baru**. Mengubah catatan baris saja tidak mengirim ulang. Baris pertama tidak lagi "terkunci" hanya karena jadwal otomatis yang belum dikirim; bila dihapus, jadwal dipindah ke baris lain.
+- **Jadwal delivery otomatis tidak basi lagi:** bila order dikirim lewat surat jalan lain, qty jadwal yang masih *Scheduled* diturunkan menjadi sisa order; bila order sudah terpenuhi / Closed / Cancelled, jadwal otomatis **dibatalkan** sehingga tidak muncul lagi di "Surat jalan mendatang" dan pengingat. Jadwal yang dihapus Admin tidak dibuat ulang bila order sudah punya pengiriman. Migrasi **2026.10.5** membatalkan jadwal basi yang sudah ada saat update dipasang.
+- **Total Outstanding** di daftar OEF dan baris Total laporan PO kini hanya menghitung **order berjalan** (Open / On Process / Partial) — sama dengan dashboard. Sebelumnya order *Cancelled* (mis. ditolak PPIC) ikut dijumlahkan.
+- **Qty retur tidak boleh melebihi barang yang sudah diterima customer** (terkirim − retur sebelumnya) di baris order tersebut; bila belum ada kiriman, form menyarankan jenis *Complaint*. Data lama yang terlanjur lebih tetap bisa diedit selama qty-nya tidak dinaikkan.
+- Form complaint: surat jalan asal yang tidak cocok dengan order & produk kini ditolak dengan pesan di form (isian tidak hilang); pilihan surat jalan dikosongkan otomatis saat order & produk diganti. **Upload bukti yang total ukurannya melebihi batas server** dicegah di browser dan, bila tetap terkirim, menampilkan pesan "Total file terlalu besar" — bukan lagi "Sesi formulir sudah kedaluwarsa".
+- **No. order OEF** dipakai konsisten di laporan Delivery (kolom "No. order"), menu Lead Time (tampilan & pencarian), dashboard, detail produk, dan migration issues — tidak lagi menampilkan kode internal `PO-…`.
+- Mengedit customer / lead / aktivitas / follow up tidak lagi **menghapus PIC yang sudah dinonaktifkan** (ditandai "(nonaktif)") atau lead lama di luar 500 lead terbaru.
+- Follow up berstatus *Done* yang diedit tetap menyimpan waktu selesai aslinya.
+- Filter tetap terjaga: urutan daftar lead saat filter diubah, filter board lead saat memindah status kartu, tanggal dibuat saat berpindah Board ↔ List, serta tab/filter/halaman Follow Up setelah menekan *Selesai*.
+- Navigasi halaman tidak lagi menampilkan "…" untuk satu halaman yang terlewat (mis. 1 2 3 4 5 6 7 8).
+- Kartu "Stok FG" di dashboard sama dengan total di menu Stock (termasuk entri legacy). Detail delivery menampilkan complaint & retur dengan alasan berbahasa Indonesia dan status. Customer yang masih punya complaint tidak bisa dihapus (pesan menyebutkan alasannya).
+

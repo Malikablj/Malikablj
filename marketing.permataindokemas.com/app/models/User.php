@@ -60,9 +60,13 @@ final class User extends Model
     }
 
     /** @return array<int,string> user aktif untuk pilihan PIC */
-    public static function picOptions(): array
+    public static function picOptions(?int $includeId = null): array
     {
-        return self::options('name', 'is_active = 1');
+        if ($includeId === null || $includeId <= 0) {
+            return self::options('name', 'is_active = 1');
+        }
+        // PIC yang sudah dinonaktifkan tetap muncul saat mengedit data miliknya, agar tidak terhapus diam-diam
+        return self::options("CONCAT(name, IF(is_active = 1, '', ' (nonaktif)'))", 'is_active = 1 OR id = :inc', ['inc' => $includeId], 'name');
     }
 
     /** @return list<array<string,mixed>> */

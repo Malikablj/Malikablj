@@ -105,7 +105,8 @@ final class PurchaseOrder extends Model
         [$where, $params] = self::filters($f);
         return Database::fetch(
             "SELECT COUNT(*) AS po_count, COALESCE(SUM(t.total_qty), 0) AS total_qty, COALESCE(SUM(t.delivered_qty), 0) AS delivered_qty,
-                    COALESCE(SUM(t.open_outstanding_qty), 0) AS outstanding_qty, COALESCE(SUM(p.ppic_status = 'Pending'), 0) AS ppic_pending
+                    COALESCE(SUM(CASE WHEN p.status IN ('Open','On Process','Partial') THEN t.open_outstanding_qty ELSE 0 END), 0) AS outstanding_qty,
+                    COALESCE(SUM(p.ppic_status = 'Pending'), 0) AS ppic_pending
              FROM purchase_orders p LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN (" . PoLine::poTotalsSql() . ') t ON t.po_id = p.id WHERE ' . $where,
             $params
@@ -285,6 +286,13 @@ final class PurchaseOrder extends Model
         if ($poId === null) {
             return null;
         }
+        $new = self::autoStatus($poId);
+        self::syncAutoSchedule($poId);
+        return $new;
+    }
+
+    private static function autoStatus(int $poId): ?string
+    {
         $po = self::findFull($poId);
         if ($po === null || $po['status'] === 'Cancelled') {
             return null;
@@ -310,6 +318,37 @@ final class PurchaseOrder extends Model
         Database::update('purchase_orders', ['status' => $new, 'status_auto' => 1], 'id = :id', ['id' => $poId]);
         Audit::log('auto_status', self::ENTITY, $poId, self::displayNumber($po), ['status' => ['old' => $po['status'], 'new' => $new]]);
         return $new;
+    }
+
+    /**
+     * Jadwal delivery otomatis OEF yang masih "Scheduled" mengikuti sisa order:
+     *  - order Closed / Cancelled atau outstanding baris sudah habis (mis. dikirim lewat surat jalan lain)
+     *    → jadwal dibatalkan, tidak lagi muncul di "Surat jalan mendatang" & pengingat;
+     *  - qty jadwal tidak boleh melebihi outstanding baris (diturunkan, tidak pernah dinaikkan,
+     *    agar jadwal kirim bertahap yang diatur manual tetap dipakai).
+     */
+    private static function syncAutoSchedule(int $poId): void
+    {
+        $row = Database::fetch(
+            'SELECT p.status AS po_status, d.* FROM purchase_orders p JOIN deliveries d ON d.id = p.schedule_delivery_id WHERE p.id = :id',
+            ['id' => $poId]
+        );
+        if ($row === null || $row['status'] !== 'Scheduled' || $row['po_line_id'] === null) {
+            return;
+        }
+        $outstanding = (int) (PoLine::totals((int) $row['po_line_id'])['outstanding_qty'] ?? 0);
+        $schedule = Delivery::find((int) $row['id']);
+        if ($schedule === null) {
+            return;
+        }
+        if (in_array($row['po_status'], ['Closed', 'Cancelled'], true) || $outstanding <= 0) {
+            Delivery::update((int) $row['id'], [
+                'status' => 'Cancelled',
+                'note'   => trim(($schedule['note'] ?? '') . ' Dibatalkan otomatis: ' . ($outstanding <= 0 ? 'order sudah terpenuhi.' : 'order ' . $row['po_status'] . '.')),
+            ], $schedule);
+        } elseif ((int) $row['delivered_qty'] > $outstanding) {
+            Delivery::update((int) $row['id'], ['delivered_qty' => $outstanding], $schedule);
+        }
     }
 
     /**

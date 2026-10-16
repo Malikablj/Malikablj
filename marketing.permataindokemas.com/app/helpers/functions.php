@@ -342,13 +342,80 @@ function activity_icon(?string $type): string
     };
 }
 
-/** Persentase aman untuk progress bar (0–100). */
+/**
+ * Persentase bulat (0–100) yang tidak menyesatkan: progres sekecil apa pun minimal 1%,
+ * dan yang belum selesai paling tinggi 99% (tidak dibulatkan menjadi 0% / 100%).
+ */
 function pct(float|int $part, float|int $total): int
 {
-    if ($total <= 0) {
+    if ($total <= 0 || $part <= 0) {
         return 0;
     }
-    return (int) max(0, min(100, round($part / $total * 100)));
+    if ($part >= $total) {
+        return 100;
+    }
+    return (int) min(99, max(1, round($part / $total * 100)));
+}
+
+/** Teks persentase progres, mis. "0,12%", "4,5%", "99%" — dibulatkan ke bawah agar tidak tampak selesai. */
+function pct_text(float|int $part, float|int $total): string
+{
+    if ($total <= 0 || $part <= 0) {
+        return '0%';
+    }
+    if ($part >= $total) {
+        return '100%';
+    }
+    $p = $part / $total * 100;
+    $decimals = $p < 1 ? 2 : ($p < 10 ? 1 : 0);
+    $factor = 10 ** $decimals;
+    $value = floor($p * $factor) / $factor;
+    if ($value <= 0) {
+        return '< 0,01%';
+    }
+    return number_format($value, $decimals, ',', '.') . '%';
+}
+
+/**
+ * Progress bar pengiriman order: bagian order yang sudah terpenuhi (Order − outstanding terbuka) ÷ Order.
+ * Progres sekecil apa pun tetap terlihat; bar hijau hanya bila outstanding benar-benar habis.
+ */
+function progress_bar(float|int $fulfilled, float|int $total, bool $over = false, string $class = ''): string
+{
+    $done = $total > 0 && $fulfilled >= $total;
+    $width = $done ? 100 : ($total > 0 && $fulfilled > 0 ? max(0.5, min(99, $fulfilled / $total * 100)) : 0);
+    $tone = $done ? ($over ? ' is-over' : ' is-done') : '';
+    $label = pct_text($fulfilled, $total) . ' terpenuhi';
+    $fill = $width > 0 ? '<span style="width: ' . rtrim(rtrim(number_format($width, 2, '.', ''), '0'), '.') . '%"></span>' : '';
+    return '<div class="progress-thin' . $tone . ($class !== '' ? ' ' . e($class) : '') . '" role="progressbar" aria-label="' . e($label) . '"'
+        . ' aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . pct($fulfilled, $total) . '" title="' . e($label) . '">' . $fill . '</div>';
+}
+
+/** Qty order yang sudah terpenuhi: Order − outstanding terbuka (kelebihan kirim di satu baris tidak menutup baris lain). */
+function fulfilled_qty(array $po): int
+{
+    $total = (int) ($po['total_qty'] ?? 0);
+    $open = array_key_exists('open_outstanding_qty', $po) ? (int) $po['open_outstanding_qty'] : max(0, (int) ($po['outstanding_qty'] ?? 0));
+    return max(0, $total - max(0, $open));
+}
+
+/** Tema tampilan dari cookie pik_theme (diatur tombol mode gelap): 'dark' atau 'light' (bawaan). */
+function ui_theme(): string
+{
+    return ($_COOKIE['pik_theme'] ?? '') === 'dark' ? 'dark' : 'light';
+}
+
+/** Atribut <html> untuk tema aktif (dirender server agar tidak berkedip saat halaman dimuat). */
+function theme_attributes(): string
+{
+    $theme = ui_theme();
+    return 'data-theme="' . $theme . '" data-bs-theme="' . $theme . '"';
+}
+
+/** Warna bilah browser (meta theme-color) untuk tema aktif. */
+function theme_color(): string
+{
+    return ui_theme() === 'dark' ? '#1A1A1A' : '#F5F5F7';
 }
 
 /** URL internal dari path yang boleh berisi query string, mis. "/customers/5?tab=contacts". */

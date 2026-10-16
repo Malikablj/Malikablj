@@ -171,7 +171,7 @@ final class ReportService
 
     private static function pct(float $part, float $whole): string
     {
-        return $whole > 0 ? number_format($part * 100 / $whole, 1, ',', '.') . '%' : '—';
+        return $whole > 0 ? pct_text($part, $whole) : '—';
     }
 
     // ------------------------------------------------------------------ reports
@@ -374,6 +374,11 @@ final class ReportService
              WHERE ' . $where . ' ORDER BY p.po_date IS NULL, p.po_date DESC, p.id DESC LIMIT ' . self::MAX_ROWS,
             $params
         );
+        foreach ($rows as &$r) {
+            // total kolom Outstanding hanya order berjalan (sama dengan dashboard): Cancelled / Closed tidak lagi ditunggu kirimannya
+            $r['outstanding_running'] = in_array($r['status'], ['Open', 'On Process', 'Partial'], true) ? (int) $r['open_outstanding_qty'] : 0;
+        }
+        unset($r);
         $open = array_values(array_filter($rows, static fn ($r) => in_array($r['status'], ['Open', 'On Process', 'Partial'], true)));
         $total = self::sumInt($rows, 'total_qty');
         $delivered = self::sumInt($rows, 'delivered_qty');
@@ -393,7 +398,7 @@ final class ReportService
                 ['key' => 'total_qty', 'label' => 'Qty order', 'type' => 'qty', 'total' => true, 'hide' => 'sm'],
                 ['key' => 'delivered_qty', 'label' => 'Terkirim', 'type' => 'qty', 'total' => true, 'hide' => 'xl'],
                 ['key' => 'return_qty', 'label' => 'Retur', 'type' => 'qty', 'total' => true, 'hide' => 'xxl'],
-                ['key' => 'outstanding_qty', 'label' => 'Outstanding', 'type' => 'qty', 'total' => true],
+                ['key' => 'outstanding_qty', 'label' => 'Outstanding', 'type' => 'qty', 'total' => 'outstanding_running', 'total_note' => 'order berjalan'],
             ],
             'rows'    => $rows,
             'summary' => [
@@ -424,7 +429,7 @@ final class ReportService
         }
         $rows = Database::fetchAll(
             "SELECT d.id, d.code, COALESCE(d.sj_number, d.code) AS sj_number, d.delivery_date, d.status, d.delivered_qty, d.destination,
-                    COALESCE(p.po_number, p.code) AS po_number, d.po_id, c.name AS customer_name, pr.name AS product_name,
+                    COALESCE(p.order_number, p.po_number, p.code) AS po_number, d.po_id, c.name AS customer_name, pr.name AS product_name,
                     CASE WHEN d.po_line_id IS NULL THEN 'Belum terhubung' ELSE 'Terhubung' END AS link_status,
                     CASE WHEN d.status IN ('Delivered','Partial') THEN d.delivered_qty ELSE 0 END AS counted_qty
              FROM deliveries d LEFT JOIN purchase_orders p ON p.id = d.po_id LEFT JOIN customers c ON c.id = p.customer_id
@@ -452,7 +457,7 @@ final class ReportService
             'columns' => [
                 ['key' => 'sj_number', 'label' => 'Surat jalan', 'type' => 'text', 'link' => '/deliveries/{id}', 'perm' => 'deliveries.view', 'sub' => ['customer_name', 'product_name']],
                 ['key' => 'delivery_date', 'label' => 'Tanggal', 'type' => 'date'],
-                ['key' => 'po_number', 'label' => 'PO', 'type' => 'text', 'hide' => 'lg'],
+                ['key' => 'po_number', 'label' => 'No. order', 'type' => 'text', 'hide' => 'lg'],
                 ['key' => 'customer_name', 'label' => 'Customer', 'type' => 'text', 'hide' => 'md'],
                 ['key' => 'product_name', 'label' => 'Produk', 'type' => 'text', 'hide' => 'xxl'],
                 ['key' => 'status', 'label' => 'Status', 'type' => 'status', 'hide' => 'sm'],

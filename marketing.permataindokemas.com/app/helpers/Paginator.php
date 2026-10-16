@@ -63,12 +63,14 @@ final class Paginator
         for ($i = max(1, $this->page - 2); $i <= min($pages, $this->page + 2); $i++) {
             $window[] = $i;
         }
-        if (!in_array(1, $window, true)) {
-            array_unshift($window, 1, '…');
+        // "…" hanya bila melompati 2 halaman atau lebih; celah satu halaman ditulis nomornya
+        $first = $window[0];
+        if ($first > 1) {
+            array_unshift($window, ...($first === 2 ? [1] : ($first === 3 ? [1, 2] : [1, '…'])));
         }
-        if (!in_array($pages, $window, true)) {
-            $window[] = '…';
-            $window[] = $pages;
+        $last = (int) $window[count($window) - 1];
+        if ($last < $pages) {
+            array_push($window, ...($last === $pages - 1 ? [$pages] : ($last === $pages - 2 ? [$pages - 1, $pages] : ['…', $pages])));
         }
         $html = '<nav aria-label="Navigasi halaman"><ul class="pagination pagination-sm">';
         $prev = $this->page - 1;

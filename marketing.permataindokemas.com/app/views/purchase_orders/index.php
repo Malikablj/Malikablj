@@ -37,7 +37,7 @@ $ppicRows = $canPpic ? count(array_filter($orders->items, static fn (array $po):
     <div><div class="stat-label">Order<?= $hasFilter ? ' (sesuai filter)' : '' ?></div><div class="stat-value"><?= e(fmt_qty($summary['po_count'] ?? 0, '0')) ?></div></div>
     <div><div class="stat-label">Total order</div><div class="stat-value"><?= e(fmt_qty($summary['total_qty'] ?? 0, '0')) ?></div><div class="x-small text-secondary">pcs</div></div>
     <div><div class="stat-label">Terkirim</div><div class="stat-value"><?= e(fmt_qty($summary['delivered_qty'] ?? 0, '0')) ?></div><div class="x-small text-secondary">pcs</div></div>
-    <div><div class="stat-label">Outstanding</div><div class="stat-value"><?= e(fmt_qty($summary['outstanding_qty'] ?? 0, '0')) ?></div><div class="x-small text-secondary">pcs belum terkirim</div></div>
+    <div><div class="stat-label">Outstanding</div><div class="stat-value"><?= e(fmt_qty($summary['outstanding_qty'] ?? 0, '0')) ?></div><div class="x-small text-secondary">pcs belum terkirim · order berjalan</div></div>
 </div>
 
 <div class="surface">
@@ -74,7 +74,7 @@ $ppicRows = $canPpic ? count(array_filter($orders->items, static fn (array $po):
             <div class="bulk-bar">
                 <div class="bulk-bar-info" title="Centang kotak di judul kolom untuk memilih semua order di halaman ini"><i class="bi bi-ui-checks"></i>
                     <span><strong data-bulk-count>0</strong> order dipilih</span>
-                    <span class="text-secondary d-none d-xxl-inline">· kotak di judul kolom = pilih semua di halaman ini</span></div>
+</div>
                 <?php if ($ppicRows > 0): ?>
                     <input type="text" class="form-control form-control-sm bulk-bar-note" name="ppic_note" id="bulk-ppic-note" maxlength="2000" placeholder="Catatan / alasan (wajib bila tidak bisa diproses)" aria-label="Catatan atau alasan PPIC">
                     <button class="btn btn-success btn-sm" type="submit" formaction="<?= e(url('/purchase-orders/ppic-bulk')) ?>" name="decision" value="approve" data-bulk-action
@@ -102,10 +102,9 @@ $ppicRows = $canPpic ? count(array_filter($orders->items, static fn (array $po):
                     <th class="d-none d-xxl-table-cell"><?= sort_link('status', 'Status', $sort, $dir) ?></th>
                     <th class="num d-none d-md-table-cell"><?= sort_link('qty', 'Qty', $sort, $dir) ?></th>
                     <th class="num"><?= sort_link('outstanding', 'Outstanding', $sort, $dir) ?></th>
-                    <th class="d-none d-xxl-table-cell">Progres</th>
                 </tr></thead>
                 <tbody>
-                <?php foreach ($orders->items as $po): $progress = pct((int) $po['delivered_qty'], (int) $po['total_qty']); $out = (int) $po['outstanding_qty']; ?>
+                <?php foreach ($orders->items as $po): $out = (int) $po['outstanding_qty']; ?>
                     <tr>
                         <?php if ($selectable > 0): ?><td class="col-check"><?php if ($isSelectable($po)): ?><input class="form-check-input" type="checkbox" name="ids[]" value="<?= (int) $po['id'] ?>" aria-label="Pilih order <?= e(PurchaseOrder::displayNumber($po)) ?>"><?php endif; ?></td><?php endif; ?>
                         <td><a class="cell-title" href="<?= e(url('/purchase-orders/' . $po['id'])) ?>"><?= e_wrap(PurchaseOrder::displayNumber($po)) ?></a>
@@ -121,8 +120,8 @@ $ppicRows = $canPpic ? count(array_filter($orders->items, static fn (array $po):
                         <td class="d-none d-sm-table-cell"><?= ppic_badge($po['ppic_status']) ?><div class="d-xxl-none mt-1"><?= status_badge($po['status']) ?></div></td>
                         <td class="d-none d-xxl-table-cell"><?= status_badge($po['status']) ?></td>
                         <td class="num d-none d-md-table-cell"><?= e(fmt_qty($po['total_qty'])) ?></td>
-                        <td class="num fw-semibold<?= $out < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($out)) ?><?= $out < 0 ? '<div class="x-small">over</div>' : '' ?></td>
-                        <td class="d-none d-xxl-table-cell"><div class="progress-thin<?= $progress >= 100 ? ($out < 0 ? ' is-over' : ' is-done') : '' ?>" title="<?= $progress ?>% terkirim"><span style="width: <?= $progress ?>%"></span></div></td>
+                        <td class="num fw-semibold<?= $out < 0 ? ' is-negative' : '' ?>"><?= e(fmt_qty($out)) ?><?= $out < 0 ? '<div class="x-small">over</div>' : '' ?>
+                            <?= progress_bar(fulfilled_qty($po), (int) $po['total_qty'], $out < 0, 'd-none d-md-block mt-2 ms-auto') ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

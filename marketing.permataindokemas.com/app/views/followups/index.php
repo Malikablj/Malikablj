@@ -5,7 +5,7 @@ use App\Models\FollowUp;
 
 /** @var string $tab @var array<string,int> $counts @var App\Helpers\Paginator $followups @var array<string,mixed> $filters @var string $today */
 $keep = array_filter(['q' => $filters['q'], 'pic' => $filters['pic'] ?: null, 'type' => $filters['type'], 'customer_id' => $filters['customer_id'] ?: null]);
-$ret = '/follow-ups?tab=' . $tab;
+$ret = App\Helpers\Request::fullPath(); // kembali ke tab, filter & halaman yang sama
 $emptyText = [
     'today' => ['Tidak ada follow up hari ini', 'Semua jadwal hari ini sudah beres.'],
     'upcoming' => ['Belum ada jadwal mendatang', 'Jadwalkan follow up agar tidak ada customer yang terlewat.'],

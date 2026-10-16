@@ -91,6 +91,13 @@ final class Router
 
         // CSRF untuk semua request POST (termasuk login)
         if ($route['method'] === 'POST') {
+            // Body melebihi post_max_size: PHP mengosongkan $_POST & $_FILES (token CSRF ikut hilang).
+            // Beri pesan yang jelas, bukan "sesi kedaluwarsa"; tidak ada data yang diproses.
+            $postMax = \App\Models\ComplaintAttachment::postMaxBytes();
+            if ($_POST === [] && $_FILES === [] && $postMax > 0 && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > $postMax) {
+                throw new HttpException(413, 'Total file yang diunggah terlalu besar (maks. ' . \App\Models\ComplaintAttachment::human($postMax)
+                    . ' sekali kirim). Klik Kembali, pilih file yang lebih sedikit atau lebih kecil, lalu kirim lagi.');
+            }
             Csrf::verifyRequest();
         }
 
