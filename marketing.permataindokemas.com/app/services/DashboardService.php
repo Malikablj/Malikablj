@@ -70,6 +70,96 @@ final class DashboardService
         ];
     }
     /**
+     * Data visual mini di kartu KPI dashboard (komposisi, tren 6 bulan, jadwal 7 hari).
+     * @return array<string,mixed>
+     */
+    public static function insights(string $today): array
+    {
+        $statusCounts = static function (string $sql, array $params = []): array {
+            $out = [];
+            foreach (Database::fetchAll($sql, $params) as $r) {
+                $out[(string) $r['k']] = (int) $r['n'];
+            }
+            return $out;
+        };
+        $running = Database::fetch(
+            "SELECT COALESCE(SUM(t.total_qty), 0) AS total, COALESCE(SUM(t.open_outstanding_qty), 0) AS open_qty
+             FROM purchase_orders po LEFT JOIN (" . PoLine::poTotalsSql() . ") t ON t.po_id = po.id
+             WHERE po.status IN ('Open','On Process','Partial')"
+        ) ?? [];
+        $week = [];
+        $perDay = $statusCounts(
+            "SELECT delivery_date AS k, COUNT(*) AS n FROM deliveries
+             WHERE status IN ('Scheduled','On Delivery') AND delivery_date BETWEEN :a AND :b GROUP BY delivery_date",
+            ['a' => $today, 'b' => date('Y-m-d', strtotime($today . ' +6 days'))]
+        );
+        for ($i = 0; $i < 7; $i++) {
+            $d = date('Y-m-d', strtotime($today . " +{$i} days"));
+            $week[$d] = $perDay[$d] ?? 0;
+        }
+        $stock = Database::fetch(
+            "SELECT COALESCE(SUM(CASE WHEN stock_type = 'FG' THEN quantity END), 0) AS FG,
+                    COALESCE(SUM(CASE WHEN stock_type = 'WIP' THEN quantity END), 0) AS WIP,
+                    COALESCE(SUM(CASE WHEN stock_type = 'Ready' THEN quantity END), 0) AS Ready,
+                    COALESCE(SUM(CASE WHEN stock_type = 'Reserved' THEN quantity END), 0) AS Reserved
+             FROM stock"
+        ) ?? [];
+
+        return [
+            'leads_by_stage'   => $statusCounts("SELECT status AS k, COUNT(*) AS n FROM leads WHERE status IN ('New','Contacted','Qualified','Quotation','Negotiation') GROUP BY status"),
+            'followups_done_today' => (int) Database::fetchValue("SELECT COUNT(*) FROM follow_up WHERE follow_up_date = :d AND status = 'Done'", ['d' => $today]),
+            'followups_open'   => (int) Database::fetchValue("SELECT COUNT(*) FROM follow_up WHERE status NOT IN ('Done','Cancelled')"),
+            'overdue_oldest'   => Database::fetchValue("SELECT MIN(follow_up_date) FROM follow_up WHERE follow_up_date < :d AND status NOT IN ('Done','Cancelled')", ['d' => $today]),
+            'orders_by_status' => $statusCounts("SELECT status AS k, COUNT(*) AS n FROM purchase_orders WHERE status IN ('Open','On Process','Partial') GROUP BY status"),
+            'ppic_oldest'      => Database::fetchValue("SELECT MIN(created_at) FROM purchase_orders WHERE ppic_status = 'Pending'"),
+            'running_total'    => (int) ($running['total'] ?? 0),
+            'running_fulfilled' => max(0, (int) ($running['total'] ?? 0) - (int) ($running['open_qty'] ?? 0)),
+            'complaints_months' => self::monthly('returns', 'return_date', $today),
+            'deliveries_week'  => $week,
+            'deliveries_on_way' => (int) Database::fetchValue("SELECT COUNT(*) FROM deliveries WHERE status = 'On Delivery'"),
+            'deliveries_late'  => (int) Database::fetchValue("SELECT COUNT(*) FROM deliveries WHERE status = 'Scheduled' AND delivery_date < :d", ['d' => $today]),
+            'stock_types'      => array_map('intval', $stock),
+            'inbound_maklon_months'   => self::monthly('inbound_maklon', 'actual_inbound_date', $today),
+            'inbound_supplier_months' => self::monthly('inbound_supplier', 'inbound_date', $today),
+        ];
+    }
+
+    /** Jumlah record per bulan untuk 6 bulan terakhir (termasuk bulan ini), mis. ['2026-05' => 3, ...]. */
+    private static function monthly(string $table, string $dateColumn, string $today): array
+    {
+        $first = date('Y-m-01', strtotime(date('Y-m-01', strtotime($today)) . ' -5 months'));
+        $rows = Database::fetchAll(
+            "SELECT DATE_FORMAT({$dateColumn}, '%Y-%m') AS ym, COUNT(*) AS n FROM {$table}
+             WHERE {$dateColumn} BETWEEN :a AND :b GROUP BY ym",
+            ['a' => $first, 'b' => $today]
+        );
+        $counts = array_column($rows, 'n', 'ym');
+        $out = [];
+        for ($i = 0; $i < 6; $i++) {
+            $ym = date('Y-m', strtotime($first . " +{$i} months"));
+            $out[$ym] = (int) ($counts[$ym] ?? 0);
+        }
+        return $out;
+    }
+
+    /**
+     * Posisi stok per produk (FG terbanyak) untuk panel dashboard.
+     * @return list<array<string,mixed>>
+     */
+    public static function stockTop(int $limit = 6): array
+    {
+        return Database::fetchAll(
+            "SELECT s.product_id, pr.name AS product_name, pr.variant, pr.unit,
+                    SUM(CASE WHEN s.stock_type = 'FG' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS fg,
+                    SUM(CASE WHEN s.stock_type = 'Ready' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS ready,
+                    SUM(CASE WHEN s.stock_type = 'WIP' THEN COALESCE(s.quantity, 0) ELSE 0 END) AS wip
+             FROM stock s JOIN products pr ON pr.id = s.product_id
+             GROUP BY s.product_id, pr.name, pr.variant, pr.unit
+             ORDER BY fg DESC, ready DESC, pr.name LIMIT " . max(1, $limit)
+        );
+    }
+
+    /**
      * Follow up terbuka hari ini ("today") atau yang terlewat ("overdue").
      * Milik user yang login ditampilkan lebih dulu.
      * @return list<array<string,mixed>>

@@ -79,6 +79,26 @@ test('dashboard menampilkan daftar sesuai role (data aktual, otorisasi backend)'
     assert_same('Planned', Database::fetchValue('SELECT status FROM follow_up WHERE id = :id', ['id' => $fu]));
 });
 
+test('dashboard baru: KPI dengan visual mini, tombol cepat & panel sesuai role', function () use ($repSetup) {
+    $repSetup();
+    $admin = client_as('Admin')->get('/');
+    foreach (['kpi-ring', 'kpi-stack', 'kpi-cols', 'class="dash-row"', 'Posisi stok', 'Terlewat', 'Buat OEF', 'Log aktivitas'] as $text) {
+        assert_contains($text, $admin->body, 'Admin: ' . $text);
+    }
+    $ppic = client_as('PPIC')->get('/');
+    assert_contains('Catat surat jalan', $ppic->body, 'tombol cepat PPIC');
+    assert_not_contains('Buat OEF', $ppic->body, 'PPIC tidak membuat OEF');
+    assert_not_contains('Posisi stok', $ppic->body);
+    $produksi = client_as('Produksi')->get('/');
+    assert_contains('Catat stok', $produksi->body);
+    assert_contains('Posisi stok', $produksi->body, 'Produksi: panel stok di samping barang masuk');
+    assert_not_contains('Order terbaru', $produksi->body);
+    assert_not_contains('Log aktivitas', $produksi->body);
+    $mgmt = client_as('Management')->get('/');
+    assert_contains('href="/reports"', $mgmt->body, 'Management: tombol Laporan');
+    assert_not_contains('Terlewat', $mgmt->body, 'tanpa panel follow up');
+});
+
 group('Phase 7 · Reports');
 
 test('akses laporan per role (PRD): Management semua + export, Viewer tanpa export', function () use ($repSetup) {

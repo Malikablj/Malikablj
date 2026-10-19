@@ -635,3 +635,21 @@ Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-se
 - Navigasi halaman tidak lagi menampilkan "…" untuk satu halaman yang terlewat (mis. 1 2 3 4 5 6 7 8).
 - Kartu "Stok FG" di dashboard sama dengan total di menu Stock (termasuk entri legacy). Detail delivery menampilkan complaint & retur dengan alasan berbahasa Indonesia dan status. Customer yang masih punya complaint tidak bisa dihapus (pesan menyebutkan alasannya).
 
+
+## 25. Desain ulang dashboard (update Oktober 2026 — 9)
+
+Cara update server sama seperti [bagian 18](#cara-update-server-berlaku-untuk-setiap-update). Tidak ada perubahan struktur database.
+
+Tujuan: menghilangkan ruang kosong (kolom kanan jauh lebih panjang dari kiri, baris KPI yang hanya terisi sebagian, kotak angka yang terlalu lega) dan membuat setiap angka punya konteks.
+
+- **Kartu KPI ringkas** — maks. 4 kartu per baris; baris terakhir melebar sehingga tidak ada slot kosong (Admin/Management/Viewer 12 kartu = 3 baris, Marketing/Sales 8 = 2 baris, PPIC 4 = 1 baris, Produksi 3 = 1 baris). Label satu baris, angka lebih besar dan sejajar antar kartu, keterangan satu konteks di bawah.
+- **Visual mini di setiap kartu** (menggantikan ruang kosong di kotak angka):
+  - cincin proporsi — customer aktif dari seluruh customer, follow up hari ini yang sudah selesai, porsi follow up terbuka yang terlewat, porsi order berjalan yang menunggu PPIC;
+  - bar komposisi — leads per tahap (New → Negotiation), order per status (Open / On Process / Partial), komposisi stok (FG / WIP / Ready / Reserved), progres outstanding terpenuhi;
+  - kolom tren — complaint & inbound maklon/supplier 6 bulan terakhir (bulan ini disorot), surat jalan 7 hari ke depan (hari ini disorot). Arahkan kursor ke kolom untuk melihat angkanya.
+- **Tombol cepat di header** sesuai role (maks. 3): mis. *Tinjau 2 OEF* (PPIC/Admin bila ada antrian), *Buat OEF*, *Log aktivitas*, *Catat surat jalan* (PPIC), *Catat stok* / *Inbound maklon* (Produksi), *Laporan* (Management).
+- **Panel disusun per baris dengan tinggi sama**, jumlah panel berapa pun selalu mengisi lebar penuh:
+  1. *Follow up* (hari ini + terlewat dalam satu panel) dan *Aktivitas terbaru* — untuk role yang mengelola follow up;
+  2. *Order terbaru* (dengan bar progres per order) dan *Pengiriman mendatang* (tanggal dalam chip; merah = lewat jadwal, biru/emas = hari ini);
+  3. *Barang masuk terbaru* dan panel baru **Posisi stok** (6 produk dengan stok FG terbanyak, Ready & WIP).
+- Di HP kartu tampil 2 per baris dengan visual mini yang lebih kecil, tombol header 2 saja. Mode gelap ikut otomatis.

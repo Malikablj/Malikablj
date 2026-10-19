@@ -1,7 +1,11 @@
 1. Buka aplikasi di browser, login, lalu tekan Ctrl+F5 (muat ulang tampilan baru).
-2. Coba mode gelap: klik ikon bulan di kanan atas (sebelah lonceng) atau menu profil › Mode gelap.
-   Pilihan tersimpan per browser; klik ikon matahari untuk kembali ke mode terang.
-3. Yang baru di update ini (README bagian 24):
+2. Buka Dashboard — tampilan baru (README bagian 25):
+   - Kartu angka ringkas 4 per baris tanpa slot kosong, angka lebih besar, dan grafik mini di tiap kartu
+     (cincin proporsi, bar komposisi, kolom tren 6 bulan / jadwal 7 hari). Arahkan kursor ke grafik untuk angkanya.
+   - Tombol cepat di kanan atas sesuai role (mis. Tinjau OEF, Buat OEF, Log aktivitas, Catat stok).
+   - Panel disusun per baris dengan tinggi sama: Follow up + Aktivitas, Order + Pengiriman,
+     Barang masuk + Posisi stok (panel baru) — tidak ada lagi ruang kosong besar di bawah.
+3. Termasuk update sebelumnya bila belum terpasang (README bagian 24):
    - Mode gelap: Night Black #1A1A1A, Grey #F2F2F2, White #FFFFFF, aksen Real Madrid Gold #FEBE10.
      Cetak / Save as PDF tetap terang.
    - Bar progres "Terkirim" di detail OEF selalu terisi bila sudah ada pengiriman (mis. 0,11%),

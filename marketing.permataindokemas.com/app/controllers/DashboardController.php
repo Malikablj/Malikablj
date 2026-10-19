@@ -24,6 +24,7 @@ final class DashboardController extends Controller
         $this->view('dashboard/index', [
             'title'           => 'Dashboard',
             'kpi'             => DashboardService::kpis($today),
+            'insights'        => DashboardService::insights($today),
             'today'           => $today,
             'hasBusinessData' => (int) Database::fetchValue('SELECT COUNT(*) FROM customers') > 0,
             'followToday'     => $canFollow ? DashboardService::followUps('today', $today, Auth::id()) : null,
@@ -33,6 +34,7 @@ final class DashboardController extends Controller
             'deliveries'      => Auth::can('deliveries.view') ? Delivery::upcoming(6) : null,
             'leadtimes'       => Auth::can('leadtime.view') ? LeadTime::upcoming($today, 4) : null,
             'inbound'         => Auth::can('inbound.view') || Auth::can('inbound_supplier.view') ? DashboardService::recentInbound(6) : null,
+            'stockTop'        => Auth::can('stock.view') ? DashboardService::stockTop(6) : null,
         ]);
     }
 }
